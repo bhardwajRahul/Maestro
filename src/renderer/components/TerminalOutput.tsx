@@ -90,6 +90,39 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     return parts.length > 0 ? parts : text;
   };
 
+  // Helper function to add search highlighting markers to text (before ANSI conversion)
+  // Uses special markers that survive ANSI-to-HTML conversion
+  const addHighlightMarkers = (text: string, query: string): string => {
+    if (!query) return text;
+
+    let result = '';
+    let lastIndex = 0;
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    let searchIndex = 0;
+
+    while (searchIndex < lowerText.length) {
+      const index = lowerText.indexOf(lowerQuery, searchIndex);
+      if (index === -1) break;
+
+      // Add text before match
+      result += text.substring(lastIndex, index);
+
+      // Add marked match with special tags
+      result += `<mark style="background-color: ${theme.colors.warning}; color: ${theme.mode === 'dark' ? '#000' : '#fff'}; padding: 1px 2px; border-radius: 2px;">`;
+      result += text.substring(index, index + query.length);
+      result += '</mark>';
+
+      lastIndex = index + query.length;
+      searchIndex = lastIndex;
+    }
+
+    // Add remaining text
+    result += text.substring(lastIndex);
+
+    return result;
+  };
+
   // Auto-focus on search input when opened
   useEffect(() => {
     if (outputSearchOpen) {
@@ -249,9 +282,14 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         // Skip rendering if text is empty after processing
         if (!processedText.trim() && log.source !== 'user') return null;
 
+        // Apply search highlighting before ANSI conversion for terminal output
+        const textWithHighlights = isTerminal && log.source !== 'user' && outputSearchQuery
+          ? addHighlightMarkers(processedText, outputSearchQuery)
+          : processedText;
+
         // Convert ANSI codes to HTML for terminal output and sanitize
         const htmlContent = isTerminal && log.source !== 'user'
-          ? DOMPurify.sanitize(ansiConverter.toHtml(processedText))
+          ? DOMPurify.sanitize(ansiConverter.toHtml(textWithHighlights))
           : processedText;
 
         // Count lines in the processed text
@@ -264,8 +302,13 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
           ? processedText.split('\n').slice(0, maxOutputLines).join('\n')
           : processedText;
 
+        // Apply highlighting to truncated text as well
+        const displayTextWithHighlights = shouldCollapse && !isExpanded && isTerminal && log.source !== 'user' && outputSearchQuery
+          ? addHighlightMarkers(displayText, outputSearchQuery)
+          : displayText;
+
         const displayHtmlContent = shouldCollapse && !isExpanded && isTerminal && log.source !== 'user'
-          ? DOMPurify.sanitize(ansiConverter.toHtml(displayText))
+          ? DOMPurify.sanitize(ansiConverter.toHtml(displayTextWithHighlights))
           : htmlContent;
 
         return (
@@ -275,7 +318,9 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             </div>
             <div className={`flex-1 p-4 rounded-xl border ${log.source === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}
                  style={{
-                   backgroundColor: log.source === 'user' ? theme.colors.bgActivity : 'transparent',
+                   backgroundColor: log.source === 'user'
+                     ? `color-mix(in srgb, ${theme.colors.accent} 15%, ${theme.colors.bgActivity})`
+                     : 'transparent',
                    borderColor: theme.colors.border
                  }}>
               {log.images && log.images.length > 0 && (
