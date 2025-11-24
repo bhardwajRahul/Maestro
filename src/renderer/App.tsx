@@ -317,6 +317,47 @@ export default function MaestroConsole() {
     }));
   }, [activeThemeId, shortcuts, llmProvider, modelSlug, apiKey, tunnelProvider, tunnelApiKey]);
 
+  // Set CSS variable for accent color (for scrollbar styling)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--accent-color', theme.colors.accent);
+  }, [theme.colors.accent]);
+
+  // Add scroll listeners to highlight scrollbars during active scrolling
+  useEffect(() => {
+    const scrollTimeouts = new Map<Element, NodeJS.Timeout>();
+
+    const handleScroll = (e: Event) => {
+      const target = e.target as Element;
+      if (!target.classList.contains('scrollbar-thin')) return;
+
+      // Add scrolling class
+      target.classList.add('scrolling');
+
+      // Clear existing timeout for this element
+      const existingTimeout = scrollTimeouts.get(target);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      // Remove scrolling class after 1 second of no scrolling
+      const timeout = setTimeout(() => {
+        target.classList.remove('scrolling');
+        scrollTimeouts.delete(target);
+      }, 1000);
+
+      scrollTimeouts.set(target, timeout);
+    };
+
+    // Add listener to capture scroll events
+    document.addEventListener('scroll', handleScroll, true);
+
+    return () => {
+      document.removeEventListener('scroll', handleScroll, true);
+      scrollTimeouts.forEach(timeout => clearTimeout(timeout));
+      scrollTimeouts.clear();
+    };
+  }, []);
+
   // --- HELPERS ---
   const getFileIcon = (type?: FileChangeType) => {
     switch (type) {
@@ -363,17 +404,32 @@ export default function MaestroConsole() {
       if (modalOpen) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          setQuickActionOpen(false);
-          setSettingsModalOpen(false);
-          setShortcutsHelpOpen(false);
-          setNewInstanceModalOpen(false);
-          setAboutModalOpen(false);
-          setCreateGroupModalOpen(false);
-          setConfirmModalOpen(false);
-          setRenameInstanceModalOpen(false);
-          setRenameGroupModalOpen(false);
-          setLightboxImage(null);
-          setPreviewFile(null);
+          e.stopPropagation();
+
+          // Close only the topmost modal (in z-index order, highest first)
+          if (confirmModalOpen) {
+            setConfirmModalOpen(false);
+          } else if (renameInstanceModalOpen) {
+            setRenameInstanceModalOpen(false);
+          } else if (renameGroupModalOpen) {
+            setRenameGroupModalOpen(false);
+          } else if (createGroupModalOpen) {
+            setCreateGroupModalOpen(false);
+          } else if (newInstanceModalOpen) {
+            setNewInstanceModalOpen(false);
+          } else if (quickActionOpen) {
+            setQuickActionOpen(false);
+          } else if (shortcutsHelpOpen) {
+            setShortcutsHelpOpen(false);
+          } else if (aboutModalOpen) {
+            setAboutModalOpen(false);
+          } else if (settingsModalOpen) {
+            setSettingsModalOpen(false);
+          } else if (lightboxImage) {
+            setLightboxImage(null);
+          } else if (previewFile) {
+            setPreviewFile(null);
+          }
         }
         // For tabbed modals, handle Cmd+Shift+[ and ] for tab navigation
         else if (settingsModalOpen && isShortcut(e, 'cyclePrev')) {
@@ -629,14 +685,23 @@ export default function MaestroConsole() {
 
   // --- ACTIONS ---
   const cycleSession = (dir: 'next' | 'prev') => {
-    const currentIndex = sortedSessions.findIndex(s => s.id === activeSessionId);
+    // Only cycle through visible sessions (not in collapsed groups)
+    const visibleSessions = sortedSessions.filter(session => {
+      if (!session.groupId) return true; // Ungrouped sessions are always visible
+      const group = groups.find(g => g.id === session.groupId);
+      return group && !group.collapsed; // Only include if group is not collapsed
+    });
+
+    if (visibleSessions.length === 0) return;
+
+    const currentIndex = visibleSessions.findIndex(s => s.id === activeSessionId);
     let nextIndex;
     if (dir === 'next') {
-      nextIndex = currentIndex === sortedSessions.length - 1 ? 0 : currentIndex + 1;
+      nextIndex = currentIndex === visibleSessions.length - 1 ? 0 : currentIndex + 1;
     } else {
-      nextIndex = currentIndex === 0 ? sortedSessions.length - 1 : currentIndex - 1;
+      nextIndex = currentIndex === 0 ? visibleSessions.length - 1 : currentIndex - 1;
     }
-    setActiveSessionId(sortedSessions[nextIndex].id);
+    setActiveSessionId(visibleSessions[nextIndex].id);
   };
 
   const showConfirmation = (message: string, onConfirm: () => void) => {
@@ -2255,7 +2320,7 @@ export default function MaestroConsole() {
 
               const handleMouseMove = (e: MouseEvent) => {
                 const delta = e.clientX - startX;
-                const newWidth = Math.max(200, Math.min(600, startWidth + delta));
+                const newWidth = Math.max(256, Math.min(600, startWidth + delta)); // 256px = w-64 original size
                 setLeftSidebarWidthState(newWidth);
               };
 
@@ -2955,6 +3020,7 @@ export default function MaestroConsole() {
             theme={theme}
             markdownRawMode={markdownRawMode}
             setMarkdownRawMode={setMarkdownRawMode}
+            shortcuts={shortcuts}
           />
         )}
       </div>
@@ -2983,7 +3049,7 @@ export default function MaestroConsole() {
 
               const handleMouseMove = (e: MouseEvent) => {
                 const delta = startX - e.clientX; // Reversed for right panel
-                const newWidth = Math.max(300, Math.min(800, startWidth + delta));
+                const newWidth = Math.max(384, Math.min(800, startWidth + delta)); // 384px = w-96 original size
                 setRightPanelWidthState(newWidth);
               };
 

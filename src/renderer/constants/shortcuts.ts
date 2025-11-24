@@ -14,4 +14,6 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   goToFiles: { id: 'goToFiles', label: 'Go to Files Tab', keys: ['Meta', 'Shift', 'f'] },
   goToHistory: { id: 'goToHistory', label: 'Go to History Tab', keys: ['Meta', 'Shift', 'h'] },
   goToScratchpad: { id: 'goToScratchpad', label: 'Go to Scratchpad Tab', keys: ['Meta', 'Shift', 's'] },
+  copyFilePath: { id: 'copyFilePath', label: 'Copy File Path (in Preview)', keys: ['Meta', 'p'] },
+  toggleMarkdownMode: { id: 'toggleMarkdownMode', label: 'Toggle Markdown Raw/Preview', keys: ['Meta', 'e'] },
 };

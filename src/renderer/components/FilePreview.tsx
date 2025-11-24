@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { FileCode, X, Copy, FileText, Eye } from 'lucide-react';
+import { visit } from 'unist-util-visit';
 
 interface FilePreviewProps {
   file: { name: string; content: string; path: string } | null;
@@ -11,6 +12,7 @@ interface FilePreviewProps {
   theme: any;
   markdownRawMode: boolean;
   setMarkdownRawMode: (value: boolean) => void;
+  shortcuts: Record<string, any>;
 }
 
 // Get language from filename extension
@@ -52,12 +54,63 @@ const isImageFile = (filename: string): boolean => {
   return imageExtensions.includes(ext || '');
 };
 
-export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdownRawMode }: FilePreviewProps) {
+// Remark plugin to support ==highlighted text== syntax
+function remarkHighlight() {
+  return (tree: any) => {
+    visit(tree, 'text', (node: any, index: number, parent: any) => {
+      const text = node.value;
+      const regex = /==([^=]+)==/g;
+
+      if (!regex.test(text)) return;
+
+      const parts: any[] = [];
+      let lastIndex = 0;
+      const matches = text.matchAll(/==([^=]+)==/g);
+
+      for (const match of matches) {
+        const matchIndex = match.index!;
+
+        // Add text before match
+        if (matchIndex > lastIndex) {
+          parts.push({
+            type: 'text',
+            value: text.slice(lastIndex, matchIndex)
+          });
+        }
+
+        // Add highlighted text
+        parts.push({
+          type: 'html',
+          value: `<mark style="background-color: #ffd700; color: #000; padding: 0 4px; border-radius: 2px;">${match[1]}</mark>`
+        });
+
+        lastIndex = matchIndex + match[0].length;
+      }
+
+      // Add remaining text
+      if (lastIndex < text.length) {
+        parts.push({
+          type: 'text',
+          value: text.slice(lastIndex)
+        });
+      }
+
+      // Replace the text node with the parts
+      if (parts.length > 0) {
+        parent.children.splice(index, 1, ...parts);
+      }
+    });
+  };
+}
+
+export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdownRawMode, shortcuts }: FilePreviewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<{ url: string; x: number; y: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const codeContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   if (!file) return null;
 
@@ -75,10 +128,93 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
     }
   }, [searchOpen, searchQuery]);
 
+  // Highlight search matches in syntax-highlighted code
+  useEffect(() => {
+    if (!searchQuery.trim() || !codeContainerRef.current || isMarkdown || isImage) return;
+
+    const container = codeContainerRef.current;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+
+    // Collect all text nodes
+    let node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text);
+    }
+
+    // Escape regex special characters
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedQuery, 'gi');
+
+    // Highlight matches using safe DOM methods
+    textNodes.forEach(textNode => {
+      const text = textNode.textContent || '';
+      const matches = text.match(regex);
+
+      if (matches) {
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+
+        text.replace(regex, (match, offset) => {
+          // Add text before match
+          if (offset > lastIndex) {
+            fragment.appendChild(document.createTextNode(text.substring(lastIndex, offset)));
+          }
+
+          // Add highlighted match
+          const mark = document.createElement('mark');
+          mark.style.backgroundColor = '#ffd700';
+          mark.style.color = '#000';
+          mark.style.padding = '0 2px';
+          mark.style.borderRadius = '2px';
+          mark.textContent = match;
+          fragment.appendChild(mark);
+
+          lastIndex = offset + match.length;
+          return match;
+        });
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+        }
+
+        textNode.parentNode?.replaceChild(fragment, textNode);
+      }
+    });
+
+    // Cleanup function to remove highlights
+    return () => {
+      container.querySelectorAll('mark').forEach(mark => {
+        const parent = mark.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+          parent.normalize();
+        }
+      });
+    };
+  }, [searchQuery, file.content, isMarkdown, isImage]);
+
   const copyPathToClipboard = () => {
     navigator.clipboard.writeText(file.path);
     setShowCopyNotification(true);
     setTimeout(() => setShowCopyNotification(false), 2000);
+  };
+
+  // Format shortcut keys for display
+  const formatShortcut = (shortcutId: string): string => {
+    const shortcut = shortcuts[shortcutId];
+    if (!shortcut) return '';
+
+    const keys = shortcut.keys.map(key => {
+      if (key === 'Meta') return '⌘';
+      if (key === 'Ctrl') return 'Ctrl';
+      if (key === 'Alt') return '⌥';
+      if (key === 'Shift') return '⇧';
+      return key.toUpperCase();
+    });
+
+    return keys.join('');
   };
 
   // Highlight search matches in content
@@ -89,6 +225,28 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
     return content.replace(regex, '<mark style="background-color: #ffd700; color: #000;">$1</mark>');
   };
 
+  // Helper to check if a shortcut matches
+  const isShortcut = (e: React.KeyboardEvent, shortcutId: string) => {
+    const shortcut = shortcuts[shortcutId];
+    if (!shortcut) return false;
+
+    const hasModifier = (key: string) => {
+      if (key === 'Meta') return e.metaKey;
+      if (key === 'Ctrl') return e.ctrlKey;
+      if (key === 'Alt') return e.altKey;
+      if (key === 'Shift') return e.shiftKey;
+      return false;
+    };
+
+    const modifiers = shortcut.keys.filter((k: string) => ['Meta', 'Ctrl', 'Alt', 'Shift'].includes(k));
+    const mainKey = shortcut.keys.find((k: string) => !['Meta', 'Ctrl', 'Alt', 'Shift'].includes(k));
+
+    const modifiersMatch = modifiers.every((m: string) => hasModifier(m));
+    const keyMatches = mainKey?.toLowerCase() === e.key.toLowerCase();
+
+    return modifiersMatch && keyMatches;
+  };
+
   // Handle keyboard events
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
@@ -96,6 +254,44 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
       e.stopPropagation();
       setSearchOpen(true);
       setTimeout(() => searchInputRef.current?.focus(), 0);
+    } else if (isShortcut(e, 'copyFilePath')) {
+      e.preventDefault();
+      e.stopPropagation();
+      copyPathToClipboard();
+    } else if (isMarkdown && isShortcut(e, 'toggleMarkdownMode')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setMarkdownRawMode(!markdownRawMode);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const container = contentRef.current;
+      if (!container) return;
+
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl + Up: Jump to top
+        container.scrollTop = 0;
+      } else if (e.altKey) {
+        // Alt + Up: Page up
+        container.scrollTop -= container.clientHeight;
+      } else {
+        // Arrow Up: Scroll up
+        container.scrollTop -= 40;
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const container = contentRef.current;
+      if (!container) return;
+
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl + Down: Jump to bottom
+        container.scrollTop = container.scrollHeight;
+      } else if (e.altKey) {
+        // Alt + Down: Page down
+        container.scrollTop += container.clientHeight;
+      } else {
+        // Arrow Down: Scroll down
+        container.scrollTop += 40;
+      }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -131,7 +327,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
               onClick={() => setMarkdownRawMode(!markdownRawMode)}
               className="p-2 rounded hover:bg-white/10 transition-colors"
               style={{ color: markdownRawMode ? theme.colors.accent : theme.colors.textDim }}
-              title={markdownRawMode ? "Show rendered markdown" : "Show raw markdown"}
+              title={`${markdownRawMode ? "Show rendered markdown" : "Show raw markdown"} (${formatShortcut('toggleMarkdownMode')})`}
             >
               {markdownRawMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
             </button>
@@ -155,7 +351,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div ref={contentRef} className="flex-1 overflow-y-auto px-6 pt-3 pb-6 scrollbar-thin">
         {/* Floating Search */}
         {searchOpen && (
           <div className="sticky top-0 z-10 pb-4">
@@ -188,8 +384,8 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
               style={{ imageRendering: 'crisp-edges' }}
             />
           </div>
-        ) : searchQuery.trim() || (isMarkdown && markdownRawMode) ? (
-          // When searching OR in raw markdown mode, show plain text with optional highlights
+        ) : (isMarkdown && markdownRawMode) || (isMarkdown && searchQuery.trim()) ? (
+          // When in raw markdown mode OR searching in markdown, show plain text with highlights
           <div
             className="font-mono text-sm whitespace-pre-wrap"
             style={{ color: theme.colors.textMain }}
@@ -220,7 +416,9 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
               .prose em { font-style: italic; }
             `}</style>
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkHighlight]}
+              rehypePlugins={[]}
+              skipHtml={false}
               components={{
                 a: ({ node, href, children, ...props }) => (
                   <a
@@ -243,27 +441,54 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
                   >
                     {children}
                   </a>
-                )
+                ),
+                code: ({ node, inline, className, children, ...props }) => {
+                  const match = (className || '').match(/language-(\w+)/);
+                  const language = match ? match[1] : 'text';
+
+                  return !inline && match ? (
+                    <SyntaxHighlighter
+                      language={language}
+                      style={vscDarkPlus}
+                      customStyle={{
+                        margin: '0.5em 0',
+                        padding: '1em',
+                        background: theme.colors.bgActivity,
+                        fontSize: '0.9em',
+                        borderRadius: '6px',
+                      }}
+                      PreTag="div"
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
               }}
             >
               {file.content}
             </ReactMarkdown>
           </div>
         ) : (
-          <SyntaxHighlighter
-            language={language}
-            style={vscDarkPlus}
-            customStyle={{
-              margin: 0,
-              padding: '24px',
-              background: 'transparent',
-              fontSize: '13px',
-            }}
-            showLineNumbers
-            PreTag="div"
-          >
-            {file.content}
-          </SyntaxHighlighter>
+          <div ref={codeContainerRef}>
+            <SyntaxHighlighter
+              language={language}
+              style={vscDarkPlus}
+              customStyle={{
+                margin: 0,
+                padding: '24px',
+                background: 'transparent',
+                fontSize: '13px',
+              }}
+              showLineNumbers
+              PreTag="div"
+            >
+              {file.content}
+            </SyntaxHighlighter>
+          </div>
         )}
       </div>
 
