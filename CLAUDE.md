@@ -181,6 +181,7 @@ interface Session {
   isGitRepo: boolean;           // Git features enabled
   fileTree: any[];              // File explorer tree
   fileExplorerExpanded: string[]; // Expanded folder paths
+  messageQueue: LogEntry[];     // Messages queued while AI is busy
 }
 ```
 

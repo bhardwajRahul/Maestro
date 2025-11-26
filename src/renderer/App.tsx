@@ -480,9 +480,28 @@ export default function MaestroConsole() {
       setSessions(prev => prev.map(s => {
         if (s.id !== actualSessionId) return s;
 
-        // For AI agent exits, just update state without adding log entry
+        // For AI agent exits, check if there are queued messages to process
         // For terminal exits, show the exit code
         if (isFromAi) {
+          // Check if there are queued messages
+          if (s.messageQueue.length > 0) {
+            // Dequeue first message and add to logs
+            const [nextMessage, ...remainingQueue] = s.messageQueue;
+
+            // Schedule the next message to be sent (async, after state update)
+            setTimeout(() => {
+              processQueuedMessage(actualSessionId, nextMessage);
+            }, 0);
+
+            return {
+              ...s,
+              aiLogs: [...s.aiLogs, nextMessage],
+              messageQueue: remainingQueue,
+              thinkingStartTime: Date.now()
+              // Keep state as 'busy' since we're processing next message
+            };
+          }
+
           return {
             ...s,
             state: 'idle' as SessionState,
@@ -823,6 +842,23 @@ export default function MaestroConsole() {
   // Helper to start a new Claude session
   const startNewClaudeSession = useCallback(() => {
     if (!activeSession) return;
+
+    // Block clearing when there are queued messages
+    if (activeSession.messageQueue.length > 0) {
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSession.id) return s;
+        return {
+          ...s,
+          aiLogs: [...s.aiLogs, {
+            id: generateId(),
+            timestamp: Date.now(),
+            source: 'system',
+            text: 'Cannot clear session while messages are queued. Remove queued messages first.'
+          }]
+        };
+      }));
+      return;
+    }
 
     setSessions(prev => prev.map(s =>
       s.id === activeSession.id ? { ...s, claudeSessionId: undefined, aiLogs: [], state: 'idle' as SessionState } : s
@@ -1639,6 +1675,26 @@ export default function MaestroConsole() {
   const processInput = () => {
     if (!activeSession || (!inputValue.trim() && stagedImages.length === 0)) return;
 
+    // Block slash commands when there are queued messages
+    if (inputValue.trim().startsWith('/') && activeSession.messageQueue.length > 0) {
+      const targetLogKey = activeSession.inputMode === 'ai' ? 'aiLogs' : 'shellLogs';
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSessionId) return s;
+        return {
+          ...s,
+          [targetLogKey]: [...s[targetLogKey], {
+            id: generateId(),
+            timestamp: Date.now(),
+            source: 'system',
+            text: 'Cannot execute commands while messages are queued. Clear the queue first.'
+          }]
+        };
+      }));
+      setInputValue('');
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+      return;
+    }
+
     // Handle slash commands
     if (inputValue.trim().startsWith('/')) {
       const commandText = inputValue.trim();
@@ -1701,6 +1757,31 @@ export default function MaestroConsole() {
 
     const currentMode = activeSession.inputMode;
     const targetLogKey = currentMode === 'ai' ? 'aiLogs' : 'shellLogs';
+
+    // Queue messages when AI is busy (only in AI mode)
+    if (activeSession.state === 'busy' && currentMode === 'ai') {
+      const queuedEntry: LogEntry = {
+        id: generateId(),
+        timestamp: Date.now(),
+        source: 'user',
+        text: inputValue,
+        images: [...stagedImages]
+      };
+
+      setSessions(prev => prev.map(s => {
+        if (s.id !== activeSessionId) return s;
+        return {
+          ...s,
+          messageQueue: [...s.messageQueue, queuedEntry]
+        };
+      }));
+
+      // Clear input
+      setInputValue('');
+      setStagedImages([]);
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+      return;
+    }
 
     console.log('[processInput] Processing input', {
       currentMode,
@@ -1907,6 +1988,59 @@ export default function MaestroConsole() {
           };
         }));
       });
+    }
+  };
+
+  // Process a queued message (called from onExit when queue has items)
+  const processQueuedMessage = async (sessionId: string, entry: LogEntry) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) {
+      console.error('[processQueuedMessage] Session not found:', sessionId);
+      return;
+    }
+
+    const targetSessionId = `${sessionId}-ai`;
+
+    try {
+      // Get agent configuration
+      const agent = await window.maestro.agents.get('claude-code');
+      if (!agent) throw new Error('Claude Code agent not found');
+
+      // Build spawn args with resume if we have a session ID
+      const spawnArgs = [...agent.args];
+
+      if (session.claudeSessionId) {
+        spawnArgs.push('--resume', session.claudeSessionId);
+      }
+
+      // Spawn Claude with prompt from queued entry
+      const commandToUse = agent.path || agent.command;
+      console.log('[processQueuedMessage] Spawning Claude for queued message:', { sessionId, text: entry.text.substring(0, 50) });
+
+      await window.maestro.process.spawn({
+        sessionId: targetSessionId,
+        toolType: 'claude-code',
+        cwd: session.cwd,
+        command: commandToUse,
+        args: spawnArgs,
+        prompt: entry.text,
+        images: entry.images && entry.images.length > 0 ? entry.images : undefined
+      });
+    } catch (error) {
+      console.error('[processQueuedMessage] Failed to spawn Claude:', error);
+      setSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s;
+        return {
+          ...s,
+          state: 'idle',
+          aiLogs: [...s.aiLogs, {
+            id: generateId(),
+            timestamp: Date.now(),
+            source: 'system',
+            text: `Error: Failed to process queued message - ${error.message}`
+          }]
+        };
+      }));
     }
   };
 
@@ -2427,6 +2561,22 @@ export default function MaestroConsole() {
           startFreshSession={() => {
             // Create a fresh AI terminal session by clearing the Claude session ID and AI logs
             if (activeSession) {
+              // Block clearing when there are queued messages
+              if (activeSession.messageQueue.length > 0) {
+                setSessions(prev => prev.map(s => {
+                  if (s.id !== activeSession.id) return s;
+                  return {
+                    ...s,
+                    aiLogs: [...s.aiLogs, {
+                      id: generateId(),
+                      timestamp: Date.now(),
+                      source: 'system',
+                      text: 'Cannot clear session while messages are queued. Remove queued messages first.'
+                    }]
+                  };
+                }));
+                return;
+              }
               setSessions(prev => prev.map(s =>
                 s.id === activeSession.id ? { ...s, claudeSessionId: undefined, aiLogs: [], state: 'idle' } : s
               ));
@@ -2626,6 +2776,22 @@ export default function MaestroConsole() {
         onNewClaudeSession={() => {
           // Create a fresh AI terminal session by clearing the Claude session ID and AI logs
           if (activeSession) {
+            // Block clearing when there are queued messages
+            if (activeSession.messageQueue.length > 0) {
+              setSessions(prev => prev.map(s => {
+                if (s.id !== activeSession.id) return s;
+                return {
+                  ...s,
+                  aiLogs: [...s.aiLogs, {
+                    id: generateId(),
+                    timestamp: Date.now(),
+                    source: 'system',
+                    text: 'Cannot clear session while messages are queued. Remove queued messages first.'
+                  }]
+                };
+              }));
+              return;
+            }
             setSessions(prev => prev.map(s =>
               s.id === activeSession.id ? { ...s, claudeSessionId: undefined, aiLogs: [], state: 'idle' } : s
             ));
@@ -2724,6 +2890,16 @@ export default function MaestroConsole() {
           ));
 
           return nextUserCommandIndex;
+        }}
+        onRemoveQueuedMessage={(messageId: string) => {
+          if (!activeSession) return;
+          setSessions(prev => prev.map(s => {
+            if (s.id !== activeSession.id) return s;
+            return {
+              ...s,
+              messageQueue: s.messageQueue.filter(msg => msg.id !== messageId)
+            };
+          }));
         }}
       />
 

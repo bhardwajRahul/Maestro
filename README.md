@@ -32,6 +32,7 @@ Download the latest release for your platform from the [Releases](https://github
 - 📋 **Session Management** - Group, rename, and organize your sessions
 - 📝 **Scratchpad** - Built-in markdown editor with live preview for task management
 - ⚡ **Slash Commands** - Extensible command system with autocomplete
+- 📬 **Message Queueing** - Queue messages while AI is busy; they're sent automatically when ready
 - 🌐 **Remote Access** - Built-in web server with optional ngrok/Cloudflare tunneling
 - 💰 **Cost Tracking** - Real-time token usage and cost tracking per session
 

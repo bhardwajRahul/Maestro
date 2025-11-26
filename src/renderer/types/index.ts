@@ -144,6 +144,8 @@ export interface Session {
   statusMessage?: string;
   // Timestamp when agent started processing (for elapsed time display)
   thinkingStartTime?: number;
+  // Message queue for AI mode - messages sent while busy are queued here
+  messageQueue: LogEntry[];
 }
 
 export interface Group {

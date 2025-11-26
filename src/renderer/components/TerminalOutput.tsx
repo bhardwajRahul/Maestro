@@ -22,13 +22,14 @@ interface TerminalOutputProps {
   logsEndRef: React.RefObject<HTMLDivElement>;
   maxOutputLines: number;
   onDeleteLog?: (logId: string) => number | null; // Returns the index to scroll to after deletion
+  onRemoveQueuedMessage?: (messageId: string) => void; // Callback to remove a queued message
 }
 
 export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((props, ref) => {
   const {
     session, theme, fontFamily, activeFocus, outputSearchOpen, outputSearchQuery,
     setOutputSearchOpen, setOutputSearchQuery, setActiveFocus, setLightboxImage,
-    inputRef, logsEndRef, maxOutputLines, onDeleteLog
+    inputRef, logsEndRef, maxOutputLines, onDeleteLog, onRemoveQueuedMessage
   } = props;
 
   // Use the forwarded ref if provided, otherwise create a local one
@@ -49,6 +50,9 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
 
   // Delete confirmation state
   const [deleteConfirmLogId, setDeleteConfirmLogId] = useState<string | null>(null);
+
+  // Queue removal confirmation state
+  const [queueRemoveConfirmId, setQueueRemoveConfirmId] = useState<string | null>(null);
 
   // Elapsed time for thinking indicator (in seconds)
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -837,40 +841,148 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         className="flex-1"
         itemContent={(index, log) => <LogItem index={index} log={log} />}
         components={{
-          Footer: () => session.state === 'busy' ? (
-            <div
-              className="flex flex-col items-center justify-center gap-1 py-6 mx-6 my-4 rounded-xl border"
-              style={{
-                backgroundColor: theme.colors.bgActivity,
-                borderColor: theme.colors.border
-              }}
-            >
-              <div className="flex items-center gap-3">
+          Footer: () => (
+            <>
+              {/* Busy indicator */}
+              {session.state === 'busy' && (
                 <div
-                  className="w-2 h-2 rounded-full animate-pulse"
-                  style={{ backgroundColor: theme.colors.warning }}
-                />
-                <span className="text-sm" style={{ color: theme.colors.textMain }}>
-                  {session.statusMessage || (session.inputMode === 'ai' ? 'Claude is thinking...' : 'Executing command...')}
-                </span>
-                <span
-                  className="text-sm font-mono"
-                  style={{ color: theme.colors.textDim }}
+                  className="flex flex-col items-center justify-center gap-1 py-6 mx-6 my-4 rounded-xl border"
+                  style={{
+                    backgroundColor: theme.colors.bgActivity,
+                    borderColor: theme.colors.border
+                  }}
                 >
-                  {formatElapsedTime(elapsedSeconds)}
-                </span>
-              </div>
-              {session.usageStats && (
-                <div className="flex items-center gap-4 mt-1 text-xs" style={{ color: theme.colors.textDim }}>
-                  <span>In: {session.usageStats.inputTokens.toLocaleString()}</span>
-                  <span>Out: {session.usageStats.outputTokens.toLocaleString()}</span>
-                  {session.usageStats.cacheReadInputTokens > 0 && (
-                    <span>Cache: {session.usageStats.cacheReadInputTokens.toLocaleString()}</span>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-2 h-2 rounded-full animate-pulse"
+                      style={{ backgroundColor: theme.colors.warning }}
+                    />
+                    <span className="text-sm" style={{ color: theme.colors.textMain }}>
+                      {session.statusMessage || (session.inputMode === 'ai' ? 'Claude is thinking...' : 'Executing command...')}
+                    </span>
+                    <span
+                      className="text-sm font-mono"
+                      style={{ color: theme.colors.textDim }}
+                    >
+                      {formatElapsedTime(elapsedSeconds)}
+                    </span>
+                  </div>
+                  {session.usageStats && (
+                    <div className="flex items-center gap-4 mt-1 text-xs" style={{ color: theme.colors.textDim }}>
+                      <span>In: {session.usageStats.inputTokens.toLocaleString()}</span>
+                      <span>Out: {session.usageStats.outputTokens.toLocaleString()}</span>
+                      {session.usageStats.cacheReadInputTokens > 0 && (
+                        <span>Cache: {session.usageStats.cacheReadInputTokens.toLocaleString()}</span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
-            </div>
-          ) : <div ref={logsEndRef} />
+
+              {/* Queued messages section */}
+              {session.messageQueue && session.messageQueue.length > 0 && (
+                <>
+                  {/* QUEUED separator */}
+                  <div className="mx-6 my-3 flex items-center gap-3">
+                    <div className="flex-1 h-px" style={{ backgroundColor: theme.colors.border }} />
+                    <span
+                      className="text-xs font-bold tracking-wider"
+                      style={{ color: theme.colors.warning }}
+                    >
+                      QUEUED
+                    </span>
+                    <div className="flex-1 h-px" style={{ backgroundColor: theme.colors.border }} />
+                  </div>
+
+                  {/* Queued messages */}
+                  {session.messageQueue.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="mx-6 mb-2 p-3 rounded-lg opacity-60 relative group"
+                      style={{
+                        backgroundColor: theme.colors.accent + '20',
+                        borderLeft: `3px solid ${theme.colors.accent}`
+                      }}
+                    >
+                      {/* Remove button */}
+                      <button
+                        onClick={() => setQueueRemoveConfirmId(msg.id)}
+                        className="absolute top-2 right-2 p-1 rounded hover:bg-black/20 transition-colors"
+                        style={{ color: theme.colors.textDim }}
+                        title="Remove from queue"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+
+                      {/* Message content */}
+                      <div
+                        className="text-sm pr-8 whitespace-pre-wrap break-words"
+                        style={{ color: theme.colors.textMain }}
+                      >
+                        {msg.text.length > 200 ? msg.text.substring(0, 200) + '...' : msg.text}
+                      </div>
+
+                      {/* Images indicator */}
+                      {msg.images && msg.images.length > 0 && (
+                        <div
+                          className="mt-1 text-xs"
+                          style={{ color: theme.colors.textDim }}
+                        >
+                          {msg.images.length} image{msg.images.length > 1 ? 's' : ''} attached
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Queue removal confirmation modal */}
+                  {queueRemoveConfirmId && (
+                    <div
+                      className="fixed inset-0 flex items-center justify-center z-50"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                      onClick={() => setQueueRemoveConfirmId(null)}
+                    >
+                      <div
+                        className="p-4 rounded-lg shadow-xl max-w-md mx-4"
+                        style={{ backgroundColor: theme.colors.bgMain }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <h3 className="text-lg font-semibold mb-2" style={{ color: theme.colors.textMain }}>
+                          Remove Queued Message?
+                        </h3>
+                        <p className="text-sm mb-4" style={{ color: theme.colors.textDim }}>
+                          This message will be removed from the queue and will not be sent.
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setQueueRemoveConfirmId(null)}
+                            className="px-3 py-1.5 rounded text-sm"
+                            style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textMain }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (onRemoveQueuedMessage) {
+                                onRemoveQueuedMessage(queueRemoveConfirmId);
+                              }
+                              setQueueRemoveConfirmId(null);
+                            }}
+                            className="px-3 py-1.5 rounded text-sm"
+                            style={{ backgroundColor: theme.colors.error, color: 'white' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* End ref for scrolling */}
+              {session.state !== 'busy' && <div ref={logsEndRef} />}
+            </>
+          )
         }}
       />
     </div>

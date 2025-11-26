@@ -87,6 +87,7 @@ interface MainPanelProps {
   getContextColor: (usage: number, theme: Theme) => string;
   setActiveSessionId: (id: string) => void;
   onDeleteLog?: (logId: string) => void;
+  onRemoveQueuedMessage?: (messageId: string) => void;
 
   // Auto mode props
   batchRunState?: BatchRunState;
@@ -108,7 +109,7 @@ export function MainPanel(props: MainPanelProps) {
     setAboutModalOpen, setRightPanelOpen, inputRef, logsEndRef, terminalOutputRef,
     fileTreeContainerRef, fileTreeFilterInputRef, toggleTunnel, toggleInputMode, processInput, handleInterrupt,
     handleInputKeyDown, handlePaste, handleDrop, getContextColor, setActiveSessionId,
-    batchRunState, onStopBatchRun, showConfirmation
+    batchRunState, onStopBatchRun, showConfirmation, onRemoveQueuedMessage
   } = props;
 
   const isAutoModeActive = batchRunState?.isRunning || false;
@@ -484,6 +485,7 @@ export function MainPanel(props: MainPanelProps) {
                 logsEndRef={logsEndRef}
                 maxOutputLines={maxOutputLines}
                 onDeleteLog={props.onDeleteLog}
+                onRemoveQueuedMessage={onRemoveQueuedMessage}
               />
 
               {/* Input Area */}

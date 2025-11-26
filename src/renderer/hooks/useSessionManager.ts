@@ -244,7 +244,8 @@ export function useSessionManager(): UseSessionManagerReturn {
         fileExplorerScrollPos: 0,
         shellCwd: workingDir,
         aiCommandHistory: [],
-        shellCommandHistory: []
+        shellCommandHistory: [],
+        messageQueue: []
       };
       setSessions(prev => [...prev, newSession]);
       setActiveSessionId(newId);
