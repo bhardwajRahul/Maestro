@@ -1344,21 +1344,20 @@ function setupIpcHandlers() {
       const ttsCommand = parts[0].replace(/^"|"$/g, ''); // Remove surrounding quotes if present
       const ttsArgs = parts.slice(1).map(arg => arg.replace(/^"|"$/g, '')); // Remove quotes from args
 
+      // Add the text as the final argument (this is how most TTS commands work)
+      ttsArgs.push(text);
+
       // Spawn the TTS process without waiting for it to complete (non-blocking)
       // This runs in the background and won't block the main process
       const child = spawn(ttsCommand, ttsArgs, {
-        stdio: ['pipe', 'ignore', 'ignore'],
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: true, // Run independently
       });
-
-      // Write the text to stdin and close it
-      child.stdin?.write(text);
-      child.stdin?.end();
 
       // Unref to allow the parent to exit independently
       child.unref();
 
-      logger.debug('Started audio feedback', 'Notification', { command: ttsCommand, args: ttsArgs, textLength: text.length });
+      logger.debug('Started audio feedback', 'Notification', { command: ttsCommand, args: ttsArgs.length, textLength: text.length });
       return { success: true };
     } catch (error) {
       logger.error('Error starting audio feedback', 'Notification', error);

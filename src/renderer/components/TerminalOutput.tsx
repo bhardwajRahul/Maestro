@@ -38,6 +38,9 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
   // Virtuoso ref for programmatic scrolling
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
+  // Track if user is viewing expanded content (disable auto-scroll)
+  const [userScrolledAway, setUserScrolledAway] = useState(false);
+
   // Track which log entries are expanded (by log ID)
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
 
@@ -902,11 +905,17 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
         ref={virtuosoRef}
         data={filteredLogs}
         className="flex-1"
+        atBottomStateChange={(atBottom) => {
+          // Track when user scrolls away from bottom
+          setUserScrolledAway(!atBottom);
+        }}
         followOutput={(isAtBottom) => {
+          // Don't auto-scroll if user has scrolled away (e.g., reading expanded content)
+          if (userScrolledAway && !isAtBottom) return false;
           // Always scroll when session becomes busy to show the thinking indicator
-          if (session.state === 'busy') return 'smooth';
+          if (session.state === 'busy' && isAtBottom) return 'smooth';
           // Always scroll when there are queued messages to show them
-          if (session.messageQueue && session.messageQueue.length > 0) return 'smooth';
+          if (session.messageQueue && session.messageQueue.length > 0 && isAtBottom) return 'smooth';
           // Otherwise, only follow if user is already at bottom
           return isAtBottom ? 'smooth' : false;
         }}
