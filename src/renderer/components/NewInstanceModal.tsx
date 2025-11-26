@@ -37,6 +37,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
   const modalRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Define handlers first before they're used in effects
   const loadAgents = async () => {
@@ -131,10 +132,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     }
   }, [isOpen, onClose, updateLayerHandler]);
 
-  // Focus modal on open (only once, not on every render)
+  // Focus name input on open (only once, not on every render)
   useEffect(() => {
-    if (isOpen && modalRef.current) {
-      modalRef.current.focus();
+    if (isOpen && nameInputRef.current) {
+      nameInputRef.current.focus();
     }
   }, [isOpen]);
 
@@ -191,13 +192,13 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
               Agent Name (Optional)
             </label>
             <input
+              ref={nameInputRef}
               type="text"
               value={instanceName}
               onChange={(e) => setInstanceName(e.target.value)}
               placeholder="My Project Session"
               className="w-full p-2 rounded border bg-transparent outline-none"
               style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
-              autoFocus
             />
           </div>
 
