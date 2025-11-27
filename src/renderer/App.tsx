@@ -1069,6 +1069,8 @@ export default function MaestroConsole() {
         ...entry,
         id: generateId()
       });
+      // Refresh history panel to show the new entry
+      rightPanelRef.current?.refreshHistoryPanel();
     }
   });
 
