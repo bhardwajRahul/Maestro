@@ -327,12 +327,40 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
     });
   }, [theme]);
 
+  // Process carriage returns to simulate terminal line overwrites
+  // When \r appears (not followed by \n), it means "return to start of line"
+  // and subsequent text overwrites from the beginning
+  const processCarriageReturns = (text: string): string => {
+    // Split by newlines first, then process each line for carriage returns
+    const lines = text.split('\n');
+    const processedLines = lines.map(line => {
+      // If line contains \r (but not \r\n which was already converted to \n),
+      // split by \r and take the last non-empty segment (the final overwrite)
+      if (line.includes('\r')) {
+        const segments = line.split('\r');
+        // Find the last non-empty segment (the final state of the line)
+        for (let i = segments.length - 1; i >= 0; i--) {
+          if (segments[i].trim()) {
+            return segments[i];
+          }
+        }
+        // If all segments are empty, return empty string
+        return '';
+      }
+      return line;
+    });
+    return processedLines.join('\n');
+  };
+
   // Filter out bash prompt lines and apply processing
   const processLogText = (text: string, isTerminal: boolean): string => {
-    if (!isTerminal) return text;
+    // Always process carriage returns (for AI status lines like "Claude is thinking...")
+    let processed = processCarriageReturns(text);
+
+    if (!isTerminal) return processed;
 
     // Remove bash prompt lines (e.g., "bash-3.2$", "zsh%", "$", "#")
-    const lines = text.split('\n');
+    const lines = processed.split('\n');
     const filteredLines = lines.filter(line => {
       const trimmed = line.trim();
       // Skip empty lines and common prompt patterns

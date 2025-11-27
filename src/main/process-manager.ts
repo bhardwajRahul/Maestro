@@ -312,6 +312,30 @@ export class ProcessManager extends EventEmitter {
                 if (msg.session_id) {
                   this.emit('session-id', sessionId, msg.session_id);
                 }
+                // Extract usage statistics from stream-json messages (typically in 'result' type)
+                if (msg.usage || msg.total_cost_usd !== undefined) {
+                  const usage = msg.usage || {};
+                  // Extract context window from modelUsage if present
+                  let contextWindow = 200000; // Default for Claude
+                  if (msg.modelUsage) {
+                    const firstModel = Object.values(msg.modelUsage)[0] as any;
+                    if (firstModel?.contextWindow) {
+                      contextWindow = firstModel.contextWindow;
+                    }
+                  }
+
+                  const usageStats = {
+                    inputTokens: usage.input_tokens || 0,
+                    outputTokens: usage.output_tokens || 0,
+                    cacheReadInputTokens: usage.cache_read_input_tokens || 0,
+                    cacheCreationInputTokens: usage.cache_creation_input_tokens || 0,
+                    totalCostUsd: msg.total_cost_usd || 0,
+                    contextWindow
+                  };
+
+                  console.log('[ProcessManager] Emitting usage stats from stream-json:', usageStats);
+                  this.emit('usage', sessionId, usageStats);
+                }
               } catch (e) {
                 // If it's not valid JSON, emit as raw text
                 console.log('[ProcessManager] Non-JSON line in stream-json mode:', line.substring(0, 100));
