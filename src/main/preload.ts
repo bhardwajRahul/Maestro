@@ -176,6 +176,8 @@ contextBridge.exposeInMainWorld('maestro', {
     broadcastActiveSession: (sessionId: string) =>
       ipcRenderer.invoke('live:broadcastActiveSession', sessionId),
     disableAll: () => ipcRenderer.invoke('live:disableAll'),
+    startServer: () => ipcRenderer.invoke('live:startServer'),
+    stopServer: () => ipcRenderer.invoke('live:stopServer'),
   },
 
   // Agent API

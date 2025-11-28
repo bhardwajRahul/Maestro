@@ -164,6 +164,180 @@ let processManager: ProcessManager | null = null;
 let webServer: WebServer | null = null;
 let agentDetector: AgentDetector | null = null;
 
+/**
+ * Create and configure the web server with all necessary callbacks.
+ * Called when user enables the web interface.
+ */
+function createWebServer(): WebServer {
+  const server = new WebServer(); // Random port with auto-generated security token
+
+  // Set up callback for web server to fetch sessions list
+  server.setGetSessionsCallback(() => {
+    const sessions = sessionsStore.get('sessions', []);
+    const groups = groupsStore.get('groups', []);
+    return sessions.map((s: any) => {
+      // Find the group for this session
+      const group = s.groupId ? groups.find((g: any) => g.id === s.groupId) : null;
+
+      // Extract last AI response for mobile preview (first 3 lines, max 500 chars)
+      let lastResponse = null;
+      if (s.aiLogs && s.aiLogs.length > 0) {
+        // Find the last stdout/stderr entry from the AI (not user messages)
+        const lastAiLog = [...s.aiLogs].reverse().find((log: any) =>
+          log.source === 'stdout' || log.source === 'stderr'
+        );
+        if (lastAiLog && lastAiLog.text) {
+          const fullText = lastAiLog.text;
+          // Get first 3 lines or 500 chars, whichever is shorter
+          const lines = fullText.split('\n').slice(0, 3);
+          let previewText = lines.join('\n');
+          if (previewText.length > 500) {
+            previewText = previewText.slice(0, 497) + '...';
+          } else if (fullText.length > previewText.length) {
+            previewText = previewText + '...';
+          }
+          lastResponse = {
+            text: previewText,
+            timestamp: lastAiLog.timestamp,
+            source: lastAiLog.source,
+            fullLength: fullText.length,
+          };
+        }
+      }
+
+      return {
+        id: s.id,
+        name: s.name,
+        toolType: s.toolType,
+        state: s.state,
+        inputMode: s.inputMode,
+        cwd: s.cwd,
+        groupId: s.groupId || null,
+        groupName: group?.name || null,
+        groupEmoji: group?.emoji || null,
+        usageStats: s.usageStats || null,
+        lastResponse,
+        claudeSessionId: s.claudeSessionId || null,
+      };
+    });
+  });
+
+  // Set up callback for web server to fetch single session details
+  server.setGetSessionDetailCallback((sessionId: string) => {
+    const sessions = sessionsStore.get('sessions', []);
+    const session = sessions.find((s: any) => s.id === sessionId);
+    if (!session) return null;
+    return {
+      id: session.id,
+      name: session.name,
+      toolType: session.toolType,
+      state: session.state,
+      inputMode: session.inputMode,
+      cwd: session.cwd,
+      aiLogs: session.aiLogs || [],
+      shellLogs: session.shellLogs || [],
+      usageStats: session.usageStats,
+      claudeSessionId: session.claudeSessionId,
+      isGitRepo: session.isGitRepo,
+    };
+  });
+
+  // Set up callback for web server to fetch current theme
+  server.setGetThemeCallback(() => {
+    const themeId = store.get('activeThemeId', 'dracula');
+    return getThemeById(themeId);
+  });
+
+  // Set up callback for web server to fetch custom AI commands
+  server.setGetCustomCommandsCallback(() => {
+    const customCommands = store.get('customAICommands', []) as Array<{
+      id: string;
+      command: string;
+      description: string;
+      prompt: string;
+    }>;
+    return customCommands;
+  });
+
+  // Set up callback for web server to write commands to sessions
+  // Note: Process IDs have -ai or -terminal suffix based on session's inputMode
+  server.setWriteToSessionCallback((sessionId: string, data: string) => {
+    if (!processManager) {
+      logger.warn('processManager is null for writeToSession', 'WebServer');
+      return false;
+    }
+
+    // Get the session's current inputMode to determine which process to write to
+    const sessions = sessionsStore.get('sessions', []);
+    const session = sessions.find((s: any) => s.id === sessionId);
+    if (!session) {
+      logger.warn(`Session ${sessionId} not found for writeToSession`, 'WebServer');
+      return false;
+    }
+
+    // Append -ai or -terminal suffix based on inputMode
+    const targetSessionId = session.inputMode === 'ai' ? `${sessionId}-ai` : `${sessionId}-terminal`;
+    logger.debug(`Writing to ${targetSessionId} (inputMode=${session.inputMode})`, 'WebServer');
+
+    const result = processManager.write(targetSessionId, data);
+    logger.debug(`Write result: ${result}`, 'WebServer');
+    return result;
+  });
+
+  // Set up callback for web server to execute commands through the desktop
+  // This forwards AI commands to the renderer, ensuring single source of truth
+  // The renderer handles all spawn logic, state management, and broadcasts
+  server.setExecuteCommandCallback(async (sessionId: string, command: string) => {
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for executeCommand', 'WebServer');
+      return false;
+    }
+
+    // Look up the session to get Claude session ID for logging
+    const sessions = sessionsStore.get('sessions', []);
+    const session = sessions.find((s: any) => s.id === sessionId);
+    const claudeSessionId = session?.claudeSessionId || 'none';
+
+    // Forward to renderer - it will handle spawn, state, and everything else
+    // This ensures web commands go through exact same code path as desktop commands
+    logger.info(`[Web → Renderer] Forwarding command | Maestro: ${sessionId} | Claude: ${claudeSessionId} | Command: ${command.substring(0, 100)}`, 'WebServer');
+    mainWindow.webContents.send('remote:executeCommand', sessionId, command);
+    return true;
+  });
+
+  // Set up callback for web server to interrupt sessions through the desktop
+  // This forwards to the renderer which handles state updates and broadcasts
+  server.setInterruptSessionCallback(async (sessionId: string) => {
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for interrupt', 'WebServer');
+      return false;
+    }
+
+    // Forward to renderer - it will handle interrupt, state update, and broadcasts
+    // This ensures web interrupts go through exact same code path as desktop interrupts
+    logger.debug(`Forwarding interrupt to renderer for session ${sessionId}`, 'WebServer');
+    mainWindow.webContents.send('remote:interrupt', sessionId);
+    return true;
+  });
+
+  // Set up callback for web server to switch session mode through the desktop
+  // This forwards to the renderer which handles state updates and broadcasts
+  server.setSwitchModeCallback(async (sessionId: string, mode: 'ai' | 'terminal') => {
+    if (!mainWindow) {
+      logger.warn('mainWindow is null for switchMode', 'WebServer');
+      return false;
+    }
+
+    // Forward to renderer - it will handle mode switch and broadcasts
+    // This ensures web mode switches go through exact same code path as desktop
+    logger.debug(`Forwarding mode switch to renderer for session ${sessionId}: ${mode}`, 'WebServer');
+    mainWindow.webContents.send('remote:switchMode', sessionId, mode);
+    return true;
+  });
+
+  return server;
+}
+
 function createWindow() {
   // Restore saved window state
   const savedState = windowStateStore.store;
@@ -280,172 +454,8 @@ app.whenReady().then(() => {
   // Initialize core services
   logger.info('Initializing core services', 'Startup');
   processManager = new ProcessManager();
-  webServer = new WebServer(); // Random port with auto-generated security token
+  // Note: webServer is created on-demand when user enables web interface (see setupWebServerCallbacks)
   agentDetector = new AgentDetector();
-
-  // Set up callback for web server to fetch sessions list
-  webServer.setGetSessionsCallback(() => {
-    const sessions = sessionsStore.get('sessions', []);
-    const groups = groupsStore.get('groups', []);
-    return sessions.map((s: any) => {
-      // Find the group for this session
-      const group = s.groupId ? groups.find((g: any) => g.id === s.groupId) : null;
-
-      // Extract last AI response for mobile preview (first 3 lines, max 500 chars)
-      let lastResponse = null;
-      if (s.aiLogs && s.aiLogs.length > 0) {
-        // Find the last stdout/stderr entry from the AI (not user messages)
-        const lastAiLog = [...s.aiLogs].reverse().find((log: any) =>
-          log.source === 'stdout' || log.source === 'stderr'
-        );
-        if (lastAiLog && lastAiLog.text) {
-          const fullText = lastAiLog.text;
-          // Get first 3 lines or 500 chars, whichever is shorter
-          const lines = fullText.split('\n').slice(0, 3);
-          let previewText = lines.join('\n');
-          if (previewText.length > 500) {
-            previewText = previewText.slice(0, 497) + '...';
-          } else if (fullText.length > previewText.length) {
-            previewText = previewText + '...';
-          }
-          lastResponse = {
-            text: previewText,
-            timestamp: lastAiLog.timestamp,
-            source: lastAiLog.source,
-            fullLength: fullText.length,
-          };
-        }
-      }
-
-      return {
-        id: s.id,
-        name: s.name,
-        toolType: s.toolType,
-        state: s.state,
-        inputMode: s.inputMode,
-        cwd: s.cwd,
-        groupId: s.groupId || null,
-        groupName: group?.name || null,
-        groupEmoji: group?.emoji || null,
-        usageStats: s.usageStats || null,
-        lastResponse,
-        claudeSessionId: s.claudeSessionId || null,
-      };
-    });
-  });
-
-  // Set up callback for web server to fetch single session details
-  webServer.setGetSessionDetailCallback((sessionId: string) => {
-    const sessions = sessionsStore.get('sessions', []);
-    const session = sessions.find((s: any) => s.id === sessionId);
-    if (!session) return null;
-    return {
-      id: session.id,
-      name: session.name,
-      toolType: session.toolType,
-      state: session.state,
-      inputMode: session.inputMode,
-      cwd: session.cwd,
-      aiLogs: session.aiLogs || [],
-      shellLogs: session.shellLogs || [],
-      usageStats: session.usageStats,
-      claudeSessionId: session.claudeSessionId,
-      isGitRepo: session.isGitRepo,
-    };
-  });
-
-  // Set up callback for web server to fetch current theme
-  webServer.setGetThemeCallback(() => {
-    const themeId = store.get('activeThemeId', 'dracula');
-    return getThemeById(themeId);
-  });
-
-  // Set up callback for web server to fetch custom AI commands
-  webServer.setGetCustomCommandsCallback(() => {
-    const customCommands = store.get('customAICommands', []) as Array<{
-      id: string;
-      command: string;
-      description: string;
-      prompt: string;
-    }>;
-    return customCommands;
-  });
-
-  // Set up callback for web server to write commands to sessions
-  // Note: Process IDs have -ai or -terminal suffix based on session's inputMode
-  webServer.setWriteToSessionCallback((sessionId: string, data: string) => {
-    if (!processManager) {
-      logger.warn('processManager is null for writeToSession', 'WebServer');
-      return false;
-    }
-
-    // Get the session's current inputMode to determine which process to write to
-    const sessions = sessionsStore.get('sessions', []);
-    const session = sessions.find((s: any) => s.id === sessionId);
-    if (!session) {
-      logger.warn(`Session ${sessionId} not found for writeToSession`, 'WebServer');
-      return false;
-    }
-
-    // Append -ai or -terminal suffix based on inputMode
-    const targetSessionId = session.inputMode === 'ai' ? `${sessionId}-ai` : `${sessionId}-terminal`;
-    logger.debug(`Writing to ${targetSessionId} (inputMode=${session.inputMode})`, 'WebServer');
-
-    const result = processManager.write(targetSessionId, data);
-    logger.debug(`Write result: ${result}`, 'WebServer');
-    return result;
-  });
-
-  // Set up callback for web server to execute commands through the desktop
-  // This forwards AI commands to the renderer, ensuring single source of truth
-  // The renderer handles all spawn logic, state management, and broadcasts
-  webServer.setExecuteCommandCallback(async (sessionId: string, command: string) => {
-    if (!mainWindow) {
-      logger.warn('mainWindow is null for executeCommand', 'WebServer');
-      return false;
-    }
-
-    // Look up the session to get Claude session ID for logging
-    const sessions = sessionsStore.get('sessions', []);
-    const session = sessions.find((s: any) => s.id === sessionId);
-    const claudeSessionId = session?.claudeSessionId || 'none';
-
-    // Forward to renderer - it will handle spawn, state, and everything else
-    // This ensures web commands go through exact same code path as desktop commands
-    logger.info(`[Web → Renderer] Forwarding command | Maestro: ${sessionId} | Claude: ${claudeSessionId} | Command: ${command.substring(0, 100)}`, 'WebServer');
-    mainWindow.webContents.send('remote:executeCommand', sessionId, command);
-    return true;
-  });
-
-  // Set up callback for web server to interrupt sessions through the desktop
-  // This forwards to the renderer which handles state updates and broadcasts
-  webServer.setInterruptSessionCallback(async (sessionId: string) => {
-    if (!mainWindow) {
-      logger.warn('mainWindow is null for interrupt', 'WebServer');
-      return false;
-    }
-
-    // Forward to renderer - it will handle interrupt, state update, and broadcasts
-    // This ensures web interrupts go through exact same code path as desktop interrupts
-    logger.debug(`Forwarding interrupt to renderer for session ${sessionId}`, 'WebServer');
-    mainWindow.webContents.send('remote:interrupt', sessionId);
-    return true;
-  });
-
-  // Set up callback for web server to switch session mode through the desktop
-  // This forwards to the renderer which handles state updates and broadcasts
-  webServer.setSwitchModeCallback(async (sessionId: string, mode: 'ai' | 'terminal') => {
-    if (!mainWindow) {
-      logger.warn('mainWindow is null for switchMode', 'WebServer');
-      return false;
-    }
-
-    // Forward to renderer - it will handle mode switch and broadcasts
-    // This ensures web mode switches go through exact same code path as desktop
-    logger.debug(`Forwarding mode switch to renderer for session ${sessionId}: ${mode}`, 'WebServer');
-    mainWindow.webContents.send('remote:switchMode', sessionId, mode);
-    return true;
-  });
 
   logger.info('Core services initialized', 'Startup');
 
@@ -461,13 +471,8 @@ app.whenReady().then(() => {
   logger.info('Creating main window', 'Startup');
   createWindow();
 
-  // Start web server for remote access (random port with security token)
-  logger.info('Starting web server', 'WebServer');
-  webServer.start().then(({ port, url }) => {
-    logger.info(`Web server running at ${url} (port ${port})`, 'WebServer');
-  }).catch((error) => {
-    logger.error(`Failed to start web server: ${error}`, 'WebServer');
-  });
+  // Note: Web server is not auto-started - it starts when user enables web interface
+  // via live:startServer IPC call from the renderer
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -930,18 +935,72 @@ function setupIpcHandlers() {
     }
   });
 
-  // Disable all live sessions (marks all sessions as offline without stopping server)
+  // Start web server (creates if needed, starts if not running)
+  ipcMain.handle('live:startServer', async () => {
+    try {
+      // Create web server if it doesn't exist
+      if (!webServer) {
+        logger.info('Creating web server', 'WebServer');
+        webServer = createWebServer();
+      }
+
+      // Start if not already running
+      if (!webServer.isActive()) {
+        logger.info('Starting web server', 'WebServer');
+        const { port, url } = await webServer.start();
+        logger.info(`Web server running at ${url} (port ${port})`, 'WebServer');
+        return { success: true, url };
+      }
+
+      // Already running
+      return { success: true, url: webServer.getSecureUrl() };
+    } catch (error: any) {
+      logger.error(`Failed to start web server: ${error.message}`, 'WebServer');
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Stop web server and clean up
+  ipcMain.handle('live:stopServer', async () => {
+    if (!webServer) {
+      return { success: true };
+    }
+
+    try {
+      logger.info('Stopping web server', 'WebServer');
+      await webServer.stop();
+      webServer = null; // Allow garbage collection, will recreate on next start
+      logger.info('Web server stopped and cleaned up', 'WebServer');
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`Failed to stop web server: ${error.message}`, 'WebServer');
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Disable all live sessions and stop the server
   ipcMain.handle('live:disableAll', async () => {
     if (!webServer) {
       return { success: true, count: 0 };
     }
+
+    // First mark all sessions as offline
     const liveSessions = webServer.getLiveSessions();
     const count = liveSessions.length;
     for (const session of liveSessions) {
       webServer.setSessionOffline(session.sessionId);
     }
-    logger.info(`Disabled ${count} live sessions`, 'Live');
-    return { success: true, count };
+
+    // Then stop the server
+    try {
+      logger.info(`Disabled ${count} live sessions, stopping server`, 'Live');
+      await webServer.stop();
+      webServer = null;
+      return { success: true, count };
+    } catch (error: any) {
+      logger.error(`Failed to stop web server during disableAll: ${error.message}`, 'WebServer');
+      return { success: false, count, error: error.message };
+    }
   });
 
   // Web server management

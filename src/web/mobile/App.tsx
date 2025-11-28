@@ -641,9 +641,7 @@ export default function MobileApp() {
   }), [showResponseNotification, setDesktopTheme]);
 
   const { state: connectionState, connect, send, error, reconnectAttempts } = useWebSocket({
-    autoReconnect: true,
-    maxReconnectAttempts: 10,
-    reconnectDelay: 2000,
+    autoReconnect: false, // Only retry manually via the retry button
     handlers: wsHandlers,
   });
 
@@ -1251,7 +1249,9 @@ export default function MobileApp() {
           !activeSessionId
             ? 'Select a session first...'
             : activeSession?.inputMode === 'ai'
-              ? `Ask ${activeSession?.toolType === 'claude-code' ? 'Claude' : activeSession?.toolType || 'AI'} about ${activeSession?.name || 'this session'}...`
+              ? (isSmallScreen
+                  ? 'Query AI...'
+                  : `Ask ${activeSession?.toolType === 'claude-code' ? 'Claude' : activeSession?.toolType || 'AI'} about ${activeSession?.name || 'this session'}...`)
               : 'Run shell command...'
         }
         disabled={!activeSessionId}

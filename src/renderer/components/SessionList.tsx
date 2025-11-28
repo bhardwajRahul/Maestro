@@ -356,12 +356,13 @@ export function SessionList(props: SessionListProps) {
                         <div className="text-[10px] uppercase font-bold mb-2" style={{ color: theme.colors.textDim }}>
                           Scan with Mobile
                         </div>
-                        <div className="p-2 rounded" style={{ backgroundColor: 'white' }}>
+                        <div className="p-3 rounded w-full" style={{ backgroundColor: 'white' }}>
                           <QRCodeSVG
                             value={webInterfaceUrl}
-                            size={100}
+                            size={240}
                             bgColor="#FFFFFF"
                             fgColor="#000000"
+                            style={{ width: '100%', height: 'auto' }}
                           />
                         </div>
                       </div>
