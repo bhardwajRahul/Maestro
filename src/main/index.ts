@@ -1276,7 +1276,7 @@ function setupIpcHandlers() {
 
   // Logger operations
   ipcMain.handle('logger:log', async (_event, level: string, message: string, context?: string, data?: unknown) => {
-    const logLevel = level as 'debug' | 'info' | 'warn' | 'error';
+    const logLevel = level as 'debug' | 'info' | 'warn' | 'error' | 'toast';
     switch (logLevel) {
       case 'debug':
         logger.debug(message, context, data);
@@ -1290,12 +1290,15 @@ function setupIpcHandlers() {
       case 'error':
         logger.error(message, context, data);
         break;
+      case 'toast':
+        logger.toast(message, context, data);
+        break;
     }
   });
 
   ipcMain.handle('logger:getLogs', async (_event, filter?: { level?: string; context?: string; limit?: number }) => {
     const typedFilter = filter ? {
-      level: filter.level as 'debug' | 'info' | 'warn' | 'error' | undefined,
+      level: filter.level as 'debug' | 'info' | 'warn' | 'error' | 'toast' | undefined,
       context: filter.context,
       limit: filter.limit,
     } : undefined;

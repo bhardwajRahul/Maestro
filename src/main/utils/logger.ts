@@ -3,7 +3,7 @@
  * Logs are stored in memory and can be retrieved via IPC
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'toast';
 
 export interface LogEntry {
   timestamp: number;
@@ -23,6 +23,7 @@ class Logger {
     info: 1,
     warn: 2,
     error: 3,
+    toast: 1, // Toast notifications always logged at info priority (always visible)
   };
 
   setLogLevel(level: LogLevel): void {
@@ -75,6 +76,10 @@ class Logger {
       case 'debug':
         console.log(message, entry.data || '');
         break;
+      case 'toast':
+        // Toast notifications logged with info styling (purple in LogViewer)
+        console.info(message, entry.data || '');
+        break;
     }
   }
 
@@ -116,6 +121,17 @@ class Logger {
     this.addLog({
       timestamp: Date.now(),
       level: 'error',
+      message,
+      context,
+      data,
+    });
+  }
+
+  toast(message: string, context?: string, data?: unknown): void {
+    // Toast notifications are always logged (they're user-facing notifications)
+    this.addLog({
+      timestamp: Date.now(),
+      level: 'toast',
       message,
       context,
       data,
