@@ -554,6 +554,15 @@ export function AgentSessionsBrowser({
     }
   }, [viewingSession, messages, onResumeSession, onClose, starredSessions]);
 
+  // Handle quick resume from the list view (without going to detail view)
+  const handleQuickResume = useCallback((session: ClaudeSession, e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't trigger session view
+    const isStarred = starredSessions.has(session.sessionId);
+    // Pass empty messages array - the history will be loaded when the session is resumed
+    onResumeSession(session.sessionId, [], session.sessionName, isStarred);
+    onClose();
+  }, [starredSessions, onResumeSession, onClose]);
+
   // Format file size
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -1112,6 +1121,17 @@ export function AgentSessionsBrowser({
                             color: isStarred ? theme.colors.warning : theme.colors.textDim,
                             fill: isStarred ? theme.colors.warning : 'transparent',
                           }}
+                        />
+                      </button>
+                      {/* Quick Resume button */}
+                      <button
+                        onClick={(e) => handleQuickResume(session, e)}
+                        className="p-1 rounded hover:bg-white/10 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                        title="Resume session in new tab"
+                      >
+                        <Play
+                          className="w-4 h-4"
+                          style={{ color: theme.colors.success }}
                         />
                       </button>
                       <div className="flex-1 min-w-0">

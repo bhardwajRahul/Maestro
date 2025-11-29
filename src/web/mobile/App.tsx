@@ -96,6 +96,14 @@ function calculateContextUsage(usageStats?: Session['usageStats'] | null): numbe
 }
 
 /**
+ * Get the active tab from a session
+ */
+function getActiveTabFromSession(session: Session | null | undefined): AITabData | null {
+  if (!session?.aiTabs || !session.activeTabId) return null;
+  return session.aiTabs.find(tab => tab.id === session.activeTabId) || null;
+}
+
+/**
  * Header component for the mobile app
  * Compact single-line header showing: Maestro | Session Name | Claude ID | Status | Cost | Context
  */
@@ -114,11 +122,16 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
   const effectiveState = isOffline ? 'offline' : connectionState;
   const statusConfig = CONNECTION_STATUS_CONFIG[effectiveState];
 
-  // Session status and usage
-  const sessionState = activeSession?.state || 'idle';
+  // Get active tab for per-tab data (claudeSessionId, usageStats)
+  const activeTab = getActiveTabFromSession(activeSession);
+
+  // Session status and usage - prefer tab-level data
+  const sessionState = activeTab?.state || activeSession?.state || 'idle';
   const isThinking = sessionState === 'busy';
-  const cost = activeSession?.usageStats?.totalCostUsd;
-  const contextUsage = calculateContextUsage(activeSession?.usageStats);
+  // Use tab's usageStats if available, otherwise fall back to session-level (deprecated)
+  const tabUsageStats = activeTab?.usageStats;
+  const cost = tabUsageStats?.totalCostUsd ?? activeSession?.usageStats?.totalCostUsd;
+  const contextUsage = calculateContextUsage(tabUsageStats ?? activeSession?.usageStats);
 
   // Get status dot color
   const getStatusDotColor = () => {
@@ -225,8 +238,8 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
             {activeSession.name}
           </span>
 
-          {/* Claude Session ID pill */}
-          {activeSession.claudeSessionId && (
+          {/* Claude Session ID pill - use active tab's claudeSessionId */}
+          {(activeTab?.claudeSessionId || activeSession.claudeSessionId) && (
             <span
               style={{
                 fontSize: '10px',
@@ -237,9 +250,9 @@ function MobileHeader({ connectionState, isOffline, onRetry, activeSession }: Mo
                 borderRadius: '3px',
                 flexShrink: 0,
               }}
-              title={`Claude Session: ${activeSession.claudeSessionId}`}
+              title={`Claude Session: ${activeTab?.claudeSessionId || activeSession.claudeSessionId}`}
             >
-              {activeSession.claudeSessionId.slice(0, 8)}
+              {(activeTab?.claudeSessionId || activeSession.claudeSessionId)?.slice(0, 8)}
             </span>
           )}
 
