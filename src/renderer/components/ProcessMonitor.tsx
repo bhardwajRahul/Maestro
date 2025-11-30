@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronRight, ChevronDown, X, Activity, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, X, Activity, RefreshCw } from 'lucide-react';
 import type { Session, Group, Theme } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -27,7 +27,7 @@ interface ProcessNode {
   emoji?: string;
   sessionId?: string;
   pid?: number;
-  processType?: 'ai' | 'terminal' | 'batch';
+  processType?: 'ai' | 'terminal' | 'batch' | 'synopsis';
   isAlive?: boolean;
   expanded?: boolean;
   children?: ProcessNode[];
@@ -111,9 +111,54 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
     });
   };
 
+  // Collect all expandable node IDs from the tree
+  const getAllExpandableNodeIds = (nodes: ProcessNode[]): string[] => {
+    const ids: string[] = [];
+    const traverse = (nodeList: ProcessNode[]) => {
+      nodeList.forEach(node => {
+        if (node.children && node.children.length > 0) {
+          ids.push(node.id);
+          traverse(node.children);
+        }
+      });
+    };
+    traverse(nodes);
+    return ids;
+  };
+
+  const expandAll = () => {
+    const processTree = buildProcessTree();
+    const allIds = getAllExpandableNodeIds(processTree);
+    setExpandedNodes(new Set(allIds));
+  };
+
+  const collapseAll = () => {
+    setExpandedNodes(new Set());
+  };
+
   // Parse the base session ID from a process session ID
-  // Process session IDs are formatted as: {baseSessionId}-ai, {baseSessionId}-terminal, {baseSessionId}-batch-{timestamp}
+  // Process session IDs are formatted as:
+  // - {baseSessionId}-ai (legacy)
+  // - {baseSessionId}-ai-{tabId} (tab-based AI)
+  // - {baseSessionId}-terminal
+  // - {baseSessionId}-batch-{timestamp}
+  // - {baseSessionId}-synopsis-{timestamp}
   const parseBaseSessionId = (processSessionId: string): string => {
+    // Check for batch mode pattern: {sessionId}-batch-{timestamp}
+    const batchMatch = processSessionId.match(/^(.+)-batch-\d+$/);
+    if (batchMatch) {
+      return batchMatch[1];
+    }
+    // Check for synopsis pattern: {sessionId}-synopsis-{timestamp}
+    const synopsisMatch = processSessionId.match(/^(.+)-synopsis-\d+$/);
+    if (synopsisMatch) {
+      return synopsisMatch[1];
+    }
+    // Check for tab-based AI pattern: {sessionId}-ai-{tabId}
+    const aiTabMatch = processSessionId.match(/^(.+)-ai-.+$/);
+    if (aiTabMatch) {
+      return aiTabMatch[1];
+    }
     // Try to match common suffixes
     const suffixes = ['-ai', '-terminal'];
     for (const suffix of suffixes) {
@@ -121,19 +166,15 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
         return processSessionId.slice(0, -suffix.length);
       }
     }
-    // Check for batch mode pattern: {sessionId}-batch-{timestamp}
-    const batchMatch = processSessionId.match(/^(.+)-batch-\d+$/);
-    if (batchMatch) {
-      return batchMatch[1];
-    }
     // Return as-is if no known suffix
     return processSessionId;
   };
 
   // Determine process type from session ID
-  const getProcessType = (processSessionId: string): 'ai' | 'terminal' | 'batch' => {
+  const getProcessType = (processSessionId: string): 'ai' | 'terminal' | 'batch' | 'synopsis' => {
     if (processSessionId.endsWith('-terminal')) return 'terminal';
     if (processSessionId.match(/-batch-\d+$/)) return 'batch';
+    if (processSessionId.match(/-synopsis-\d+$/)) return 'synopsis';
     return 'ai';
   };
 
@@ -184,6 +225,8 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
           label = 'Terminal Shell';
         } else if (processType === 'batch') {
           label = `AI Agent (${proc.toolType}) - Batch`;
+        } else if (processType === 'synopsis') {
+          label = `AI Agent (${proc.toolType}) - Synopsis`;
         } else {
           label = `AI Agent (${proc.toolType})`;
         }
@@ -248,7 +291,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
       const rootNode: ProcessNode = {
         id: 'group-root',
         type: 'group',
-        label: 'No Group',
+        label: 'UNGROUPED',
         emoji: '📁',
         expanded: expandedNodes.has('group-root'),
         children: ungroupedSessions.map(session => buildSessionNode(session))
@@ -551,7 +594,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => fetchActiveProcesses()}
               className="p-1.5 rounded hover:bg-opacity-10 flex items-center gap-1"
@@ -563,13 +606,40 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={onClose}
-              className="p-1 rounded hover:bg-opacity-10"
+              onClick={expandAll}
+              className="p-1.5 rounded hover:bg-opacity-10"
               style={{ color: theme.colors.textDim }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${theme.colors.accent}20`}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Expand all"
             >
-              <X className="w-5 h-5" />
+              <div className="flex flex-col items-center -space-y-1.5">
+                <ChevronUp className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" />
+              </div>
+            </button>
+            <button
+              onClick={collapseAll}
+              className="p-1.5 rounded hover:bg-opacity-10"
+              style={{ color: theme.colors.textDim }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${theme.colors.accent}20`}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Collapse all"
+            >
+              <div className="flex flex-col items-center -space-y-1.5">
+                <ChevronDown className="w-4 h-4" />
+                <ChevronUp className="w-4 h-4" />
+              </div>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded hover:bg-opacity-10"
+              style={{ color: theme.colors.textDim }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${theme.colors.accent}20`}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              title="Close (Esc)"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
