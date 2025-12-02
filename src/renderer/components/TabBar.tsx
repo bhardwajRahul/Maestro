@@ -607,8 +607,8 @@ export function TabBar({
     >
       {/* Unread filter toggle - sticky at the beginning with opaque background */}
       <div
-        className="sticky left-0 z-10 flex items-center shrink-0 pr-1 mb-1 self-center group"
-        style={{ backgroundColor: theme.colors.bgSidebar }}
+        className="sticky left-0 flex items-center shrink-0 pr-1 mb-1 self-center group"
+        style={{ backgroundColor: theme.colors.bgSidebar, zIndex: 1 }}
       >
         <button
           onClick={toggleUnreadFilter}
@@ -627,11 +627,12 @@ export function TabBar({
         </button>
         {/* Hover overlay */}
         <div
-          className="absolute left-0 top-full mt-1 px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20"
+          className="absolute left-0 top-full mt-1 px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
           style={{
             backgroundColor: theme.colors.bgSidebar,
             border: `1px solid ${theme.colors.border}`,
-            color: theme.colors.textMain
+            color: theme.colors.textMain,
+            zIndex: 2
           }}
         >
           {showUnreadOnly ? 'Showing unread only' : 'Filter unread tabs'}
@@ -699,8 +700,8 @@ export function TabBar({
 
       {/* New Tab Button - sticky on right when tabs overflow, otherwise inline */}
       <div
-        className={`flex items-center shrink-0 pl-1 mb-1 self-center ${isOverflowing ? 'sticky right-0 z-10' : ''}`}
-        style={{ backgroundColor: isOverflowing ? theme.colors.bgSidebar : 'transparent' }}
+        className={`flex items-center shrink-0 pl-1 mb-1 self-center ${isOverflowing ? 'sticky right-0' : ''}`}
+        style={{ backgroundColor: isOverflowing ? theme.colors.bgSidebar : 'transparent', zIndex: isOverflowing ? 1 : undefined }}
       >
         <button
           onClick={onNewTab}
