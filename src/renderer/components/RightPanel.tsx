@@ -230,14 +230,14 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
 
         {activeRightTab === 'autorun' && (
           <AutoRun
-            content={session.scratchPadContent}
+            content=""  // TODO: Content now loaded from files via autorun:readDoc IPC
             onChange={updateScratchPad}
             theme={theme}
             sessionId={session.id}
-            initialMode={session.scratchPadMode || 'edit'}
-            initialCursorPosition={session.scratchPadCursorPosition || 0}
-            initialEditScrollPos={session.scratchPadEditScrollPos || 0}
-            initialPreviewScrollPos={session.scratchPadPreviewScrollPos || 0}
+            initialMode="edit"  // TODO: Use session.autoRunMode once field is added
+            initialCursorPosition={0}  // TODO: Use session.autoRunCursorPosition once field is added
+            initialEditScrollPos={0}  // TODO: Use session.autoRunEditScrollPos once field is added
+            initialPreviewScrollPos={0}  // TODO: Use session.autoRunPreviewScrollPos once field is added
             onStateChange={updateScratchPadState}
             batchRunState={batchRunState}
             onOpenBatchRunner={onOpenBatchRunner}

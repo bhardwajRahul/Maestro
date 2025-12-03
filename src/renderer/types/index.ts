@@ -7,7 +7,7 @@ export type ToolType = 'claude' | 'claude-code' | 'aider' | 'opencode' | 'termin
 export type SessionState = 'idle' | 'busy' | 'waiting_input' | 'connecting' | 'error';
 export type FileChangeType = 'modified' | 'added' | 'deleted';
 export type RightPanelTab = 'files' | 'history' | 'autorun';
-export type ScratchPadMode = 'raw' | 'preview' | 'wysiwyg';
+// Note: ScratchPadMode was removed as part of the Scratchpad → Auto Run migration
 export type FocusArea = 'sidebar' | 'main' | 'right';
 export type LLMProvider = 'openrouter' | 'anthropic' | 'ollama';
 
@@ -185,7 +185,6 @@ export interface Session {
   aiLogs: LogEntry[];
   shellLogs: LogEntry[];
   workLog: WorkLogItem[];
-  scratchPadContent: string;
   contextUsage: number;
   // Usage statistics from AI responses
   usageStats?: UsageStats;
@@ -216,11 +215,6 @@ export interface Session {
   // Command history (separate for each mode)
   aiCommandHistory?: string[];
   shellCommandHistory?: string[];
-  // Scratchpad state tracking
-  scratchPadCursorPosition?: number;
-  scratchPadEditScrollPos?: number;
-  scratchPadPreviewScrollPos?: number;
-  scratchPadMode?: 'edit' | 'preview';
   // Claude Code session ID for conversation continuity
   // DEPRECATED: Use aiTabs[activeIndex].claudeSessionId instead
   claudeSessionId?: string;

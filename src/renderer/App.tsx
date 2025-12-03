@@ -2323,10 +2323,12 @@ export default function MaestroConsole() {
   }, []);
 
   // Handler to start batch run from modal
+  // TODO: Update to read content from Auto Run file system once IPC handlers are implemented
   const handleStartBatchRun = useCallback((prompt: string) => {
     if (!activeSession) return;
     setBatchRunnerModalOpen(false);
-    startBatchRun(activeSession.id, activeSession.scratchPadContent, prompt);
+    // Pass empty string for now - content will be read from files in the new Auto Run system
+    startBatchRun(activeSession.id, '', prompt);
   }, [activeSession, startBatchRun]);
 
   // Handler to stop batch run for active session (with confirmation)
@@ -3467,7 +3469,6 @@ export default function MaestroConsole() {
         aiLogs: [], // Deprecated - logs are now in aiTabs
         shellLogs: [{ id: generateId(), timestamp: Date.now(), source: 'system', text: 'Shell Session Ready.' }],
         workLog: [],
-        scratchPadContent: '',
         contextUsage: 0,
         inputMode: agentId === 'terminal' ? 'terminal' : 'ai',
         // AI process PID (terminal uses runCommand which spawns fresh shells)
@@ -3728,24 +3729,22 @@ export default function MaestroConsole() {
     }
   };
 
-  const updateScratchPad = useCallback((content: string) => {
-    setSessions(prev => prev.map(s => s.id === activeSessionId ? { ...s, scratchPadContent: content } : s));
-  }, [activeSessionId]);
+  // TODO: Auto Run content is now stored in files, not session state
+  // This function will be removed once AutoRun component is updated to use file-based storage
+  const updateScratchPad = useCallback((_content: string) => {
+    // No-op: content is now stored in files via autorun:writeDoc IPC
+  }, []);
 
-  const updateScratchPadState = useCallback((state: {
+  // TODO: Auto Run state tracking to be updated once new autoRun session fields are added
+  // This function will be updated to use the new autoRun* fields
+  const updateScratchPadState = useCallback((_state: {
     mode: 'edit' | 'preview';
     cursorPosition: number;
     editScrollPos: number;
     previewScrollPos: number;
   }) => {
-    setSessions(prev => prev.map(s => s.id === activeSessionId ? {
-      ...s,
-      scratchPadMode: state.mode,
-      scratchPadCursorPosition: state.cursorPosition,
-      scratchPadEditScrollPos: state.editScrollPos,
-      scratchPadPreviewScrollPos: state.previewScrollPos
-    } : s));
-  }, [activeSessionId]);
+    // No-op until new autoRun* fields are added to Session interface
+  }, []);
 
   const processInput = async (overrideInputValue?: string) => {
     const effectiveInputValue = overrideInputValue ?? inputValue;

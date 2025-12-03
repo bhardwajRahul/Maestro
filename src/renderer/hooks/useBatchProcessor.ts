@@ -322,12 +322,12 @@ export function useBatchProcessor({
           });
         }
 
-        // Re-read the scratchpad file to check remaining tasks and sync to UI
+        // Re-read the scratchpad file to check remaining tasks
+        // TODO: In new Auto Run system, content is stored in files, not session state
         const readResult = await window.maestro.tempfile.read(writeResult.path);
         if (readResult.success && readResult.content) {
-          // Sync scratchpad changes to UI after each task
-          console.log('[BatchProcessor] Syncing scratchpad after task', i + 1, 'for session:', sessionId);
-          onUpdateSession(sessionId, { scratchPadContent: readResult.content });
+          console.log('[BatchProcessor] Checking remaining tasks after task', i + 1, 'for session:', sessionId);
+          // Note: scratchPadContent field removed - content now stored in files
 
           const remainingTasks = countUnfinishedTasks(readResult.content);
           console.log('[BatchProcessor] Remaining unchecked tasks:', remainingTasks);
@@ -344,16 +344,9 @@ export function useBatchProcessor({
       }
     }
 
-    // Sync back changes from temp file
-    try {
-      const finalReadResult = await window.maestro.tempfile.read(writeResult.path);
-      if (finalReadResult.success && finalReadResult.content) {
-        // Update session's scratchpad content
-        onUpdateSession(sessionId, { scratchPadContent: finalReadResult.content });
-      }
-    } catch (error) {
-      console.error('Error reading final scratchpad state:', error);
-    }
+    // Note: In the old system, we would sync back changes from temp file to session state
+    // TODO: In new Auto Run system, content is persisted directly to files via autorun:writeDoc IPC
+    // No need to sync back - the file IS the source of truth
 
     // Clean up temp file
     try {
