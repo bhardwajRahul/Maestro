@@ -526,23 +526,27 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     });
   }, [selectedFile, localContent]);
 
+  // Track content prop to detect external changes (for session switch sync)
+  const prevContentForSyncRef = useRef(content);
+
   // Sync local content from prop when session changes (switching sessions)
+  // or when content changes externally (e.g., switching documents, batch run modifying tasks)
   useEffect(() => {
-    if (sessionId !== prevSessionIdRef.current) {
+    const sessionChanged = sessionId !== prevSessionIdRef.current;
+    const contentChanged = content !== prevContentForSyncRef.current;
+
+    if (sessionChanged) {
       // Reset editing flag so content can sync properly when returning to this session
       isEditingRef.current = false;
       setLocalContent(content);
       prevSessionIdRef.current = sessionId;
+      prevContentForSyncRef.current = content;
+    } else if (contentChanged && !isEditingRef.current) {
+      // Content changed externally (document switch, batch run, etc.) - sync if not editing
+      setLocalContent(content);
+      prevContentForSyncRef.current = content;
     }
   }, [sessionId, content]);
-
-  // Also sync if content changes externally (e.g., batch run modifying tasks)
-  // But only when we're not actively editing (avoid fighting with user input)
-  useEffect(() => {
-    if (!isEditingRef.current && content !== localContent) {
-      setLocalContent(content);
-    }
-  }, [content]);
 
   // Sync local content to parent on blur
   const syncContentToParent = useCallback(() => {
