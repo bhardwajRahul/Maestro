@@ -369,100 +369,6 @@ export function AchievementCard({ theme, autoRunStats, globalStats, onEscapeWith
     return count.toString();
   };
 
-  // Draw the maestro conductor silhouette
-  const drawMaestroSilhouette = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
-    ctx.save();
-    ctx.translate(x, y);
-    const scale = size / 512;
-    ctx.scale(scale, scale);
-
-    ctx.fillStyle = '#FFFFFF';
-
-    // Head - profile facing left
-    ctx.beginPath();
-    ctx.ellipse(180, 80, 55, 60, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Nose bump
-    ctx.beginPath();
-    ctx.ellipse(118, 85, 12, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Hair/top of head
-    ctx.beginPath();
-    ctx.ellipse(185, 35, 40, 25, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Neck
-    ctx.fillRect(155, 130, 50, 40);
-
-    // Collar area
-    ctx.beginPath();
-    ctx.moveTo(140, 165);
-    ctx.lineTo(260, 165);
-    ctx.lineTo(250, 185);
-    ctx.lineTo(150, 185);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bow tie
-    ctx.beginPath();
-    ctx.ellipse(200, 175, 25, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Torso
-    ctx.beginPath();
-    ctx.moveTo(140, 185);
-    ctx.lineTo(120, 350);
-    ctx.lineTo(280, 350);
-    ctx.lineTo(260, 185);
-    ctx.closePath();
-    ctx.fill();
-
-    // Left arm
-    ctx.beginPath();
-    ctx.moveTo(140, 200);
-    ctx.quadraticCurveTo(90, 220, 80, 280);
-    ctx.quadraticCurveTo(75, 300, 90, 310);
-    ctx.lineTo(110, 305);
-    ctx.quadraticCurveTo(120, 290, 115, 260);
-    ctx.quadraticCurveTo(130, 240, 145, 230);
-    ctx.closePath();
-    ctx.fill();
-
-    // Left hand
-    ctx.beginPath();
-    ctx.ellipse(85, 295, 18, 22, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Right arm raised with baton
-    ctx.beginPath();
-    ctx.moveTo(260, 200);
-    ctx.quadraticCurveTo(300, 180, 330, 130);
-    ctx.quadraticCurveTo(340, 115, 355, 100);
-    ctx.lineTo(365, 110);
-    ctx.quadraticCurveTo(350, 130, 340, 145);
-    ctx.quadraticCurveTo(315, 195, 270, 220);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right hand
-    ctx.beginPath();
-    ctx.ellipse(350, 95, 15, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Baton
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(360, 85);
-    ctx.lineTo(395, 20);
-    ctx.stroke();
-
-    ctx.restore();
-  };
-
   // Generate shareable achievement card as canvas
   const generateShareImage = useCallback(async (): Promise<HTMLCanvasElement> => {
     const canvas = document.createElement('canvas');
@@ -504,12 +410,6 @@ export function AchievementCard({ theme, autoRunStats, globalStats, onEscapeWith
     ctx.lineWidth = 4;
     ctx.roundRect(-2, -2, width + 4, height + 4, 22);
     ctx.stroke();
-
-    // Draw conductor silhouette in top left (subtle, as background element)
-    ctx.save();
-    ctx.globalAlpha = 0.08;
-    drawMaestroSilhouette(ctx, -20, 20, 280);
-    ctx.restore();
 
     // Trophy icon circle with gradient
     const trophyX = width / 2;
