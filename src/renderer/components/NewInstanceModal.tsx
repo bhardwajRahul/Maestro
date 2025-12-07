@@ -33,6 +33,7 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
   const [refreshingAgent, setRefreshingAgent] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<AgentDebugInfo | null>(null);
   const [homeDir, setHomeDir] = useState<string>('');
+  const [customAgentPaths, setCustomAgentPaths] = useState<Record<string, string>>({});
 
   // Layer stack integration
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -59,6 +60,10 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
     try {
       const detectedAgents = await window.maestro.agents.detect();
       setAgents(detectedAgents);
+
+      // Load custom paths for agents
+      const paths = await window.maestro.agents.getAllCustomPaths();
+      setCustomAgentPaths(paths);
 
       // Set default or first available
       const defaultAvailable = detectedAgents.find((a: AgentConfig) => a.id === defaultAgent && a.available);
@@ -230,62 +235,111 @@ export function NewInstanceModal({ isOpen, onClose, onCreate, theme, defaultAgen
                 {agents.filter(a => !a.hidden).map((agent) => (
                   <div
                     key={agent.id}
-                    onClick={() => {
-                      if (agent.id === 'claude-code' && agent.available) {
-                        setSelectedAgent(agent.id);
-                      }
-                    }}
-                    className={`w-full text-left p-3 rounded border transition-all ${
+                    className={`rounded border transition-all ${
                       selectedAgent === agent.id ? 'ring-2' : ''
-                    } ${(agent.id !== 'claude-code' || !agent.available) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-opacity-10 cursor-pointer'}`}
+                    }`}
                     style={{
                       borderColor: theme.colors.border,
                       backgroundColor: selectedAgent === agent.id ? theme.colors.accentDim : 'transparent',
                       ringColor: theme.colors.accent,
-                      color: theme.colors.textMain,
                     }}
-                    role="option"
-                    aria-selected={selectedAgent === agent.id}
-                    tabIndex={agent.id === 'claude-code' && agent.available ? 0 : -1}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{agent.name}</div>
-                        {agent.path && (
-                          <div className="text-xs opacity-50 font-mono mt-1">{agent.path}</div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {agent.id === 'claude-code' ? (
-                          <>
-                            {agent.available ? (
-                              <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.success + '20', color: theme.colors.success }}>
-                                Available
-                              </span>
-                            ) : (
-                              <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.error + '20', color: theme.colors.error }}>
-                                Not Found
-                              </span>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRefreshAgent(agent.id);
-                              }}
-                              className="p-1 rounded hover:bg-white/10 transition-colors"
-                              title="Refresh detection (shows debug info if not found)"
-                              style={{ color: theme.colors.textDim }}
-                            >
-                              <RefreshCw className={`w-4 h-4 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`} />
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.warning + '20', color: theme.colors.warning }}>
-                            Coming Soon
-                          </span>
-                        )}
+                    <div
+                      onClick={() => {
+                        if (agent.id === 'claude-code' && agent.available) {
+                          setSelectedAgent(agent.id);
+                        }
+                      }}
+                      className={`w-full text-left p-3 ${(agent.id !== 'claude-code' || !agent.available) ? 'opacity-40 cursor-not-allowed' : 'hover:bg-opacity-10 cursor-pointer'}`}
+                      style={{ color: theme.colors.textMain }}
+                      role="option"
+                      aria-selected={selectedAgent === agent.id}
+                      tabIndex={agent.id === 'claude-code' && agent.available ? 0 : -1}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{agent.name}</div>
+                          {agent.path && (
+                            <div className="text-xs opacity-50 font-mono mt-1">{agent.path}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {agent.id === 'claude-code' ? (
+                            <>
+                              {agent.available ? (
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.success + '20', color: theme.colors.success }}>
+                                  Available
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.error + '20', color: theme.colors.error }}>
+                                  Not Found
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRefreshAgent(agent.id);
+                                }}
+                                className="p-1 rounded hover:bg-white/10 transition-colors"
+                                title="Refresh detection (shows debug info if not found)"
+                                style={{ color: theme.colors.textDim }}
+                              >
+                                <RefreshCw className={`w-4 h-4 ${refreshingAgent === agent.id ? 'animate-spin' : ''}`} />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.warning + '20', color: theme.colors.warning }}>
+                              Coming Soon
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {/* Custom path input for Claude Code */}
+                    {agent.id === 'claude-code' && (
+                      <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: theme.colors.border }}>
+                        <label className="block text-xs opacity-60 mb-1">Custom Path (optional)</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customAgentPaths[agent.id] || ''}
+                            onChange={(e) => {
+                              const newPaths = { ...customAgentPaths, [agent.id]: e.target.value };
+                              setCustomAgentPaths(newPaths);
+                            }}
+                            onBlur={async () => {
+                              const path = customAgentPaths[agent.id]?.trim() || null;
+                              await window.maestro.agents.setCustomPath(agent.id, path);
+                              // Refresh agents to pick up the new path
+                              loadAgents();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="/path/to/claude"
+                            className="flex-1 p-1.5 rounded border bg-transparent outline-none text-xs font-mono"
+                            style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                          />
+                          {customAgentPaths[agent.id] && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const newPaths = { ...customAgentPaths };
+                                delete newPaths[agent.id];
+                                setCustomAgentPaths(newPaths);
+                                await window.maestro.agents.setCustomPath(agent.id, null);
+                                loadAgents();
+                              }}
+                              className="px-2 py-1 rounded text-xs"
+                              style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs opacity-40 mt-1">
+                          Specify a custom path if the agent is not in your PATH
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

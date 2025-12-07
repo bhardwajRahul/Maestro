@@ -74,8 +74,8 @@ export interface WorkLogItem {
 }
 
 // History entry types for the History panel
-// AUTO = task completed by Auto Run, USER = manual user prompt, LOOP = loop iteration summary
-export type HistoryEntryType = 'AUTO' | 'USER' | 'LOOP';
+// AUTO = task completed by Auto Run (includes loop summaries), USER = manual user prompt
+export type HistoryEntryType = 'AUTO' | 'USER';
 
 export interface HistoryEntry {
   id: string;

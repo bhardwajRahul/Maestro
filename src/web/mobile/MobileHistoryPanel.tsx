@@ -2,12 +2,12 @@
  * MobileHistoryPanel component for Maestro mobile web interface
  *
  * A full-screen view displaying history entries from the desktop app.
- * This view shows all AUTO, USER, and LOOP entries in a list format, with the ability
+ * This view shows all AUTO and USER entries in a list format, with the ability
  * to tap on an entry to see full details.
  *
  * Features:
  * - List view of all history entries
- * - Filter by AUTO/USER/LOOP type
+ * - Filter by AUTO/USER type
  * - Tap to view full details
  * - Read-only (no resume functionality on mobile)
  */
@@ -19,7 +19,7 @@ import { buildApiUrl } from '../utils/config';
 import { webLogger } from '../utils/logger';
 
 // History entry type matching the desktop type
-export type HistoryEntryType = 'AUTO' | 'USER' | 'LOOP';
+export type HistoryEntryType = 'AUTO' | 'USER';
 
 export interface HistoryEntry {
   id: string;
@@ -92,8 +92,6 @@ function HistoryCard({ entry, onSelect }: HistoryCardProps) {
   const getPillColor = () => {
     if (entry.type === 'AUTO') {
       return { bg: colors.warning + '20', text: colors.warning, border: colors.warning + '40' };
-    } else if (entry.type === 'LOOP') {
-      return { bg: colors.success + '20', text: colors.success, border: colors.success + '40' };
     }
     return { bg: colors.accent + '20', text: colors.accent, border: colors.accent + '40' };
   };
@@ -189,12 +187,6 @@ function HistoryCard({ entry, onSelect }: HistoryCardProps) {
               <path d="M12 8V4H8" />
               <rect x="8" y="8" width="8" height="12" rx="1" />
               <path d="M12 8v12" />
-            </svg>
-          ) : entry.type === 'LOOP' ? (
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 4 23 10 17 10" />
-              <polyline points="1 20 1 14 7 14" />
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
             </svg>
           ) : (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -303,8 +295,6 @@ function HistoryDetailView({ entry, onClose }: HistoryDetailViewProps) {
   const getPillColor = () => {
     if (entry.type === 'AUTO') {
       return { bg: colors.warning + '20', text: colors.warning, border: colors.warning + '40' };
-    } else if (entry.type === 'LOOP') {
-      return { bg: colors.success + '20', text: colors.success, border: colors.success + '40' };
     }
     return { bg: colors.accent + '20', text: colors.accent, border: colors.accent + '40' };
   };
@@ -592,7 +582,7 @@ export interface MobileHistoryPanelProps {
 /**
  * Filter type for history entries
  */
-type HistoryFilter = 'all' | 'AUTO' | 'USER' | 'LOOP';
+type HistoryFilter = 'all' | 'AUTO' | 'USER';
 
 /**
  * MobileHistoryPanel component
@@ -686,7 +676,6 @@ export function MobileHistoryPanel({
   // Count entries by type
   const autoCount = entries.filter((e) => e.type === 'AUTO').length;
   const userCount = entries.filter((e) => e.type === 'USER').length;
-  const loopCount = entries.filter((e) => e.type === 'LOOP').length;
 
   return (
     <>
@@ -760,18 +749,13 @@ export function MobileHistoryPanel({
             flexShrink: 0,
           }}
         >
-          {/* Only show LOOP filter if there are LOOP entries */}
-          {(['all', 'AUTO', 'USER', 'LOOP'] as HistoryFilter[])
-            .filter((ft) => ft !== 'LOOP' || loopCount > 0)
-            .map((filterType) => {
+          {(['all', 'AUTO', 'USER'] as HistoryFilter[]).map((filterType) => {
             const isActive = filter === filterType;
             const count = filterType === 'all'
               ? entries.length
               : filterType === 'AUTO'
                 ? autoCount
-                : filterType === 'USER'
-                  ? userCount
-                  : loopCount;
+                : userCount;
             const displayLabel = filterType === 'all' ? 'All' : filterType;
 
             let bgColor = colors.bgMain;
@@ -787,10 +771,6 @@ export function MobileHistoryPanel({
                 bgColor = colors.accent + '20';
                 textColor = colors.accent;
                 borderColor = colors.accent + '40';
-              } else if (filterType === 'LOOP') {
-                bgColor = colors.success + '20';
-                textColor = colors.success;
-                borderColor = colors.success + '40';
               } else {
                 bgColor = colors.accent + '20';
                 textColor = colors.accent;

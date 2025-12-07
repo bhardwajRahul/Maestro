@@ -150,7 +150,7 @@ function createLoopSummaryEntry(params: LoopSummaryParams): Omit<HistoryEntry, '
   ].filter(line => line !== '').join('\n');
 
   return {
-    type: 'LOOP',
+    type: 'AUTO',
     timestamp: Date.now(),
     summary: loopSummary,
     fullResponse: loopDetails,
@@ -840,7 +840,7 @@ ${docList}
       ].filter(line => line !== '').join('\n');
 
       onAddHistoryEntry({
-        type: 'LOOP',
+        type: 'AUTO',
         timestamp: Date.now(),
         summary: loopSummary,
         fullResponse: loopDetails,

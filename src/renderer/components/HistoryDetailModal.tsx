@@ -333,8 +333,9 @@ export function HistoryDetailModal({
                     </span>
                   </div>
                   {(() => {
-                    const totalTokens = entry.usageStats!.inputTokens + entry.usageStats!.outputTokens;
-                    const contextUsage = Math.min(100, Math.round((totalTokens / entry.usageStats!.contextWindow) * 100));
+                    // Context usage should only count input-related tokens (what's in context), not output tokens (what model generates)
+                    const contextTokens = entry.usageStats!.inputTokens + entry.usageStats!.cacheReadInputTokens + entry.usageStats!.cacheCreationInputTokens;
+                    const contextUsage = Math.min(100, Math.round((contextTokens / entry.usageStats!.contextWindow) * 100));
                     return (
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
@@ -352,7 +353,7 @@ export function HistoryDetailModal({
                           </span>
                         </div>
                         <span className="text-[10px] font-mono" style={{ color: theme.colors.textDim }}>
-                          {(totalTokens / 1000).toFixed(1)}k / {(entry.usageStats!.contextWindow / 1000).toFixed(0)}k tokens
+                          {(contextTokens / 1000).toFixed(1)}k / {(entry.usageStats!.contextWindow / 1000).toFixed(0)}k tokens
                         </span>
                       </div>
                     );

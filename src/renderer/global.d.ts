@@ -46,7 +46,7 @@ interface UsageStats {
   contextWindow: number;
 }
 
-type HistoryEntryType = 'AUTO' | 'USER' | 'LOOP';
+type HistoryEntryType = 'AUTO' | 'USER';
 
 interface MaestroAPI {
   settings: {

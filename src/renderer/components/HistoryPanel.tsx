@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { Bot, User, ExternalLink, Check, X, Clock, HelpCircle, RefreshCw } from 'lucide-react';
+import { Bot, User, ExternalLink, Check, X, Clock, HelpCircle } from 'lucide-react';
 import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
 import { HistoryHelpModal } from './HistoryHelpModal';
@@ -282,7 +282,7 @@ const LOAD_MORE_COUNT = 50;         // Entries to add when scrolling
 
 export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPanelProps>(function HistoryPanel({ session, theme, onJumpToClaudeSession, onResumeSession, onOpenSessionAsTab }, ref) {
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
-  const [activeFilters, setActiveFilters] = useState<Set<HistoryEntryType>>(new Set(['AUTO', 'USER', 'LOOP']));
+  const [activeFilters, setActiveFilters] = useState<Set<HistoryEntryType>>(new Set(['AUTO', 'USER']));
   const [isLoading, setIsLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [detailModalEntry, setDetailModalEntry] = useState<HistoryEntry | null>(null);
@@ -575,8 +575,6 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
         return { bg: theme.colors.warning + '20', text: theme.colors.warning, border: theme.colors.warning + '40' };
       case 'USER':
         return { bg: theme.colors.accent + '20', text: theme.colors.accent, border: theme.colors.accent + '40' };
-      case 'LOOP':
-        return { bg: theme.colors.success + '20', text: theme.colors.success, border: theme.colors.success + '40' };
       default:
         return { bg: theme.colors.bgActivity, text: theme.colors.textDim, border: theme.colors.border };
     }
@@ -589,8 +587,6 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
         return Bot;
       case 'USER':
         return User;
-      case 'LOOP':
-        return RefreshCw;
       default:
         return Bot;
     }
@@ -602,10 +598,7 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
       <div className="flex items-start gap-3 mb-4 pt-2">
         {/* Left-justified filter pills */}
         <div className="flex gap-2 flex-shrink-0">
-          {/* Only show LOOP pill if there are LOOP entries */}
-          {(['AUTO', 'USER', 'LOOP'] as HistoryEntryType[])
-            .filter(type => type !== 'LOOP' || historyEntries.some(e => e.type === 'LOOP'))
-            .map(type => {
+          {(['AUTO', 'USER'] as HistoryEntryType[]).map(type => {
               const isActive = activeFilters.has(type);
               const colors = getPillColor(type);
               const Icon = getEntryIcon(type);

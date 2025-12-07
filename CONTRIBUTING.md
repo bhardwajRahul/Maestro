@@ -76,6 +76,7 @@ maestro/
 
 ```bash
 npm run dev            # Start dev server with hot reload
+npm run dev:demo       # Start in demo mode (fresh settings, isolated data)
 npm run dev:web        # Start web interface dev server
 npm run build          # Full production build (main + renderer + web + CLI)
 npm run build:main     # Build main process only
@@ -88,6 +89,26 @@ npm run package        # Package for all platforms
 npm run package:mac    # Package for macOS
 npm run package:win    # Package for Windows
 npm run package:linux  # Package for Linux
+```
+
+### Demo Mode
+
+Use demo mode to run Maestro with a fresh, isolated data directory - useful for demos, testing, or screenshots without affecting your real settings:
+
+```bash
+npm run dev:demo
+```
+
+Demo mode stores all data in `/tmp/maestro-demo`. For a completely fresh start each time:
+
+```bash
+rm -rf /tmp/maestro-demo && npm run dev:demo
+```
+
+You can also specify a custom demo directory via environment variable:
+
+```bash
+MAESTRO_DEMO_DIR=~/Desktop/my-demo npm run dev
 ```
 
 ## Common Development Tasks

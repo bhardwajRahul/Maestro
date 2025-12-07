@@ -162,10 +162,10 @@ const windowStateStore = new Store<WindowState>({
   },
 });
 
-// History entries store (per-project history for AUTO, USER, and LOOP entries)
+// History entries store (per-project history for AUTO and USER entries)
 interface HistoryEntry {
   id: string;
-  type: 'AUTO' | 'USER' | 'LOOP';
+  type: 'AUTO' | 'USER';
   timestamp: number;
   summary: string;
   fullResponse?: string;

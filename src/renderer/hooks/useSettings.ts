@@ -445,8 +445,8 @@ export function useSettings(): UseSettingsReturn {
 
   // Get the highest unacknowledged badge level (if any)
   const getUnacknowledgedBadgeLevel = (): number | null => {
-    const acknowledged = autoRunStatsState.lastAcknowledgedBadgeLevel ?? 0;
-    const current = autoRunStatsState.currentBadgeLevel;
+    const acknowledged = autoRunStats.lastAcknowledgedBadgeLevel ?? 0;
+    const current = autoRunStats.currentBadgeLevel;
     if (current > acknowledged) {
       return current;
     }

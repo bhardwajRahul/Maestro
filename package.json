@@ -17,6 +17,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev:demo": "MAESTRO_DEMO_DIR=/tmp/maestro-demo npm run dev",
     "dev:main": "tsc -p tsconfig.main.json && NODE_ENV=development electron .",
     "dev:renderer": "vite",
     "dev:web": "vite --config vite.config.web.mts",

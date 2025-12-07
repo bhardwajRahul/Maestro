@@ -33,7 +33,7 @@ export interface UsageStats {
 }
 
 // History entry types for the History panel
-export type HistoryEntryType = 'AUTO' | 'USER' | 'LOOP';
+export type HistoryEntryType = 'AUTO' | 'USER';
 
 export interface HistoryEntry {
   id: string;

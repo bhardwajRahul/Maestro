@@ -28,7 +28,6 @@ interface TabProps {
   onSelect: () => void;
   onClose: () => void;
   onMiddleClick: () => void;
-  onContextMenu: (e: React.MouseEvent) => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
@@ -70,7 +69,6 @@ function Tab({
   onSelect,
   onClose,
   onMiddleClick,
-  onContextMenu,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -204,7 +202,6 @@ function Tab({
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onContextMenu={onContextMenu}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -376,106 +373,6 @@ function Tab({
 }
 
 /**
- * Context menu for tab right-click actions.
- */
-interface ContextMenuProps {
-  x: number;
-  y: number;
-  theme: Theme;
-  canClose: boolean;
-  canCloseOthers: boolean;
-  onRename: () => void;
-  onClose: () => void;
-  onCloseOthers: () => void;
-  onDismiss: () => void;
-}
-
-function ContextMenu({
-  x,
-  y,
-  theme,
-  canClose,
-  canCloseOthers,
-  onRename,
-  onClose,
-  onCloseOthers,
-  onDismiss
-}: ContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close on click outside
-  React.useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onDismiss();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onDismiss]);
-
-  // Close on Escape
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onDismiss();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onDismiss]);
-
-  return (
-    <div
-      ref={menuRef}
-      className="fixed z-50 py-1 rounded-md shadow-xl border"
-      style={{
-        left: x,
-        top: y,
-        backgroundColor: theme.colors.bgSidebar,
-        borderColor: theme.colors.border,
-        minWidth: '140px'
-      }}
-    >
-      <button
-        onClick={() => {
-          onRename();
-          onDismiss();
-        }}
-        className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
-        style={{ color: theme.colors.textMain }}
-      >
-        Rename
-      </button>
-      {canClose && (
-        <button
-          onClick={() => {
-            onClose();
-            onDismiss();
-          }}
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
-          style={{ color: theme.colors.textMain }}
-        >
-          Close
-        </button>
-      )}
-      {canCloseOthers && (
-        <button
-          onClick={() => {
-            onCloseOthers();
-            onDismiss();
-          }}
-          className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
-          style={{ color: theme.colors.textMain }}
-        >
-          Close Others
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
  * TabBar component for displaying AI session tabs.
  * Shows tabs for each Claude Code conversation within a Maestro session.
  * Appears only in AI mode (hidden in terminal mode).
@@ -496,12 +393,6 @@ export function TabBar({
   onToggleUnreadFilter,
   onOpenTabSearch
 }: TabBarProps) {
-  const [contextMenu, setContextMenu] = useState<{
-    tabId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   // Use prop if provided (controlled), otherwise use local state (uncontrolled)
@@ -528,15 +419,6 @@ export function TabBar({
 
   // Can always close tabs - closing the last one creates a fresh new tab
   const canClose = true;
-
-  const handleContextMenu = useCallback((tabId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({
-      tabId,
-      x: e.clientX,
-      y: e.clientY
-    });
-  }, []);
 
   const handleDragStart = useCallback((tabId: string, e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
@@ -695,7 +577,6 @@ export function TabBar({
               onSelect={() => onTabSelect(tab.id)}
               onClose={() => onTabClose(tab.id)}
               onMiddleClick={() => canClose && onTabClose(tab.id)}
-              onContextMenu={(e) => handleContextMenu(tab.id, e)}
               onDragStart={(e) => handleDragStart(tab.id, e)}
               onDragOver={(e) => handleDragOver(tab.id, e)}
               onDragEnd={handleDragEnd}
@@ -736,20 +617,6 @@ export function TabBar({
         </button>
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          theme={theme}
-          canClose={canClose}
-          canCloseOthers={tabs.length > 1}
-          onRename={() => handleRenameRequest(contextMenu.tabId)}
-          onClose={() => onTabClose(contextMenu.tabId)}
-          onCloseOthers={() => onCloseOthers?.(contextMenu.tabId)}
-          onDismiss={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 }

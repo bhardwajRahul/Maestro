@@ -456,7 +456,7 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('history:getAll', projectPath, sessionId),
     add: (entry: {
       id: string;
-      type: 'AUTO' | 'USER' | 'LOOP';
+      type: 'AUTO' | 'USER';
       timestamp: number;
       summary: string;
       fullResponse?: string;
@@ -897,7 +897,7 @@ export interface MaestroAPI {
   history: {
     getAll: (projectPath?: string, sessionId?: string) => Promise<Array<{
       id: string;
-      type: 'AUTO' | 'USER' | 'LOOP';
+      type: 'AUTO' | 'USER';
       timestamp: number;
       summary: string;
       fullResponse?: string;
@@ -920,7 +920,7 @@ export interface MaestroAPI {
     }>>;
     add: (entry: {
       id: string;
-      type: 'AUTO' | 'USER' | 'LOOP';
+      type: 'AUTO' | 'USER';
       timestamp: number;
       summary: string;
       fullResponse?: string;

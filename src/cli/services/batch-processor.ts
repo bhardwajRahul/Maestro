@@ -310,7 +310,7 @@ export async function* runPlaybook(
 
     const historyEntry: HistoryEntry = {
       id: generateUUID(),
-      type: 'LOOP',
+      type: 'AUTO',
       timestamp: Date.now(),
       summary: loopSummary,
       fullResponse: loopDetails,
@@ -709,7 +709,7 @@ export async function* runPlaybook(
       const loopSummary = `Loop ${loopIteration + 1} completed: ${loopTasksCompleted} tasks accomplished`;
       const historyEntry: HistoryEntry = {
         id: generateUUID(),
-        type: 'LOOP',
+        type: 'AUTO',
         timestamp: Date.now(),
         summary: loopSummary,
         projectPath: session.cwd,

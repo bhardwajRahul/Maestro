@@ -201,7 +201,7 @@ export type GetCustomCommandsCallback = () => CustomAICommand[];
 // History entry type for the history API
 export interface HistoryEntryData {
   id: string;
-  type: 'AUTO' | 'USER' | 'LOOP';
+  type: 'AUTO' | 'USER';
   timestamp: number;
   summary: string;
   fullResponse?: string;
