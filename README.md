@@ -4,7 +4,7 @@
 
 > A unified, highly-responsive developer command center for managing your fleet of AI coding agents.
 
-Maestro is a desktop application that allows you to run and manage multiple AI coding instances in parallel with a Linear/Superhuman-level responsive interface. Currently supporting Claude Code with plans for additional agentic coding tools (OpenAI Codex, Gemini CLI, Qwen3 Coder) based on user demand.
+Maestro is a desktop application for **spec-driven development** with AI coding agents. Collaborate with AI to create detailed specification documents, then let Auto Run execute them automatically—each task in a fresh session with clean context. Run multiple agents in parallel with a Linear/Superhuman-level responsive interface. Currently supporting Claude Code with plans for additional agentic coding tools (OpenAI Codex, Gemini CLI, Qwen3 Coder) based on user demand.
 
 **[Watch the Introduction Video](https://youtu.be/fmwwTOg7cyA?si=dJ89K54tGflKa5G4)**
 
@@ -51,6 +51,38 @@ NOTE: On macOS you may need to clear the quarantine label to successfully launch
 - 🏆 **[Achievements](#achievements)** - Level up from Apprentice to Titan of the Baton based on cumulative Auto Run time. 11 conductor-themed ranks to unlock.
 
 > **Note**: Maestro currently supports Claude Code only. Support for other agentic coding tools may be added in future releases based on community demand.
+
+### Spec-Driven Workflow
+
+Maestro enables a **specification-first approach** to AI-assisted development. Instead of ad-hoc prompting, you collaboratively build detailed specs with the AI, then execute them systematically:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. PLAN          2. SPECIFY         3. EXECUTE        4. REFINE   │
+│  ─────────        ──────────         ─────────         ─────────   │
+│  Discuss the      Create markdown    Auto Run works    Review       │
+│  feature with     docs with task     through tasks,    results,     │
+│  the AI agent     checklists in      fresh session     update specs │
+│                   your Auto Run      per task          and repeat   │
+│                   folder                                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this works:**
+- **Deliberate planning** — Conversation forces you to think through requirements before coding
+- **Documented specs** — Your markdown files become living documentation
+- **Clean execution** — Each task runs in isolation with no context bleed
+- **Iterative refinement** — Review, adjust specs, re-run—specs evolve with your understanding
+
+**Example workflow:**
+
+1. **Plan**: In the AI Terminal, discuss your feature: *"I want to add user authentication with OAuth support"*
+2. **Specify**: Ask the AI to help create a spec: *"Create a markdown checklist for implementing this feature"*
+3. **Save**: Copy the spec to your Auto Run folder (or have the AI write it directly)
+4. **Execute**: Switch to Auto Run tab, select the doc, click Run—Maestro handles the rest
+5. **Review**: Check the History tab for results, refine specs as needed
+
+This approach mirrors methodologies like [Spec-Kit](https://github.com/github/spec-kit), but with a graphical interface, real-time AI collaboration, and multi-agent parallelism.
 
 ### Key Concepts
 

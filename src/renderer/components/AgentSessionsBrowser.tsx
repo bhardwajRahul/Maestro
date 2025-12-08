@@ -91,9 +91,10 @@ export function AgentSessionsBrowser({
     totalMessages: number;
     totalCostUsd: number;
     totalSizeBytes: number;
+    totalTokens: number;
     oldestTimestamp: string | null;
     isComplete: boolean;
-  }>({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, oldestTimestamp: null, isComplete: false });
+  }>({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null, isComplete: false });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -222,7 +223,7 @@ export function AgentSessionsBrowser({
     setHasMoreSessions(false);
     setTotalSessionCount(0);
     nextCursorRef.current = null;
-    setAggregateStats({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, oldestTimestamp: null, isComplete: false });
+    setAggregateStats({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null, isComplete: false });
 
     const loadSessions = async () => {
       if (!activeSession?.cwd) {
@@ -272,6 +273,7 @@ export function AgentSessionsBrowser({
           totalMessages: stats.totalMessages,
           totalCostUsd: stats.totalCostUsd,
           totalSizeBytes: stats.totalSizeBytes,
+          totalTokens: stats.totalTokens ?? 0,
           oldestTimestamp: stats.oldestTimestamp,
           isComplete: stats.isComplete,
         });
@@ -530,12 +532,21 @@ export function AgentSessionsBrowser({
       totalMessages: aggregateStats.totalMessages,
       totalSize: aggregateStats.totalSizeBytes,
       totalCost: aggregateStats.totalCostUsd,
+      totalTokens: aggregateStats.totalTokens,
       oldestSession: aggregateStats.oldestTimestamp
         ? new Date(aggregateStats.oldestTimestamp)
         : null,
       isComplete: aggregateStats.isComplete,
     };
   }, [aggregateStats]);
+
+  // Format token count with K/M/B suffix (approximate)
+  const formatTokens = (tokens: number): string => {
+    if (tokens >= 1_000_000_000) return `~${Math.round(tokens / 1_000_000_000)}B`;
+    if (tokens >= 1_000_000) return `~${Math.round(tokens / 1_000_000)}M`;
+    if (tokens >= 1_000) return `~${Math.round(tokens / 1_000)}K`;
+    return tokens.toString();
+  };
 
   // Filter sessions by search - use different strategies based on search mode
   const filteredSessions = useMemo(() => {
@@ -1120,6 +1131,14 @@ export function AgentSessionsBrowser({
                   <DollarSign className="w-4 h-4" style={{ color: theme.colors.success }} />
                   <span className={`text-xs font-medium font-mono ${!stats.isComplete ? 'animate-pulse' : ''}`} style={{ color: theme.colors.success }}>
                     ${stats.totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              {(stats.totalTokens > 0 || !stats.isComplete) && (
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4" style={{ color: theme.colors.accent }} />
+                  <span className={`text-xs font-medium font-mono ${!stats.isComplete ? 'animate-pulse' : ''}`} style={{ color: theme.colors.textDim }}>
+                    {formatTokens(stats.totalTokens)} tokens
                   </span>
                 </div>
               )}

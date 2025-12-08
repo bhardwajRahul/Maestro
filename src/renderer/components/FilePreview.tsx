@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, Clipboard, Loader2, Image } from 'lucide-react';
+import { FileCode, X, Copy, FileText, Eye, ChevronUp, ChevronDown, Clipboard, Loader2, Image, Globe } from 'lucide-react';
 import { visit } from 'unist-util-visit';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -137,16 +137,19 @@ function MarkdownImage({
   src,
   alt,
   markdownFilePath,
-  theme
+  theme,
+  showRemoteImages = false
 }: {
   src?: string;
   alt?: string;
   markdownFilePath: string;
   theme: any;
+  showRemoteImages?: boolean;
 }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const isRemoteUrl = src?.startsWith('http://') || src?.startsWith('https://');
 
   useEffect(() => {
     if (!src) {
@@ -161,9 +164,13 @@ function MarkdownImage({
       return;
     }
 
-    // If it's an HTTP(S) URL, use it directly
+    // If it's an HTTP(S) URL, handle based on showRemoteImages setting
     if (src.startsWith('http://') || src.startsWith('https://')) {
-      setDataUrl(src);
+      if (showRemoteImages) {
+        setDataUrl(src);
+      } else {
+        setDataUrl(null);
+      }
       setLoading(false);
       return;
     }
@@ -187,7 +194,7 @@ function MarkdownImage({
         setError(`Failed to load image: ${err.message || 'Unknown error'}`);
         setLoading(false);
       });
-  }, [src, markdownFilePath]);
+  }, [src, markdownFilePath, showRemoteImages]);
 
   if (loading) {
     return (
@@ -209,6 +216,19 @@ function MarkdownImage({
       >
         <Image className="w-4 h-4" style={{ color: theme.colors.error }} />
         <span className="text-xs" style={{ color: theme.colors.error }}>{error}</span>
+      </span>
+    );
+  }
+
+  // Show placeholder for blocked remote images
+  if (!dataUrl && isRemoteUrl && !showRemoteImages) {
+    return (
+      <span
+        className="inline-flex items-center gap-2 px-3 py-2 rounded"
+        style={{ backgroundColor: theme.colors.bgActivity, border: `1px dashed ${theme.colors.border}` }}
+      >
+        <Image className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+        <span className="text-xs" style={{ color: theme.colors.textDim }}>Remote image blocked</span>
       </span>
     );
   }
@@ -286,6 +306,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
   const [fileStats, setFileStats] = useState<FileStats | null>(null);
   const [showStatsBar, setShowStatsBar] = useState(true);
   const [tokenCount, setTokenCount] = useState<number | null>(null);
+  const [showRemoteImages, setShowRemoteImages] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -730,14 +751,24 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isMarkdown && (
-              <button
-                onClick={() => setMarkdownRawMode(!markdownRawMode)}
-                className="p-2 rounded hover:bg-white/10 transition-colors"
-                style={{ color: markdownRawMode ? theme.colors.accent : theme.colors.textDim }}
-                title={`${markdownRawMode ? "Show rendered markdown" : "Show raw markdown"} (${formatShortcut('toggleMarkdownMode')})`}
-              >
-                {markdownRawMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-              </button>
+              <>
+                <button
+                  onClick={() => setShowRemoteImages(!showRemoteImages)}
+                  className="p-2 rounded hover:bg-white/10 transition-colors"
+                  style={{ color: showRemoteImages ? theme.colors.accent : theme.colors.textDim }}
+                  title={showRemoteImages ? "Hide remote images" : "Show remote images"}
+                >
+                  <Globe className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setMarkdownRawMode(!markdownRawMode)}
+                  className="p-2 rounded hover:bg-white/10 transition-colors"
+                  style={{ color: markdownRawMode ? theme.colors.accent : theme.colors.textDim }}
+                  title={`${markdownRawMode ? "Show rendered markdown" : "Show raw markdown"} (${formatShortcut('toggleMarkdownMode')})`}
+                >
+                  {markdownRawMode ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                </button>
+              </>
             )}
             <button
               onClick={copyContentToClipboard}
@@ -963,6 +994,7 @@ export function FilePreview({ file, onClose, theme, markdownRawMode, setMarkdown
                     alt={alt}
                     markdownFilePath={file.path}
                     theme={theme}
+                    showRemoteImages={showRemoteImages}
                   />
                 )
               }}

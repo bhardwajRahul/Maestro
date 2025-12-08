@@ -2498,6 +2498,7 @@ function setupIpcHandlers() {
       totalMessages: number;
       totalCostUsd: number;
       totalSizeBytes: number;
+      totalTokens: number;
       oldestTimestamp: string | null;
       processedCount: number;
       isComplete: boolean;
@@ -2519,7 +2520,7 @@ function setupIpcHandlers() {
       try {
         await fs.access(projectDir);
       } catch {
-        return { totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, oldestTimestamp: null };
+        return { totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null };
       }
 
       // List all .jsonl files
@@ -2531,6 +2532,7 @@ function setupIpcHandlers() {
       let totalMessages = 0;
       let totalCostUsd = 0;
       let totalSizeBytes = 0;
+      let totalTokens = 0;
       let oldestTimestamp: string | null = null;
       let processedCount = 0;
 
@@ -2579,6 +2581,9 @@ function setupIpcHandlers() {
               const cacheCreationCost = (cacheCreationTokens / 1_000_000) * CLAUDE_PRICING.CACHE_CREATION_PER_MILLION;
               totalCostUsd += inputCost + outputCost + cacheReadCost + cacheCreationCost;
 
+              // Accumulate total tokens (input + output)
+              totalTokens += inputTokens + outputTokens;
+
               // Find oldest timestamp
               const lines = content.split('\n').filter(l => l.trim());
               for (let j = 0; j < Math.min(lines.length, CLAUDE_SESSION_PARSE_LIMITS.OLDEST_TIMESTAMP_SCAN_LINES); j++) {
@@ -2608,6 +2613,7 @@ function setupIpcHandlers() {
           totalMessages,
           totalCostUsd,
           totalSizeBytes,
+          totalTokens,
           oldestTimestamp,
           processedCount,
           isComplete: processedCount >= totalSessions,
@@ -2621,11 +2627,12 @@ function setupIpcHandlers() {
         totalMessages,
         totalCostUsd,
         totalSizeBytes,
+        totalTokens,
         oldestTimestamp,
       };
     } catch (error) {
       logger.error('Error computing project stats', 'ClaudeSessions', error);
-      return { totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, oldestTimestamp: null };
+      return { totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null };
     }
   });
 
