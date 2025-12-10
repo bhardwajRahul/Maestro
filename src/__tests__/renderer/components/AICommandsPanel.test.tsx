@@ -9,6 +9,7 @@
  * - Delete commands (custom commands, built-in protection)
  * - Command validation (slash prefix normalization, duplicate prevention)
  * - Built-in command handling (edit allowed, delete prevented)
+ * - Template autocomplete integration (dropdown rendering, keyboard handling)
  */
 
 import React from 'react';
@@ -16,6 +17,49 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AICommandsPanel } from '../../../renderer/components/AICommandsPanel';
 import type { Theme, CustomAICommand } from '../../../renderer/types';
+
+// Mock the useTemplateAutocomplete hook
+const mockAutocompleteState = {
+  isOpen: false,
+  search: '',
+  filteredVariables: [],
+  selectedIndex: 0,
+  position: { top: 0, left: 0 },
+};
+
+const mockCloseAutocomplete = vi.fn();
+const mockHandleKeyDown = vi.fn().mockReturnValue(false);
+const mockSelectVariable = vi.fn();
+const mockAutocompleteRef = { current: null };
+
+vi.mock('../../../renderer/hooks/useTemplateAutocomplete', () => ({
+  useTemplateAutocomplete: vi.fn((props: { onChange: (value: string) => void }) => {
+    // Capture the onChange in a closure for this specific hook instance
+    const onChange = props.onChange;
+    return {
+      autocompleteState: mockAutocompleteState,
+      handleKeyDown: mockHandleKeyDown,
+      // Mock handleChange that actually propagates the change to the parent
+      handleChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onChange(e.target.value);
+      },
+      selectVariable: mockSelectVariable,
+      closeAutocomplete: mockCloseAutocomplete,
+      autocompleteRef: mockAutocompleteRef,
+    };
+  }),
+}));
+
+// Mock TemplateAutocompleteDropdown
+vi.mock('../../../renderer/components/TemplateAutocompleteDropdown', () => ({
+  TemplateAutocompleteDropdown: React.forwardRef(
+    (props: { theme: Theme; state: typeof mockAutocompleteState; onSelect: () => void }, ref) => (
+      <div data-testid="autocomplete-dropdown" ref={ref as React.Ref<HTMLDivElement>}>
+        Autocomplete Dropdown
+      </div>
+    )
+  ),
+}));
 
 // Sample theme for testing
 const mockTheme: Theme = {
@@ -1154,6 +1198,160 @@ describe('AICommandsPanel', () => {
 
       const commandText = screen.getByText('/themed');
       expect(commandText).toHaveStyle({ color: lightTheme.colors.accent });
+    });
+  });
+
+  describe('Template autocomplete integration', () => {
+    it('should render autocomplete dropdown in create form', () => {
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={[]}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Command/i }));
+
+      // Should render autocomplete dropdown (mocked)
+      expect(screen.getByTestId('autocomplete-dropdown')).toBeInTheDocument();
+    });
+
+    it('should render autocomplete dropdown in edit form', () => {
+      const commands = [
+        createMockCommand({ id: 'cmd-1', command: '/test', prompt: 'Test prompt' }),
+      ];
+
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={commands}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Edit command'));
+
+      // Should render autocomplete dropdown (mocked)
+      const dropdowns = screen.getAllByTestId('autocomplete-dropdown');
+      expect(dropdowns.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should show template variable hint in create form placeholder', () => {
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={[]}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Command/i }));
+
+      const textarea = screen.getByPlaceholderText(/type {{ for variables/i);
+      expect(textarea).toBeInTheDocument();
+    });
+
+    it('should update value when typing in create form through autocomplete handler', () => {
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={[]}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Command/i }));
+
+      const textarea = screen.getByPlaceholderText(/type {{ for variables/i);
+      fireEvent.change(textarea, { target: { value: 'Test {{' } });
+
+      // The value should be updated through the autocomplete handler
+      expect(textarea).toHaveValue('Test {{');
+    });
+
+    it('should update value when typing in edit form through autocomplete handler', () => {
+      const commands = [
+        createMockCommand({ id: 'cmd-1', command: '/test', prompt: 'Original' }),
+      ];
+
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={commands}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Edit command'));
+
+      const textarea = screen.getByDisplayValue('Original');
+      fireEvent.change(textarea, { target: { value: 'Updated {{' } });
+
+      // The value should be updated through the autocomplete handler
+      expect(textarea).toHaveValue('Updated {{');
+    });
+
+    it('should call autocomplete handleKeyDown on keydown in create form', () => {
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={[]}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Command/i }));
+
+      const textarea = screen.getByPlaceholderText(/type {{ for variables/i);
+      fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+
+      expect(mockHandleKeyDown).toHaveBeenCalled();
+    });
+
+    it('should call autocomplete handleKeyDown on keydown in edit form', () => {
+      const commands = [
+        createMockCommand({ id: 'cmd-1', command: '/test', prompt: 'Original' }),
+      ];
+
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={commands}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByTitle('Edit command'));
+
+      const textarea = screen.getByDisplayValue('Original');
+      fireEvent.keyDown(textarea, { key: 'ArrowDown' });
+
+      expect(mockHandleKeyDown).toHaveBeenCalled();
+    });
+
+    it('should insert tab character when Tab pressed and autocomplete not handling', () => {
+      render(
+        <AICommandsPanel
+          theme={mockTheme}
+          customAICommands={[]}
+          setCustomAICommands={mockSetCustomAICommands}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Add Command/i }));
+
+      const textarea = screen.getByPlaceholderText(/type {{ for variables/i) as HTMLTextAreaElement;
+
+      // Set initial value
+      fireEvent.change(textarea, { target: { value: 'line1' } });
+
+      // Simulate Tab key (autocomplete mock returns false, so Tab should insert)
+      fireEvent.keyDown(textarea, { key: 'Tab' });
+
+      // The Tab key handler should have been triggered
+      // Note: Due to mocking, we can't fully test the tab insertion but can verify the handler was called
+      expect(mockHandleKeyDown).toHaveBeenCalled();
     });
   });
 });

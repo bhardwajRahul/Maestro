@@ -64,6 +64,7 @@ describe('TEMPLATE_VARIABLES constant', () => {
     expect(variables).toContain('{{AGENT_PATH}}');
     expect(variables).toContain('{{AGENT_GROUP}}');
     expect(variables).toContain('{{AGENT_SESSION_ID}}');
+    expect(variables).toContain('{{TAB_NAME}}');
     expect(variables).toContain('{{TOOL_TYPE}}');
   });
 
@@ -113,6 +114,7 @@ describe('TEMPLATE_VARIABLES_GENERAL constant', () => {
     const variables = TEMPLATE_VARIABLES_GENERAL.map((v) => v.variable);
     expect(variables).toContain('{{AGENT_NAME}}');
     expect(variables).toContain('{{AGENT_PATH}}');
+    expect(variables).toContain('{{TAB_NAME}}');
     expect(variables).toContain('{{DATE}}');
     expect(variables).toContain('{{GIT_BRANCH}}');
   });
@@ -184,6 +186,24 @@ describe('substituteTemplateVariables', () => {
       });
       const result = substituteTemplateVariables('Tool: {{TOOL_TYPE}}', context);
       expect(result).toBe('Tool: aider');
+    });
+
+    it('should replace {{TAB_NAME}} with session.name', () => {
+      const context = createTestContext({
+        session: createTestSession({ name: 'My Custom Tab' }),
+      });
+      const result = substituteTemplateVariables('Tab: {{TAB_NAME}}', context);
+      expect(result).toBe('Tab: My Custom Tab');
+    });
+
+    it('should have {{TAB_NAME}} and {{SESSION_NAME}} as aliases (both return session.name)', () => {
+      const context = createTestContext({
+        session: createTestSession({ name: 'Aliased Name' }),
+      });
+      const result1 = substituteTemplateVariables('{{TAB_NAME}}', context);
+      const result2 = substituteTemplateVariables('{{SESSION_NAME}}', context);
+      expect(result1).toBe(result2);
+      expect(result1).toBe('Aliased Name');
     });
   });
 

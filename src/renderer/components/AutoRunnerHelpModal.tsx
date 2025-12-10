@@ -298,6 +298,7 @@ export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps
               >
                 <div><code style={{ color: theme.colors.accent }}>{'{{AGENT_NAME}}'}</code> — Agent name</div>
                 <div><code style={{ color: theme.colors.accent }}>{'{{AGENT_PATH}}'}</code> — Agent home directory path</div>
+                <div><code style={{ color: theme.colors.accent }}>{'{{TAB_NAME}}'}</code> — Custom tab name</div>
                 <div><code style={{ color: theme.colors.accent }}>{'{{GIT_BRANCH}}'}</code> — Current git branch</div>
                 <div><code style={{ color: theme.colors.accent }}>{'{{DATE}}'}</code> — Current date (YYYY-MM-DD)</div>
                 <div><code style={{ color: theme.colors.accent }}>{'{{LOOP_NUMBER}}'}</code> — Current loop iteration</div>

@@ -62,6 +62,9 @@ interface AutoRunProps {
   // Expand to modal callback
   onExpand?: () => void;
 
+  // Hide top controls (when rendered in expanded modal with controls in header)
+  hideTopControls?: boolean;
+
   // Legacy prop for backwards compatibility
   onChange?: (content: string) => void;
 }
@@ -381,6 +384,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   onStopBatchRun,
   sessionState,
   onExpand,
+  hideTopControls = false,
   onChange,  // Legacy prop for backwards compatibility
 }, ref) {
   const isLocked = batchRunState?.isRunning || false;
@@ -1538,7 +1542,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       }}
     >
       {/* Select Folder Button - shown when no folder is configured */}
-      {!folderPath && (
+      {!folderPath && !hideTopControls && (
         <div className="pt-2 flex justify-center">
           <button
             onClick={onOpenSetup}
@@ -1554,7 +1558,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         </div>
       )}
 
-      {/* Mode Toggle */}
+      {/* Mode Toggle - hidden when controls are in modal header */}
+      {!hideTopControls && (
       <div className="flex gap-2 mb-3 justify-center pt-2">
         {/* Expand button */}
         {onExpand && (
@@ -1677,6 +1682,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           <HelpCircle className="w-3.5 h-3.5" />
         </button>
       </div>
+      )}
 
       {/* Document Selector */}
       {folderPath && (

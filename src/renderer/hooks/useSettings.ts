@@ -27,7 +27,7 @@ const DEFAULT_AUTO_RUN_STATS: AutoRunStats = {
 };
 
 // Default AI commands that ship with Maestro
-// Template variables available: {{AGENT_NAME}}, {{AGENT_PATH}}, {{AGENT_GROUP}}, {{AGENT_SESSION_ID}}, {{DATE}}, {{TIME}}, etc.
+// Template variables available: {{AGENT_NAME}}, {{AGENT_PATH}}, {{TAB_NAME}}, {{AGENT_GROUP}}, {{AGENT_SESSION_ID}}, {{DATE}}, {{TIME}}, etc.
 const DEFAULT_AI_COMMANDS: CustomAICommand[] = [
   {
     id: 'commit',

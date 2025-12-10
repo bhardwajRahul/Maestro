@@ -330,7 +330,7 @@ describe('useTemplateAutocomplete', () => {
 
       const filtered = result.current.autocompleteState.filteredVariables;
       expect(filtered.length).toBeGreaterThan(0);
-      // Should include SESSION_ID, SESSION_NAME, AGENT_SESSION_ID
+      // Should include AGENT_SESSION_ID (SESSION_NAME and SESSION_ID are now legacy aliases, not documented)
       expect(filtered.some(v => v.variable.includes('SESSION'))).toBe(true);
     });
 
@@ -1311,6 +1311,7 @@ describe('useTemplateAutocomplete', () => {
       expect(variables.some(v => v.variable === '{{AGENT_NAME}}')).toBe(true);
       expect(variables.some(v => v.variable === '{{AGENT_PATH}}')).toBe(true);
       expect(variables.some(v => v.variable === '{{AGENT_SESSION_ID}}')).toBe(true);
+      expect(variables.some(v => v.variable === '{{TAB_NAME}}')).toBe(true);
 
       // Path variables
       expect(variables.some(v => v.variable === '{{CWD}}')).toBe(true);

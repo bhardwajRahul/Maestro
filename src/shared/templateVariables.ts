@@ -8,6 +8,7 @@
  *   {{AGENT_PATH}}        - Agent home directory path (full path to project)
  *   {{AGENT_GROUP}}       - Agent's group name (if grouped)
  *   {{AGENT_SESSION_ID}}  - Agent session ID (for conversation continuity)
+ *   {{TAB_NAME}}          - Custom tab name (alias: SESSION_NAME)
  *   {{TOOL_TYPE}}         - Agent type (claude-code, aider, etc.)
  *
  * Path Variables:
@@ -74,6 +75,7 @@ export const TEMPLATE_VARIABLES = [
   { variable: '{{AGENT_PATH}}', description: 'Agent home directory path' },
   { variable: '{{AGENT_SESSION_ID}}', description: 'Agent session ID' },
   { variable: '{{AUTORUN_FOLDER}}', description: 'Auto Run folder path', autoRunOnly: true },
+  { variable: '{{TAB_NAME}}', description: 'Custom tab name' },
   { variable: '{{CONTEXT_USAGE}}', description: 'Context usage %' },
   { variable: '{{CWD}}', description: 'Working directory' },
   { variable: '{{DATE}}', description: 'Date (YYYY-MM-DD)' },
@@ -114,6 +116,7 @@ export function substituteTemplateVariables(
     'AGENT_PATH': session.fullPath || session.projectRoot || session.cwd,
     'AGENT_GROUP': groupName || '',
     'AGENT_SESSION_ID': session.claudeSessionId || '',
+    'TAB_NAME': session.name,
     'TOOL_TYPE': session.toolType,
 
     // Path variables
@@ -122,7 +125,7 @@ export function substituteTemplateVariables(
 
     // Legacy aliases (deprecated - kept for backwards compatibility)
     'SESSION_ID': session.id,
-    'SESSION_NAME': session.name,
+    'SESSION_NAME': session.name, // Alias for TAB_NAME
     'PROJECT_PATH': session.fullPath || session.projectRoot || session.cwd,
     'PROJECT_NAME': (session.fullPath || session.projectRoot || session.cwd).split('/').pop() || '',
 

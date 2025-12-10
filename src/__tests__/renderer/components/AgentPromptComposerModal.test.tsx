@@ -67,7 +67,7 @@ vi.mock('../../../renderer/components/TemplateAutocompleteDropdown', () => ({
 // Mock TEMPLATE_VARIABLES
 vi.mock('../../../renderer/utils/templateVariables', () => ({
   TEMPLATE_VARIABLES: [
-    { variable: '{{SESSION_NAME}}', description: 'Current session name' },
+    { variable: '{{TAB_NAME}}', description: 'Custom tab name' },
     { variable: '{{AGENT_PATH}}', description: 'Agent home directory path' },
     { variable: '{{DATE}}', description: 'Current date' },
     { variable: '{{TIME}}', description: 'Current time' },
@@ -383,7 +383,7 @@ describe('AgentPromptComposerModal', () => {
       });
 
       expect(screen.getByTestId('chevron-down-icon')).toBeInTheDocument();
-      expect(screen.getByText('Current session name')).toBeInTheDocument();
+      expect(screen.getByText('Custom tab name')).toBeInTheDocument();
     });
 
     it('collapses when clicking the header button again', async () => {
@@ -443,7 +443,7 @@ describe('AgentPromptComposerModal', () => {
         fireEvent.click(toggleButton!);
       });
 
-      expect(screen.getByText('{{SESSION_NAME}}')).toBeInTheDocument();
+      expect(screen.getByText('{{TAB_NAME}}')).toBeInTheDocument();
       expect(screen.getByText('{{AGENT_PATH}}')).toBeInTheDocument();
       expect(screen.getByText('{{DATE}}')).toBeInTheDocument();
       expect(screen.getByText('{{TIME}}')).toBeInTheDocument();
@@ -466,7 +466,7 @@ describe('AgentPromptComposerModal', () => {
         fireEvent.click(toggleButton!);
       });
 
-      expect(screen.getByText('Current session name')).toBeInTheDocument();
+      expect(screen.getByText('Custom tab name')).toBeInTheDocument();
       expect(screen.getByText('Agent home directory path')).toBeInTheDocument();
       expect(screen.getByText('Current date')).toBeInTheDocument();
       expect(screen.getByText('Current time')).toBeInTheDocument();
@@ -510,7 +510,7 @@ describe('AgentPromptComposerModal', () => {
         fireEvent.click(toggleButton!);
       });
 
-      const variableCode = screen.getByText('{{SESSION_NAME}}');
+      const variableCode = screen.getByText('{{TAB_NAME}}');
       expect(variableCode).toHaveAttribute('title', 'Click to insert');
     });
   });
@@ -543,13 +543,13 @@ describe('AgentPromptComposerModal', () => {
       });
 
       // Click on a variable
-      const variableCode = screen.getByText('{{SESSION_NAME}}');
+      const variableCode = screen.getByText('{{TAB_NAME}}');
       await act(async () => {
         fireEvent.click(variableCode);
       });
 
       // Value should be updated with variable inserted
-      expect(textarea.value).toBe('Hello {{SESSION_NAME}}World');
+      expect(textarea.value).toBe('Hello {{TAB_NAME}}World');
     });
 
     it('replaces selected text when variable is clicked', async () => {
@@ -1387,7 +1387,7 @@ describe('AgentPromptComposerModal', () => {
       });
 
       // Click on a variable
-      const variableCode = screen.getByText('{{SESSION_NAME}}');
+      const variableCode = screen.getByText('{{TAB_NAME}}');
       await act(async () => {
         fireEvent.click(variableCode);
       });

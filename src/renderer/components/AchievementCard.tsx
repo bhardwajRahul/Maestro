@@ -823,7 +823,7 @@ export function AchievementCard({ theme, autoRunStats, globalStats, onEscapeWith
             style={{ color: theme.colors.textDim }}
           >
             <History className="w-3 h-3" />
-            <span>Unlock History</span>
+            <span>Path to the Podium: Timeline</span>
             <ChevronDown
               className={`w-3 h-3 ml-auto transition-transform duration-200 ${
                 historyExpanded ? 'rotate-180' : ''

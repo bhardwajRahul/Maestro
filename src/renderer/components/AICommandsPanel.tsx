@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus, Trash2, Edit2, Save, X, Terminal, Lock, ChevronDown, ChevronRight, Variable } from 'lucide-react';
 import type { Theme, CustomAICommand } from '../types';
 import { TEMPLATE_VARIABLES_GENERAL } from '../utils/templateVariables';
+import { useTemplateAutocomplete } from '../hooks/useTemplateAutocomplete';
+import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 
 interface AICommandsPanelProps {
   theme: Theme;
@@ -25,6 +27,36 @@ export function AICommandsPanel({ theme, customAICommands, setCustomAICommands }
     command: '/',
     description: '',
     prompt: '',
+  });
+
+  // Refs for textareas
+  const newCommandTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const editCommandTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Template autocomplete for new command prompt
+  const {
+    autocompleteState: newAutocompleteState,
+    handleKeyDown: handleNewAutocompleteKeyDown,
+    handleChange: handleNewAutocompleteChange,
+    selectVariable: selectNewVariable,
+    autocompleteRef: newAutocompleteRef,
+  } = useTemplateAutocomplete({
+    textareaRef: newCommandTextareaRef,
+    value: newCommand.prompt,
+    onChange: (value) => setNewCommand({ ...newCommand, prompt: value }),
+  });
+
+  // Template autocomplete for edit command prompt
+  const {
+    autocompleteState: editAutocompleteState,
+    handleKeyDown: handleEditAutocompleteKeyDown,
+    handleChange: handleEditAutocompleteChange,
+    selectVariable: selectEditVariable,
+    autocompleteRef: editAutocompleteRef,
+  } = useTemplateAutocomplete({
+    textareaRef: editCommandTextareaRef,
+    value: editingCommand?.prompt || '',
+    onChange: (value) => editingCommand && setEditingCommand({ ...editingCommand, prompt: value }),
   });
 
   const handleSaveEdit = () => {
@@ -194,15 +226,40 @@ export function AICommandsPanel({ theme, customAICommands, setCustomAICommands }
               />
             </div>
           </div>
-          <div>
+          <div className="relative">
             <label className="block text-xs font-medium opacity-70 mb-1">Prompt</label>
             <textarea
+              ref={newCommandTextareaRef}
               value={newCommand.prompt}
-              onChange={(e) => setNewCommand({ ...newCommand, prompt: e.target.value })}
-              placeholder="The actual prompt sent to the AI agent when this command is invoked..."
+              onChange={handleNewAutocompleteChange}
+              onKeyDown={(e) => {
+                if (handleNewAutocompleteKeyDown(e)) {
+                  return;
+                }
+                // Allow Tab for indentation when autocomplete is not active
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  const textarea = e.currentTarget;
+                  const start = textarea.selectionStart;
+                  const end = textarea.selectionEnd;
+                  const value = textarea.value;
+                  const newValue = value.substring(0, start) + '\t' + value.substring(end);
+                  setNewCommand({ ...newCommand, prompt: newValue });
+                  setTimeout(() => {
+                    textarea.selectionStart = textarea.selectionEnd = start + 1;
+                  }, 0);
+                }
+              }}
+              placeholder="The actual prompt sent to the AI agent when this command is invoked... (type {{ for variables)"
               rows={10}
               className="w-full p-2 rounded border bg-transparent outline-none text-sm resize-y scrollbar-thin min-h-[150px]"
               style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+            />
+            <TemplateAutocompleteDropdown
+              ref={newAutocompleteRef}
+              theme={theme}
+              state={newAutocompleteState}
+              onSelect={selectNewVariable}
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -236,7 +293,7 @@ export function AICommandsPanel({ theme, customAICommands, setCustomAICommands }
 
       {/* Existing commands list */}
       <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
-        {customAICommands.map((cmd) => (
+        {[...customAICommands].sort((a, b) => a.command.localeCompare(b.command)).map((cmd) => (
           <div
             key={cmd.id}
             className="p-3 rounded-lg border"
@@ -267,14 +324,39 @@ export function AICommandsPanel({ theme, customAICommands, setCustomAICommands }
                     />
                   </div>
                 </div>
-                <div className="flex-1 flex flex-col min-h-0">
+                <div className="flex-1 flex flex-col min-h-0 relative">
                   <label className="block text-xs font-medium opacity-70 mb-1">Prompt</label>
                   <textarea
+                    ref={editCommandTextareaRef}
                     value={editingCommand.prompt}
-                    onChange={(e) => setEditingCommand({ ...editingCommand, prompt: e.target.value })}
+                    onChange={handleEditAutocompleteChange}
+                    onKeyDown={(e) => {
+                      if (handleEditAutocompleteKeyDown(e)) {
+                        return;
+                      }
+                      // Allow Tab for indentation when autocomplete is not active
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const textarea = e.currentTarget;
+                        const start = textarea.selectionStart;
+                        const end = textarea.selectionEnd;
+                        const value = textarea.value;
+                        const newValue = value.substring(0, start) + '\t' + value.substring(end);
+                        setEditingCommand({ ...editingCommand, prompt: newValue });
+                        setTimeout(() => {
+                          textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        }, 0);
+                      }
+                    }}
                     rows={12}
                     className="w-full flex-1 p-2 rounded border bg-transparent outline-none text-sm resize-y scrollbar-thin min-h-[200px]"
                     style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
+                  />
+                  <TemplateAutocompleteDropdown
+                    ref={editAutocompleteRef}
+                    theme={theme}
+                    state={editAutocompleteState}
+                    onSelect={selectEditVariable}
                   />
                 </div>
                 <div className="flex justify-end gap-2">

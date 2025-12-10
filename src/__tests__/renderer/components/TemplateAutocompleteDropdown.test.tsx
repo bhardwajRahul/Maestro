@@ -39,7 +39,7 @@ const createMockState = (overrides?: Partial<AutocompleteState>): AutocompleteSt
   selectedIndex: 0,
   searchText: '',
   filteredVariables: [
-    { variable: '{{SESSION_NAME}}', description: 'Current session name' },
+    { variable: '{{TAB_NAME}}', description: 'Custom tab name' },
     { variable: '{{CWD}}', description: 'Current working directory' },
     { variable: '{{TIMESTAMP}}', description: 'Current timestamp' },
   ],
@@ -96,7 +96,7 @@ describe('TemplateAutocompleteDropdown', () => {
         />
       );
 
-      expect(screen.getByText('{{SESSION_NAME}}')).toBeInTheDocument();
+      expect(screen.getByText('{{TAB_NAME}}')).toBeInTheDocument();
       expect(screen.getByText('{{CWD}}')).toBeInTheDocument();
       expect(screen.getByText('{{TIMESTAMP}}')).toBeInTheDocument();
     });
@@ -115,7 +115,7 @@ describe('TemplateAutocompleteDropdown', () => {
 
       const codeElements = container.querySelectorAll('code');
       expect(codeElements.length).toBe(3);
-      expect(codeElements[0].textContent).toBe('{{SESSION_NAME}}');
+      expect(codeElements[0].textContent).toBe('{{TAB_NAME}}');
     });
 
     it('displays variable descriptions', () => {
@@ -128,7 +128,7 @@ describe('TemplateAutocompleteDropdown', () => {
         />
       );
 
-      expect(screen.getByText('Current session name')).toBeInTheDocument();
+      expect(screen.getByText('Custom tab name')).toBeInTheDocument();
       expect(screen.getByText('Current working directory')).toBeInTheDocument();
       expect(screen.getByText('Current timestamp')).toBeInTheDocument();
     });
@@ -287,7 +287,7 @@ describe('TemplateAutocompleteDropdown', () => {
         />
       );
 
-      const description = screen.getByText('Current session name');
+      const description = screen.getByText('Custom tab name');
       expect(description).toHaveStyle({ color: mockTheme.colors.textDim });
     });
   });
