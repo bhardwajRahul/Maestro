@@ -560,9 +560,9 @@ export default function MaestroConsole() {
         // Mark sessions as loaded for splash screen coordination
         setSessionsLoaded(true);
 
-        // If no sessions were loaded, automatically open the new agent modal
+        // If no sessions were loaded, automatically open the onboarding wizard
         if (!hasSessionsLoaded) {
-          setNewInstanceModalOpen(true);
+          openWizardModal();
         }
       }
     };
