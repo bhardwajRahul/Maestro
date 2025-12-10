@@ -168,6 +168,8 @@ export default function MaestroConsole() {
     autoRunStats, recordAutoRunComplete, updateAutoRunProgress, acknowledgeBadge, getUnacknowledgedBadgeLevel,
     tourCompleted, setTourCompleted,
     firstAutoRunCompleted, setFirstAutoRunCompleted,
+    recordWizardStart, recordWizardComplete, recordWizardAbandon, recordWizardResume,
+    recordTourStart, recordTourComplete, recordTourSkip,
   } = settings;
 
   // --- STATE ---
@@ -7286,7 +7288,13 @@ export default function MaestroConsole() {
       )}
 
       {/* --- MAESTRO WIZARD (onboarding wizard for new users) --- */}
-      <MaestroWizard theme={theme} />
+      <MaestroWizard
+        theme={theme}
+        onWizardStart={recordWizardStart}
+        onWizardResume={recordWizardResume}
+        onWizardAbandon={recordWizardAbandon}
+        onWizardComplete={recordWizardComplete}
+      />
 
       {/* --- TOUR OVERLAY (onboarding tour for interface guidance) --- */}
       <TourOverlay
@@ -7296,6 +7304,9 @@ export default function MaestroConsole() {
           setTourOpen(false);
           setTourCompleted(true);
         }}
+        onTourStart={recordTourStart}
+        onTourComplete={recordTourComplete}
+        onTourSkip={recordTourSkip}
       />
 
       {/* --- FLASH NOTIFICATION (centered, auto-dismiss) --- */}

@@ -47,6 +47,15 @@ const AUTO_SAVE_DELAY = 2000;
 interface PhaseReviewScreenProps {
   theme: Theme;
   onLaunchSession: (wantsTour: boolean) => Promise<void>;
+  /** Analytics callback: Called when wizard completes successfully */
+  onWizardComplete?: (
+    durationMs: number,
+    conversationExchanges: number,
+    phasesGenerated: number,
+    tasksGenerated: number
+  ) => void;
+  /** Start time of the wizard for duration calculation */
+  wizardStartTime?: number;
 }
 
 /**
@@ -859,9 +868,18 @@ function countTasks(content: string): number {
 function DocumentReview({
   theme,
   onLaunchSession,
+  onWizardComplete,
+  wizardStartTime,
 }: {
   theme: Theme;
   onLaunchSession: (wantsTour: boolean) => Promise<void>;
+  onWizardComplete?: (
+    durationMs: number,
+    conversationExchanges: number,
+    phasesGenerated: number,
+    tasksGenerated: number
+  ) => void;
+  wizardStartTime?: number;
 }): JSX.Element {
   const {
     state,
@@ -982,6 +1000,33 @@ function DocumentReview({
           setEditedPhase1Content(localContent);
         }
 
+        // Record wizard completion for analytics
+        if (onWizardComplete) {
+          // Calculate wizard duration
+          const durationMs = wizardStartTime
+            ? Date.now() - wizardStartTime
+            : 0;
+
+          // Count conversation exchanges (user messages in the conversation)
+          const conversationExchanges = state.conversationHistory.filter(
+            (msg) => msg.role === 'user'
+          ).length;
+
+          // Count phases and tasks generated
+          const phasesGenerated = generatedDocuments.length;
+          const tasksGenerated = generatedDocuments.reduce(
+            (total, doc) => total + countTasks(doc.content),
+            0
+          );
+
+          onWizardComplete(
+            durationMs,
+            conversationExchanges,
+            phasesGenerated,
+            tasksGenerated
+          );
+        }
+
         await onLaunchSession(wantsTour);
       } catch (err) {
         const errorMessage =
@@ -997,6 +1042,10 @@ function DocumentReview({
       setEditedPhase1Content,
       setWantsTour,
       onLaunchSession,
+      onWizardComplete,
+      wizardStartTime,
+      state.conversationHistory,
+      generatedDocuments,
     ]
   );
 
@@ -1254,6 +1303,8 @@ function DocumentReview({
 export function PhaseReviewScreen({
   theme,
   onLaunchSession,
+  onWizardComplete,
+  wizardStartTime,
 }: PhaseReviewScreenProps): JSX.Element {
   const {
     state,
@@ -1436,7 +1487,12 @@ export function PhaseReviewScreen({
     return (
       <>
         {announcementElement}
-        <DocumentReview theme={theme} onLaunchSession={onLaunchSession} />
+        <DocumentReview
+          theme={theme}
+          onLaunchSession={onLaunchSession}
+          onWizardComplete={onWizardComplete}
+          wizardStartTime={wizardStartTime}
+        />
       </>
     );
   }

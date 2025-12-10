@@ -32,6 +32,19 @@ interface MaestroWizardProps {
   theme: Theme;
   /** Callback to create session and launch Auto Run when wizard completes */
   onLaunchSession?: (wantsTour: boolean) => Promise<void>;
+  /** Analytics callback: Called when wizard is started fresh */
+  onWizardStart?: () => void;
+  /** Analytics callback: Called when wizard is resumed from saved state */
+  onWizardResume?: () => void;
+  /** Analytics callback: Called when wizard is abandoned before completion */
+  onWizardAbandon?: () => void;
+  /** Analytics callback: Called when wizard completes successfully */
+  onWizardComplete?: (
+    durationMs: number,
+    conversationExchanges: number,
+    phasesGenerated: number,
+    tasksGenerated: number
+  ) => void;
 }
 
 /**
@@ -59,7 +72,14 @@ function getStepTitle(step: WizardStep): string {
  * the current step from WizardContext. Integrates with LayerStack for
  * proper modal behavior including Escape key handling.
  */
-export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): JSX.Element | null {
+export function MaestroWizard({
+  theme,
+  onLaunchSession,
+  onWizardStart,
+  onWizardResume,
+  onWizardAbandon,
+  onWizardComplete,
+}: MaestroWizardProps): JSX.Element | null {
   const {
     state,
     closeWizard,
@@ -71,6 +91,11 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
 
   // State for exit confirmation modal
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // Track wizard start time for duration calculation
+  const wizardStartTimeRef = useRef<number>(0);
+  // Track if wizard start has been recorded for this open session
+  const wizardStartedRef = useRef(false);
 
   // State for screen transition animations
   // displayedStep is the step actually being rendered (lags behind currentStep during transitions)
@@ -112,8 +137,12 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
   const handleConfirmExit = useCallback(() => {
     saveStateForResumeRef.current();
     setShowExitConfirm(false);
+    // Record wizard abandonment for analytics
+    if (onWizardAbandon) {
+      onWizardAbandon();
+    }
     closeWizardRef.current();
-  }, []);
+  }, [onWizardAbandon]);
 
   /**
    * Handle cancel exit - close confirmation and stay in wizard
@@ -156,6 +185,29 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
       setDisplayedStep(state.currentStep);
     }
   }, [state.isOpen, state.currentStep]);
+
+  // Track wizard start for analytics
+  useEffect(() => {
+    if (state.isOpen && !wizardStartedRef.current) {
+      wizardStartedRef.current = true;
+      wizardStartTimeRef.current = Date.now();
+
+      // Determine if this is a fresh start or resume based on current step
+      // If we're on step 1, it's a fresh start. Otherwise, it's a resume.
+      if (getCurrentStepNumber() === 1) {
+        if (onWizardStart) {
+          onWizardStart();
+        }
+      } else {
+        if (onWizardResume) {
+          onWizardResume();
+        }
+      }
+    } else if (!state.isOpen) {
+      // Reset when wizard closes
+      wizardStartedRef.current = false;
+    }
+  }, [state.isOpen, getCurrentStepNumber, onWizardStart, onWizardResume]);
 
   // Announce step changes to screen readers
   useEffect(() => {
@@ -210,12 +262,14 @@ export function MaestroWizard({ theme, onLaunchSession }: MaestroWizardProps): J
           <PhaseReviewScreen
             theme={theme}
             onLaunchSession={onLaunchSession || (async () => {})}
+            onWizardComplete={onWizardComplete}
+            wizardStartTime={wizardStartTimeRef.current}
           />
         );
       default:
         return null;
     }
-  }, [displayedStep, theme, onLaunchSession]);
+  }, [displayedStep, theme, onLaunchSession, onWizardComplete]);
 
   return (
     <div

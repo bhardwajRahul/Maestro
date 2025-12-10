@@ -233,6 +233,37 @@ export interface AutoRunStats {
   badgeHistory: BadgeUnlockRecord[]; // History of badge unlocks with timestamps
 }
 
+// Onboarding analytics statistics (survives app restarts)
+// These are stored locally only - no data is sent externally
+export interface OnboardingStats {
+  // Wizard statistics
+  wizardStartCount: number;              // Number of times wizard was started
+  wizardCompletionCount: number;         // Number of times wizard was completed
+  wizardAbandonCount: number;            // Number of times wizard was abandoned (exited before completion)
+  wizardResumeCount: number;             // Number of times wizard was resumed from saved state
+  averageWizardDurationMs: number;       // Average time to complete wizard (0 if none completed)
+  totalWizardDurationMs: number;         // Total cumulative wizard duration
+  lastWizardCompletedAt: number;         // Timestamp of last wizard completion (0 if never)
+
+  // Tour statistics
+  tourStartCount: number;                // Number of times tour was started
+  tourCompletionCount: number;           // Number of times tour was completed (all steps)
+  tourSkipCount: number;                 // Number of times tour was skipped before completion
+  tourStepsViewedTotal: number;          // Total tour steps viewed across all tours
+  averageTourStepsViewed: number;        // Average steps viewed per tour (completed + skipped)
+
+  // Conversation statistics
+  totalConversationExchanges: number;    // Total user<->AI exchanges across all wizards
+  averageConversationExchanges: number;  // Average exchanges per completed wizard
+  totalConversationsCompleted: number;   // Number of wizard conversations that reached ready state
+
+  // Phase generation statistics
+  totalPhasesGenerated: number;          // Total phase documents generated
+  averagePhasesPerWizard: number;        // Average phases per completed wizard
+  totalTasksGenerated: number;           // Total tasks generated across all phases
+  averageTasksPerPhase: number;          // Average tasks per phase
+}
+
 // AI Tab for multi-tab support within a Maestro session
 // Each tab represents a separate Claude Code conversation
 export interface AITab {

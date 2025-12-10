@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { LLMProvider, ThemeId, Shortcut, CustomAICommand, GlobalStats, AutoRunStats } from '../types';
+import type { LLMProvider, ThemeId, Shortcut, CustomAICommand, GlobalStats, AutoRunStats, OnboardingStats } from '../types';
 import { DEFAULT_SHORTCUTS } from '../constants/shortcuts';
 
 // Default global stats
@@ -24,6 +24,36 @@ const DEFAULT_AUTO_RUN_STATS: AutoRunStats = {
   lastBadgeUnlockLevel: 0,
   lastAcknowledgedBadgeLevel: 0,
   badgeHistory: [],
+};
+
+// Default onboarding stats (all local, no external telemetry)
+const DEFAULT_ONBOARDING_STATS: OnboardingStats = {
+  // Wizard statistics
+  wizardStartCount: 0,
+  wizardCompletionCount: 0,
+  wizardAbandonCount: 0,
+  wizardResumeCount: 0,
+  averageWizardDurationMs: 0,
+  totalWizardDurationMs: 0,
+  lastWizardCompletedAt: 0,
+
+  // Tour statistics
+  tourStartCount: 0,
+  tourCompletionCount: 0,
+  tourSkipCount: 0,
+  tourStepsViewedTotal: 0,
+  averageTourStepsViewed: 0,
+
+  // Conversation statistics
+  totalConversationExchanges: 0,
+  averageConversationExchanges: 0,
+  totalConversationsCompleted: 0,
+
+  // Phase generation statistics
+  totalPhasesGenerated: 0,
+  averagePhasesPerWizard: 0,
+  totalTasksGenerated: 0,
+  averageTasksPerPhase: 0,
 };
 
 // Default AI commands that ship with Maestro
@@ -157,6 +187,23 @@ export interface UseSettingsReturn {
   setTourCompleted: (value: boolean) => void;
   firstAutoRunCompleted: boolean;
   setFirstAutoRunCompleted: (value: boolean) => void;
+
+  // Onboarding Stats (persistent, local-only analytics)
+  onboardingStats: OnboardingStats;
+  setOnboardingStats: (value: OnboardingStats) => void;
+  recordWizardStart: () => void;
+  recordWizardComplete: (durationMs: number, conversationExchanges: number, phasesGenerated: number, tasksGenerated: number) => void;
+  recordWizardAbandon: () => void;
+  recordWizardResume: () => void;
+  recordTourStart: () => void;
+  recordTourComplete: (stepsViewed: number) => void;
+  recordTourSkip: (stepsViewed: number) => void;
+  getOnboardingAnalytics: () => {
+    wizardCompletionRate: number;
+    tourCompletionRate: number;
+    averageConversationExchanges: number;
+    averagePhasesPerWizard: number;
+  };
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -229,6 +276,9 @@ export function useSettings(): UseSettingsReturn {
   const [wizardCompleted, setWizardCompletedState] = useState(false);
   const [tourCompleted, setTourCompletedState] = useState(false);
   const [firstAutoRunCompleted, setFirstAutoRunCompletedState] = useState(false);
+
+  // Onboarding Stats (persistent, local-only analytics)
+  const [onboardingStats, setOnboardingStatsState] = useState<OnboardingStats>(DEFAULT_ONBOARDING_STATS);
 
   // Wrapper functions that persist to electron-store
   const setLlmProvider = (value: LLMProvider) => {
@@ -566,6 +616,160 @@ export function useSettings(): UseSettingsReturn {
     window.maestro.settings.set('firstAutoRunCompleted', value);
   };
 
+  // Onboarding Stats functions
+  const setOnboardingStats = (value: OnboardingStats) => {
+    setOnboardingStatsState(value);
+    window.maestro.settings.set('onboardingStats', value);
+  };
+
+  // Record when wizard is started
+  const recordWizardStart = () => {
+    setOnboardingStatsState(prev => {
+      const updated: OnboardingStats = {
+        ...prev,
+        wizardStartCount: prev.wizardStartCount + 1,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when wizard is completed successfully
+  const recordWizardComplete = (
+    durationMs: number,
+    conversationExchanges: number,
+    phasesGenerated: number,
+    tasksGenerated: number
+  ) => {
+    setOnboardingStatsState(prev => {
+      const newCompletionCount = prev.wizardCompletionCount + 1;
+      const newTotalDuration = prev.totalWizardDurationMs + durationMs;
+      const newTotalExchanges = prev.totalConversationExchanges + conversationExchanges;
+      const newTotalPhases = prev.totalPhasesGenerated + phasesGenerated;
+      const newTotalTasks = prev.totalTasksGenerated + tasksGenerated;
+
+      const updated: OnboardingStats = {
+        ...prev,
+        wizardCompletionCount: newCompletionCount,
+        totalWizardDurationMs: newTotalDuration,
+        averageWizardDurationMs: Math.round(newTotalDuration / newCompletionCount),
+        lastWizardCompletedAt: Date.now(),
+
+        // Conversation stats
+        totalConversationExchanges: newTotalExchanges,
+        totalConversationsCompleted: prev.totalConversationsCompleted + 1,
+        averageConversationExchanges: newCompletionCount > 0
+          ? Math.round((newTotalExchanges / newCompletionCount) * 10) / 10
+          : 0,
+
+        // Phase generation stats
+        totalPhasesGenerated: newTotalPhases,
+        averagePhasesPerWizard: newCompletionCount > 0
+          ? Math.round((newTotalPhases / newCompletionCount) * 10) / 10
+          : 0,
+        totalTasksGenerated: newTotalTasks,
+        averageTasksPerPhase: newTotalPhases > 0
+          ? Math.round((newTotalTasks / newTotalPhases) * 10) / 10
+          : 0,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when wizard is abandoned (closed before completion)
+  const recordWizardAbandon = () => {
+    setOnboardingStatsState(prev => {
+      const updated: OnboardingStats = {
+        ...prev,
+        wizardAbandonCount: prev.wizardAbandonCount + 1,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when wizard is resumed from saved state
+  const recordWizardResume = () => {
+    setOnboardingStatsState(prev => {
+      const updated: OnboardingStats = {
+        ...prev,
+        wizardResumeCount: prev.wizardResumeCount + 1,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when tour is started
+  const recordTourStart = () => {
+    setOnboardingStatsState(prev => {
+      const updated: OnboardingStats = {
+        ...prev,
+        tourStartCount: prev.tourStartCount + 1,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when tour is completed (all steps viewed)
+  const recordTourComplete = (stepsViewed: number) => {
+    setOnboardingStatsState(prev => {
+      const newCompletionCount = prev.tourCompletionCount + 1;
+      const newTotalStepsViewed = prev.tourStepsViewedTotal + stepsViewed;
+      const totalTours = newCompletionCount + prev.tourSkipCount;
+
+      const updated: OnboardingStats = {
+        ...prev,
+        tourCompletionCount: newCompletionCount,
+        tourStepsViewedTotal: newTotalStepsViewed,
+        averageTourStepsViewed: totalTours > 0
+          ? Math.round((newTotalStepsViewed / totalTours) * 10) / 10
+          : stepsViewed,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Record when tour is skipped before completion
+  const recordTourSkip = (stepsViewed: number) => {
+    setOnboardingStatsState(prev => {
+      const newSkipCount = prev.tourSkipCount + 1;
+      const newTotalStepsViewed = prev.tourStepsViewedTotal + stepsViewed;
+      const totalTours = prev.tourCompletionCount + newSkipCount;
+
+      const updated: OnboardingStats = {
+        ...prev,
+        tourSkipCount: newSkipCount,
+        tourStepsViewedTotal: newTotalStepsViewed,
+        averageTourStepsViewed: totalTours > 0
+          ? Math.round((newTotalStepsViewed / totalTours) * 10) / 10
+          : stepsViewed,
+      };
+      window.maestro.settings.set('onboardingStats', updated);
+      return updated;
+    });
+  };
+
+  // Get computed analytics for display
+  const getOnboardingAnalytics = () => {
+    const totalWizardAttempts = onboardingStats.wizardStartCount;
+    const totalTourAttempts = onboardingStats.tourStartCount;
+
+    return {
+      wizardCompletionRate: totalWizardAttempts > 0
+        ? Math.round((onboardingStats.wizardCompletionCount / totalWizardAttempts) * 100)
+        : 0,
+      tourCompletionRate: totalTourAttempts > 0
+        ? Math.round((onboardingStats.tourCompletionCount / totalTourAttempts) * 100)
+        : 0,
+      averageConversationExchanges: onboardingStats.averageConversationExchanges,
+      averagePhasesPerWizard: onboardingStats.averagePhasesPerWizard,
+    };
+  };
+
   // Load settings from electron-store on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -603,6 +807,7 @@ export function useSettings(): UseSettingsReturn {
       const savedWizardCompleted = await window.maestro.settings.get('wizardCompleted');
       const savedTourCompleted = await window.maestro.settings.get('tourCompleted');
       const savedFirstAutoRunCompleted = await window.maestro.settings.get('firstAutoRunCompleted');
+      const savedOnboardingStats = await window.maestro.settings.get('onboardingStats');
 
       if (savedEnterToSendAI !== undefined) setEnterToSendAIState(savedEnterToSendAI);
       if (savedEnterToSendTerminal !== undefined) setEnterToSendTerminalState(savedEnterToSendTerminal);
@@ -668,6 +873,11 @@ export function useSettings(): UseSettingsReturn {
       if (savedWizardCompleted !== undefined) setWizardCompletedState(savedWizardCompleted);
       if (savedTourCompleted !== undefined) setTourCompletedState(savedTourCompleted);
       if (savedFirstAutoRunCompleted !== undefined) setFirstAutoRunCompletedState(savedFirstAutoRunCompleted);
+
+      // Load onboarding stats
+      if (savedOnboardingStats !== undefined) {
+        setOnboardingStatsState({ ...DEFAULT_ONBOARDING_STATS, ...savedOnboardingStats });
+      }
 
       // Mark settings as loaded
       setSettingsLoaded(true);
@@ -753,5 +963,15 @@ export function useSettings(): UseSettingsReturn {
     setTourCompleted,
     firstAutoRunCompleted,
     setFirstAutoRunCompleted,
+    onboardingStats,
+    setOnboardingStats,
+    recordWizardStart,
+    recordWizardComplete,
+    recordWizardAbandon,
+    recordWizardResume,
+    recordTourStart,
+    recordTourComplete,
+    recordTourSkip,
+    getOnboardingAnalytics,
   };
 }

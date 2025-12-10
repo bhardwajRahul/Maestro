@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useSettings } from '../../../renderer/hooks/useSettings';
-import type { GlobalStats, AutoRunStats, CustomAICommand } from '../../../renderer/types';
+import type { GlobalStats, AutoRunStats, OnboardingStats, CustomAICommand } from '../../../renderer/types';
 import { DEFAULT_SHORTCUTS } from '../../../renderer/constants/shortcuts';
 
 // Helper to wait for settings to load
@@ -1327,6 +1327,301 @@ describe('useSettings', () => {
 
       // Should return currentBadgeLevel when lastAcknowledged is undefined/0
       expect(result.current.getUnacknowledgedBadgeLevel()).toBe(3);
+    });
+  });
+
+  describe('onboarding stats', () => {
+    it('should have default onboarding stats (all zeros)', async () => {
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      expect(result.current.onboardingStats).toEqual({
+        wizardStartCount: 0,
+        wizardCompletionCount: 0,
+        wizardAbandonCount: 0,
+        wizardResumeCount: 0,
+        averageWizardDurationMs: 0,
+        totalWizardDurationMs: 0,
+        lastWizardCompletedAt: 0,
+        tourStartCount: 0,
+        tourCompletionCount: 0,
+        tourSkipCount: 0,
+        tourStepsViewedTotal: 0,
+        averageTourStepsViewed: 0,
+        totalConversationExchanges: 0,
+        averageConversationExchanges: 0,
+        totalConversationsCompleted: 0,
+        totalPhasesGenerated: 0,
+        averagePhasesPerWizard: 0,
+        totalTasksGenerated: 0,
+        averageTasksPerPhase: 0,
+      });
+    });
+
+    it('should load saved onboarding stats', async () => {
+      const savedStats: Partial<OnboardingStats> = {
+        wizardStartCount: 5,
+        wizardCompletionCount: 3,
+        tourStartCount: 4,
+        tourCompletionCount: 2,
+      };
+
+      vi.mocked(window.maestro.settings.get).mockImplementation(async (key: string) => {
+        if (key === 'onboardingStats') return savedStats;
+        return undefined;
+      });
+
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      expect(result.current.onboardingStats.wizardStartCount).toBe(5);
+      expect(result.current.onboardingStats.wizardCompletionCount).toBe(3);
+      expect(result.current.onboardingStats.tourStartCount).toBe(4);
+      expect(result.current.onboardingStats.tourCompletionCount).toBe(2);
+      // Other fields should have default values
+      expect(result.current.onboardingStats.wizardAbandonCount).toBe(0);
+    });
+
+    describe('recordWizardStart', () => {
+      it('should increment wizard start count', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordWizardStart();
+        });
+
+        expect(result.current.onboardingStats.wizardStartCount).toBe(1);
+        expect(window.maestro.settings.set).toHaveBeenCalledWith('onboardingStats', expect.objectContaining({
+          wizardStartCount: 1,
+        }));
+      });
+
+      it('should increment from existing count', async () => {
+        vi.mocked(window.maestro.settings.get).mockImplementation(async (key: string) => {
+          if (key === 'onboardingStats') return { wizardStartCount: 5 };
+          return undefined;
+        });
+
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordWizardStart();
+        });
+
+        expect(result.current.onboardingStats.wizardStartCount).toBe(6);
+      });
+    });
+
+    describe('recordWizardComplete', () => {
+      it('should update wizard completion stats correctly', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        const durationMs = 300000; // 5 minutes
+        const conversationExchanges = 10;
+        const phasesGenerated = 3;
+        const tasksGenerated = 15;
+
+        act(() => {
+          result.current.recordWizardComplete(durationMs, conversationExchanges, phasesGenerated, tasksGenerated);
+        });
+
+        expect(result.current.onboardingStats.wizardCompletionCount).toBe(1);
+        expect(result.current.onboardingStats.totalWizardDurationMs).toBe(300000);
+        expect(result.current.onboardingStats.averageWizardDurationMs).toBe(300000);
+        expect(result.current.onboardingStats.totalConversationExchanges).toBe(10);
+        expect(result.current.onboardingStats.averageConversationExchanges).toBe(10);
+        expect(result.current.onboardingStats.totalConversationsCompleted).toBe(1);
+        expect(result.current.onboardingStats.totalPhasesGenerated).toBe(3);
+        expect(result.current.onboardingStats.averagePhasesPerWizard).toBe(3);
+        expect(result.current.onboardingStats.totalTasksGenerated).toBe(15);
+        expect(result.current.onboardingStats.averageTasksPerPhase).toBe(5); // 15 / 3
+        expect(result.current.onboardingStats.lastWizardCompletedAt).toBeGreaterThan(0);
+      });
+
+      it('should calculate averages correctly over multiple completions', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        // First completion
+        act(() => {
+          result.current.recordWizardComplete(300000, 10, 3, 15);
+        });
+
+        // Second completion
+        act(() => {
+          result.current.recordWizardComplete(600000, 20, 5, 25);
+        });
+
+        expect(result.current.onboardingStats.wizardCompletionCount).toBe(2);
+        expect(result.current.onboardingStats.totalWizardDurationMs).toBe(900000); // 300000 + 600000
+        expect(result.current.onboardingStats.averageWizardDurationMs).toBe(450000); // 900000 / 2
+        expect(result.current.onboardingStats.totalConversationExchanges).toBe(30); // 10 + 20
+        expect(result.current.onboardingStats.averageConversationExchanges).toBe(15); // 30 / 2
+        expect(result.current.onboardingStats.totalPhasesGenerated).toBe(8); // 3 + 5
+        expect(result.current.onboardingStats.averagePhasesPerWizard).toBe(4); // 8 / 2
+        expect(result.current.onboardingStats.totalTasksGenerated).toBe(40); // 15 + 25
+        expect(result.current.onboardingStats.averageTasksPerPhase).toBe(5); // 40 / 8
+      });
+    });
+
+    describe('recordWizardAbandon', () => {
+      it('should increment wizard abandon count', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordWizardAbandon();
+        });
+
+        expect(result.current.onboardingStats.wizardAbandonCount).toBe(1);
+        expect(window.maestro.settings.set).toHaveBeenCalledWith('onboardingStats', expect.objectContaining({
+          wizardAbandonCount: 1,
+        }));
+      });
+    });
+
+    describe('recordWizardResume', () => {
+      it('should increment wizard resume count', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordWizardResume();
+        });
+
+        expect(result.current.onboardingStats.wizardResumeCount).toBe(1);
+        expect(window.maestro.settings.set).toHaveBeenCalledWith('onboardingStats', expect.objectContaining({
+          wizardResumeCount: 1,
+        }));
+      });
+    });
+
+    describe('recordTourStart', () => {
+      it('should increment tour start count', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordTourStart();
+        });
+
+        expect(result.current.onboardingStats.tourStartCount).toBe(1);
+        expect(window.maestro.settings.set).toHaveBeenCalledWith('onboardingStats', expect.objectContaining({
+          tourStartCount: 1,
+        }));
+      });
+    });
+
+    describe('recordTourComplete', () => {
+      it('should update tour completion stats correctly', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordTourComplete(8);
+        });
+
+        expect(result.current.onboardingStats.tourCompletionCount).toBe(1);
+        expect(result.current.onboardingStats.tourStepsViewedTotal).toBe(8);
+        expect(result.current.onboardingStats.averageTourStepsViewed).toBe(8);
+      });
+
+      it('should calculate average steps over multiple tours', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        // First completion
+        act(() => {
+          result.current.recordTourComplete(8);
+        });
+
+        // Second completion
+        act(() => {
+          result.current.recordTourComplete(10);
+        });
+
+        expect(result.current.onboardingStats.tourCompletionCount).toBe(2);
+        expect(result.current.onboardingStats.tourStepsViewedTotal).toBe(18); // 8 + 10
+        expect(result.current.onboardingStats.averageTourStepsViewed).toBe(9); // 18 / 2
+      });
+    });
+
+    describe('recordTourSkip', () => {
+      it('should update tour skip stats correctly', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        act(() => {
+          result.current.recordTourSkip(3);
+        });
+
+        expect(result.current.onboardingStats.tourSkipCount).toBe(1);
+        expect(result.current.onboardingStats.tourStepsViewedTotal).toBe(3);
+        expect(result.current.onboardingStats.averageTourStepsViewed).toBe(3);
+      });
+
+      it('should include skipped tours in average calculation', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        // Complete tour with 8 steps
+        act(() => {
+          result.current.recordTourComplete(8);
+        });
+
+        // Skip tour after 2 steps
+        act(() => {
+          result.current.recordTourSkip(2);
+        });
+
+        expect(result.current.onboardingStats.tourCompletionCount).toBe(1);
+        expect(result.current.onboardingStats.tourSkipCount).toBe(1);
+        expect(result.current.onboardingStats.tourStepsViewedTotal).toBe(10); // 8 + 2
+        expect(result.current.onboardingStats.averageTourStepsViewed).toBe(5); // 10 / 2 tours
+      });
+    });
+
+    describe('getOnboardingAnalytics', () => {
+      it('should return 0 rates when no wizard or tour attempts', async () => {
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        const analytics = result.current.getOnboardingAnalytics();
+
+        expect(analytics.wizardCompletionRate).toBe(0);
+        expect(analytics.tourCompletionRate).toBe(0);
+        expect(analytics.averageConversationExchanges).toBe(0);
+        expect(analytics.averagePhasesPerWizard).toBe(0);
+      });
+
+      it('should calculate correct completion rates', async () => {
+        vi.mocked(window.maestro.settings.get).mockImplementation(async (key: string) => {
+          if (key === 'onboardingStats') {
+            return {
+              wizardStartCount: 10,
+              wizardCompletionCount: 7,
+              tourStartCount: 8,
+              tourCompletionCount: 6,
+              averageConversationExchanges: 12.5,
+              averagePhasesPerWizard: 3.2,
+            };
+          }
+          return undefined;
+        });
+
+        const { result } = renderHook(() => useSettings());
+        await waitForSettingsLoaded(result);
+
+        const analytics = result.current.getOnboardingAnalytics();
+
+        expect(analytics.wizardCompletionRate).toBe(70); // 7/10 * 100
+        expect(analytics.tourCompletionRate).toBe(75); // 6/8 * 100
+        expect(analytics.averageConversationExchanges).toBe(12.5);
+        expect(analytics.averagePhasesPerWizard).toBe(3.2);
+      });
     });
   });
 });

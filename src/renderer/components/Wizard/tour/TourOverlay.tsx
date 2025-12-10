@@ -24,6 +24,12 @@ interface TourOverlayProps {
   onClose: () => void;
   /** Optional starting step index */
   startStep?: number;
+  /** Analytics callback: Called when tour starts */
+  onTourStart?: () => void;
+  /** Analytics callback: Called when tour completes all steps */
+  onTourComplete?: (stepsViewed: number) => void;
+  /** Analytics callback: Called when tour is skipped before completion */
+  onTourSkip?: (stepsViewed: number) => void;
 }
 
 /**
@@ -79,9 +85,17 @@ export function TourOverlay({
   isOpen,
   onClose,
   startStep = 0,
+  onTourStart,
+  onTourComplete,
+  onTourSkip,
 }: TourOverlayProps): JSX.Element | null {
   const containerRef = useRef<HTMLDivElement>(null);
   const { registerLayer, unregisterLayer } = useLayerStack();
+
+  // Track if tour start has been recorded for this open session
+  const tourStartedRef = useRef(false);
+  // Track maximum step viewed (1-indexed for reporting)
+  const maxStepViewedRef = useRef(1);
 
   const {
     currentStep,
@@ -91,13 +105,53 @@ export function TourOverlay({
     isTransitioning,
     nextStep,
     previousStep,
-    skipTour,
+    skipTour: internalSkipTour,
     isLastStep,
   } = useTour({
     isOpen,
-    onComplete: onClose,
+    onComplete: () => {
+      // Tour completed - user viewed all steps
+      if (onTourComplete) {
+        onTourComplete(maxStepViewedRef.current);
+      }
+      onClose();
+    },
     startStep,
   });
+
+  // Wrapper for skipTour that calls analytics callback
+  const skipTour = useCallback(() => {
+    // Tour skipped before completion
+    if (onTourSkip) {
+      onTourSkip(maxStepViewedRef.current);
+    }
+    internalSkipTour();
+  }, [internalSkipTour, onTourSkip]);
+
+  // Track tour start when it opens
+  useEffect(() => {
+    if (isOpen && !tourStartedRef.current) {
+      tourStartedRef.current = true;
+      maxStepViewedRef.current = 1; // Reset to 1 (first step)
+      if (onTourStart) {
+        onTourStart();
+      }
+    } else if (!isOpen) {
+      // Reset when tour closes
+      tourStartedRef.current = false;
+    }
+  }, [isOpen, onTourStart]);
+
+  // Track the maximum step viewed
+  useEffect(() => {
+    if (isOpen) {
+      // currentStepIndex is 0-based, we track 1-based for human-readable reporting
+      const stepNumber = currentStepIndex + 1;
+      if (stepNumber > maxStepViewedRef.current) {
+        maxStepViewedRef.current = stepNumber;
+      }
+    }
+  }, [isOpen, currentStepIndex]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
