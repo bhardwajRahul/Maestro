@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Wand2, ExternalLink, FileCode, BarChart3, Loader2, Trophy } from 'lucide-react';
+import { X, Wand2, ExternalLink, FileCode, BarChart3, Loader2, Trophy, Globe } from 'lucide-react';
 import type { Theme, Session, AutoRunStats } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -138,7 +138,17 @@ export function AboutModal({ theme, sessions, autoRunStats, onClose, onOpenLeade
     >
       <div className="w-[450px] max-h-[90vh] border rounded-lg shadow-2xl overflow-hidden flex flex-col" style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}>
         <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: theme.colors.border }}>
-          <h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>About Maestro</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>About Maestro</h2>
+            <button
+              onClick={() => window.maestro.shell.openExternal('https://runmaestro.ai')}
+              className="p-1 rounded hover:bg-white/10 transition-colors"
+              title="Visit runmaestro.ai"
+              style={{ color: theme.colors.accent }}
+            >
+              <Globe className="w-4 h-4" />
+            </button>
+          </div>
           <button onClick={onClose} style={{ color: theme.colors.textDim }}>
             <X className="w-4 h-4" />
           </button>
@@ -309,7 +319,7 @@ export function AboutModal({ theme, sessions, autoRunStats, onClose, onOpenLeade
                   </span>
                 </div>
                 {isLeaderboardRegistered ? (
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: theme.colors.success, color: '#fff' }}>Active</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: theme.colors.success, color: '#000' }}>Active</span>
                 ) : (
                   <ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
                 )}

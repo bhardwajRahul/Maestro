@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, Activity, X, Keyboard,
   Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, Info, FileText, GitBranch, Bot, Clock,
-  ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass
+  ScrollText, Cpu, Menu, Bookmark, Trophy, Trash2, Edit3, FolderInput, Download, Compass, Globe
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Session, Group, Theme, Shortcut, AutoRunStats } from '../types';
@@ -1177,6 +1177,17 @@ export function SessionList(props: SessionListProps) {
                         <div className="text-xs" style={{ color: theme.colors.textDim }}>Version, Credits, Stats</div>
                       </div>
                     </button>
+                    <button
+                      onClick={() => { window.maestro.shell.openExternal('https://runmaestro.ai'); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                    >
+                      <Globe className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Maestro Website</div>
+                        <div className="text-xs" style={{ color: theme.colors.textDim }}>Visit runmaestro.ai</div>
+                      </div>
+                      <ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
+                    </button>
                   </div>
                 </div>
               )}
@@ -1301,6 +1312,17 @@ export function SessionList(props: SessionListProps) {
                       <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>About Maestro</div>
                       <div className="text-xs" style={{ color: theme.colors.textDim }}>Version, Credits, Stats</div>
                     </div>
+                  </button>
+                  <button
+                    onClick={() => { window.maestro.shell.openExternal('https://runmaestro.ai'); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/10 transition-colors text-left"
+                  >
+                    <Globe className="w-5 h-5" style={{ color: theme.colors.accent }} />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium" style={{ color: theme.colors.textMain }}>Maestro Website</div>
+                      <div className="text-xs" style={{ color: theme.colors.textDim }}>Visit runmaestro.ai</div>
+                    </div>
+                    <ExternalLink className="w-4 h-4" style={{ color: theme.colors.textDim }} />
                   </button>
                 </div>
               </div>

@@ -177,6 +177,33 @@ describe('ToastContext', () => {
       expect(contextValue!.toasts).toHaveLength(1);
     });
 
+    it('duration of -1 disables toast UI but still logs and notifies', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      let contextValue: ReturnType<typeof useToast> | null = null;
+
+      renderWithProvider(
+        <ToastConsumer onMount={(ctx) => { contextValue = ctx; }} />,
+        { defaultDuration: -1 } // -1 = toasts disabled
+      );
+
+      await act(async () => {
+        contextValue!.addToast({
+          type: 'success',
+          title: 'Hidden Toast',
+          message: 'Should not appear in UI',
+        });
+      });
+
+      // Toast should NOT be in the visible toasts array
+      expect(contextValue!.toasts).toHaveLength(0);
+
+      // But logging should still happen
+      expect(window.maestro.logger.toast).toHaveBeenCalledWith('Hidden Toast', expect.any(Object));
+
+      // And OS notification should still be shown (if enabled)
+      expect(window.maestro.notification.show).toHaveBeenCalled();
+    });
+
     it('logs toast via window.maestro.logger.toast', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       let contextValue: ReturnType<typeof useToast> | null = null;

@@ -1054,6 +1054,30 @@ describe('SettingsModal', () => {
       expect(setOsNotificationsEnabled).toHaveBeenCalledWith(false);
     });
 
+    it('should update checkbox state when prop changes (regression test for memo bug)', async () => {
+      // This test ensures the component re-renders when props change
+      // A previous bug had an overly restrictive memo comparator that prevented re-renders
+      const { rerender } = render(<SettingsModal {...createDefaultProps({ initialTab: 'notifications', osNotificationsEnabled: true })} />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+
+      // Verify initial checked state
+      const checkbox = screen.getByText('Enable OS Notifications').closest('label')?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+
+      // Rerender with changed prop (simulating what happens after onChange)
+      rerender(<SettingsModal {...createDefaultProps({ initialTab: 'notifications', osNotificationsEnabled: false })} />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+
+      // The checkbox should now be unchecked - this would fail with the old memo comparator
+      expect(checkbox.checked).toBe(false);
+    });
+
     it('should test notification when button is clicked', async () => {
       render(<SettingsModal {...createDefaultProps({ initialTab: 'notifications' })} />);
 
@@ -1136,6 +1160,9 @@ describe('SettingsModal', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Off' }));
+      expect(setToastDuration).toHaveBeenCalledWith(-1);
 
       fireEvent.click(screen.getByRole('button', { name: '5s' }));
       expect(setToastDuration).toHaveBeenCalledWith(5);

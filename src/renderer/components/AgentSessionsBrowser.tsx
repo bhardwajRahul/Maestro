@@ -113,8 +113,6 @@ export function AgentSessionsBrowser({
   onCloseRef.current = onClose;
   const viewingSessionRef = useRef(viewingSession);
   viewingSessionRef.current = viewingSession;
-  const showSearchPanelRef = useRef(showSearchPanel);
-  showSearchPanelRef.current = showSearchPanel;
   const autoJumpedRef = useRef<string | null>(null); // Track which session we've auto-jumped to
 
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -135,12 +133,10 @@ export function AgentSessionsBrowser({
       focusTrap: 'lenient',
       ariaLabel: 'Agent Sessions Browser',
       onEscape: () => {
+        // If viewing a session detail, go back to list; otherwise close the panel
         if (viewingSessionRef.current) {
           setViewingSession(null);
           setMessages([]);
-        } else if (showSearchPanelRef.current) {
-          // If in search panel, switch back to graph first
-          setShowSearchPanel(false);
         } else {
           onCloseRef.current();
         }
@@ -154,22 +150,19 @@ export function AgentSessionsBrowser({
     };
   }, [registerLayer, unregisterLayer]);
 
-  // Update handler when viewingSession or showSearchPanel changes
+  // Update handler when viewingSession changes
   useEffect(() => {
     if (layerIdRef.current) {
       updateLayerHandler(layerIdRef.current, () => {
         if (viewingSessionRef.current) {
           setViewingSession(null);
           setMessages([]);
-        } else if (showSearchPanelRef.current) {
-          // If in search panel, switch back to graph first
-          setShowSearchPanel(false);
         } else {
           onCloseRef.current();
         }
       });
     }
-  }, [viewingSession, showSearchPanel, updateLayerHandler]);
+  }, [viewingSession, updateLayerHandler]);
 
   // Restore focus and scroll position when returning from detail view to list view
   const prevViewingSessionRef = useRef<ClaudeSession | null>(null);

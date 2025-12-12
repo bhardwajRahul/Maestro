@@ -308,14 +308,13 @@ export function TabSwitcherModal({
 
       return items;
     } else {
-      // All Named mode - show sessions with claudeSessionId for the CURRENT PROJECT (including open ones)
+      // All Named mode - show only sessions that have been given a custom name
       // For open tabs, use the 'open' type so we get usage stats; for closed ones use 'named'
       const items: ListItem[] = [];
 
-      // Add open tabs that have a Claude session (whether named or not)
-      // This ensures all active sessions are searchable, not just those with custom names
+      // Add open tabs that have a custom name (not just UUID-based display names)
       for (const tab of tabs) {
-        if (tab.claudeSessionId) {
+        if (tab.claudeSessionId && tab.name) {
           items.push({ type: 'open' as const, tab });
         }
       }
@@ -482,7 +481,7 @@ export function TabSwitcherModal({
               color: viewMode === 'all-named' ? theme.colors.accentForeground : theme.colors.textDim
             }}
           >
-            All Named ({tabs.filter(t => t.claudeSessionId).length + namedSessions.filter(s => s.projectPath === projectRoot && !openTabSessionIds.has(s.claudeSessionId)).length})
+            All Named ({tabs.filter(t => t.claudeSessionId && t.name).length + namedSessions.filter(s => s.projectPath === projectRoot && !openTabSessionIds.has(s.claudeSessionId)).length})
           </button>
           <button
             onClick={() => setViewMode('starred')}

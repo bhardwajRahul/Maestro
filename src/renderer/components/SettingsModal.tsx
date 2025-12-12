@@ -1624,6 +1624,18 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 </label>
                 <div className="flex gap-2">
                   <button
+                    onClick={() => props.setToastDuration(-1)}
+                    className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === -1 ? 'ring-2' : ''}`}
+                    style={{
+                      borderColor: theme.colors.border,
+                      backgroundColor: props.toastDuration === -1 ? theme.colors.accentDim : 'transparent',
+                      ringColor: theme.colors.accent,
+                      color: theme.colors.textMain
+                    }}
+                  >
+                    Off
+                  </button>
+                  <button
                     onClick={() => props.setToastDuration(5)}
                     className={`flex-1 py-2 px-3 rounded border transition-all ${props.toastDuration === 5 ? 'ring-2' : ''}`}
                     style={{
@@ -1685,7 +1697,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                   </button>
                 </div>
                 <p className="text-xs opacity-50 mt-2">
-                  How long toast notifications remain on screen. "Never" means they stay until manually dismissed.
+                  How long toast notifications remain on screen. "Off" disables them entirely. "Never" means they stay until manually dismissed.
                 </p>
               </div>
 
@@ -1712,11 +1724,4 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparator: only re-render if key display props change
-  // Callbacks are stable (wrapped in useCallback in App.tsx)
-  return prevProps.isOpen === nextProps.isOpen &&
-         prevProps.theme === nextProps.theme &&
-         prevProps.activeThemeId === nextProps.activeThemeId &&
-         prevProps.initialTab === nextProps.initialTab;
 });

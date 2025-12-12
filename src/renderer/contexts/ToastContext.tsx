@@ -56,6 +56,10 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
   }, []);
 
   const addToast = useCallback((toast: Omit<Toast, 'id' | 'timestamp'>) => {
+    // If defaultDuration is -1, toasts are disabled entirely - skip showing toast UI
+    // but still log, speak, and show OS notification
+    const toastsDisabled = defaultDuration === -1;
+
     const id = `toast-${Date.now()}-${toastIdCounter.current++}`;
     // Convert seconds to ms, use 0 for "never dismiss"
     const durationMs = toast.duration !== undefined
@@ -69,7 +73,10 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
       duration: durationMs,
     };
 
-    setToasts(prev => [...prev, newToast]);
+    // Only add to visible toast queue if not disabled
+    if (!toastsDisabled) {
+      setToasts(prev => [...prev, newToast]);
+    }
 
     // Log toast to system logs
     window.maestro.logger.toast(toast.title, {
@@ -122,8 +129,8 @@ export function ToastProvider({ children, defaultDuration: initialDuration = 20 
       });
     }
 
-    // Auto-remove after duration (only if duration > 0)
-    if (durationMs > 0) {
+    // Auto-remove after duration (only if duration > 0 and toasts are not disabled)
+    if (!toastsDisabled && durationMs > 0) {
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
       }, durationMs);

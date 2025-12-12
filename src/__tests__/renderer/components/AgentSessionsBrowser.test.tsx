@@ -1506,28 +1506,14 @@ describe('AgentSessionsBrowser', () => {
         await vi.runAllTimersAsync();
       });
 
-      // First Escape closes search panel (component defaults to search panel view)
+      // Escape should close modal directly (search panel no longer intercepts Escape)
       await act(async () => {
-        const escapeEvent1 = new KeyboardEvent('keydown', {
+        const escapeEvent = new KeyboardEvent('keydown', {
           key: 'Escape',
           bubbles: true,
           cancelable: true,
         });
-        window.dispatchEvent(escapeEvent1);
-        await vi.runAllTimersAsync();
-      });
-
-      // First Escape should NOT close modal (closes search panel instead)
-      expect(onClose).not.toHaveBeenCalled();
-
-      // Second Escape should close modal
-      await act(async () => {
-        const escapeEvent2 = new KeyboardEvent('keydown', {
-          key: 'Escape',
-          bubbles: true,
-          cancelable: true,
-        });
-        window.dispatchEvent(escapeEvent2);
+        window.dispatchEvent(escapeEvent);
         await vi.runAllTimersAsync();
       });
 
