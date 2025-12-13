@@ -25,6 +25,7 @@ export { useClaudeSessionManagement } from './useClaudeSessionManagement';
 export { useAgentExecution } from './useAgentExecution';
 export { useFileTreeManagement } from './useFileTreeManagement';
 export { useGroupManagement } from './useGroupManagement';
+export { useWebBroadcasting } from './useWebBroadcasting';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -83,3 +84,8 @@ export type {
   UseGroupManagementReturn,
   GroupModalState,
 } from './useGroupManagement';
+export type {
+  UseWebBroadcastingDeps,
+  UseWebBroadcastingReturn,
+  RightPanelHistoryHandle,
+} from './useWebBroadcasting';

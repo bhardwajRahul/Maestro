@@ -48,6 +48,7 @@ import { useClaudeSessionManagement } from './hooks/useClaudeSessionManagement';
 import { useAgentExecution } from './hooks/useAgentExecution';
 import { useFileTreeManagement } from './hooks/useFileTreeManagement';
 import { useGroupManagement } from './hooks/useGroupManagement';
+import { useWebBroadcasting } from './hooks/useWebBroadcasting';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
@@ -1628,16 +1629,10 @@ export default function MaestroConsole() {
     defaultSaveToHistory,
   });
 
-  // Listen for external history changes (e.g., from CLI) and refresh history panel
-  useEffect(() => {
-    const unsubscribe = window.maestro.history.onExternalChange(async () => {
-      console.log('[History] External change detected, reloading from disk and refreshing history panel');
-      // Reload from disk before refreshing (to bypass electron-store cache)
-      await window.maestro.history.reload();
-      rightPanelRef.current?.refreshHistoryPanel();
-    });
-    return unsubscribe;
-  }, []);
+  // Web broadcasting hook - handles external history change notifications
+  useWebBroadcasting({
+    rightPanelRef,
+  });
 
   // Listen for CLI activity changes (when CLI is running playbooks)
   // Update session states to show busy when CLI is active
