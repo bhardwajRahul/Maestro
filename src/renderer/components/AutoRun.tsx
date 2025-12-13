@@ -500,19 +500,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     };
   }, [localContent, folderPath, selectedFile, handleContentChange]);
 
-  // Clear auto-save timer and update lastSavedContent when document changes (session or file change)
-  useEffect(() => {
-    // Clear pending auto-save when document changes
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-      autoSaveTimeoutRef.current = null;
-    }
-    // Reset lastSavedContent to the new content
-    lastSavedContentRef.current = content;
-    // Reset undo history snapshot to the new content (so first edit creates a proper undo point)
-    resetUndoHistory(content);
-  }, [selectedFile, sessionId, content, resetUndoHistory]);
-
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -559,6 +546,19 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     setLocalContent,
     textareaRef,
   });
+
+  // Clear auto-save timer and update lastSavedContent when document changes (session or file change)
+  useEffect(() => {
+    // Clear pending auto-save when document changes
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
+    // Reset lastSavedContent to the new content
+    lastSavedContentRef.current = content;
+    // Reset undo history snapshot to the new content (so first edit creates a proper undo point)
+    resetUndoHistory(content);
+  }, [selectedFile, sessionId, content, resetUndoHistory]);
 
   // Image handling hook (attachments, paste, upload, lightbox)
   const {

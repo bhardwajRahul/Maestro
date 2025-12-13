@@ -169,6 +169,19 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   const [promptComposerOpen, setPromptComposerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Git worktree state - only show worktree section for git repos
+  const [isGitRepo, setIsGitRepo] = useState(false);
+  const [checkingGitRepo, setCheckingGitRepo] = useState(true);
+
+  // Worktree configuration state
+  const [worktreeEnabled, setWorktreeEnabled] = useState(false);
+  const [worktreePath, setWorktreePath] = useState('');
+  const [branchName, setBranchName] = useState('');
+  const [createPROnCompletion, setCreatePROnCompletion] = useState(false);
+  const [prTargetBranch, setPrTargetBranch] = useState('main');
+  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
+  const [ghCliStatus, setGhCliStatus] = useState<GhCliStatus | null>(null);
+
   // Playbook management callback to apply loaded playbook configuration
   const handleApplyPlaybook = useCallback((data: {
     documents: BatchDocumentEntry[];
@@ -231,19 +244,6 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
     },
     onApplyPlaybook: handleApplyPlaybook,
   });
-
-  // Git worktree state - only show worktree section for git repos
-  const [isGitRepo, setIsGitRepo] = useState(false);
-  const [checkingGitRepo, setCheckingGitRepo] = useState(true);
-
-  // Worktree configuration state
-  const [worktreeEnabled, setWorktreeEnabled] = useState(false);
-  const [worktreePath, setWorktreePath] = useState('');
-  const [branchName, setBranchName] = useState('');
-  const [createPROnCompletion, setCreatePROnCompletion] = useState(false);
-  const [prTargetBranch, setPrTargetBranch] = useState('main');
-  const [availableBranches, setAvailableBranches] = useState<string[]>([]);
-  const [ghCliStatus, setGhCliStatus] = useState<GhCliStatus | null>(null);
 
   // Worktree validation hook (debounced validation of worktree path)
   const { validation: worktreeValidation } = useWorktreeValidation({

@@ -635,7 +635,7 @@ describe('TabSwitcherModal', () => {
 
       expect(screen.getByText(/Open Tabs/)).toBeInTheDocument();
       expect(screen.getByText(/All Named/)).toBeInTheDocument();
-      expect(screen.getByText('Tab to switch')).toBeInTheDocument();
+      expect(screen.getByText(/↑↓ navigate • Enter select/)).toBeInTheDocument();
     });
 
     it('renders footer with navigation hints', () => {
