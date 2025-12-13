@@ -10,6 +10,7 @@ export { useInputSync } from './useInputSync';
 export { useSessionNavigation } from './useSessionNavigation';
 export { useAutoRunUndo } from './useAutoRunUndo';
 export { useAutoRunImageHandling, imageCache } from './useAutoRunImageHandling';
+export { useGitStatusPolling } from './useGitStatusPolling';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -21,3 +22,4 @@ export type { UseInputSyncReturn, UseInputSyncDeps } from './useInputSync';
 export type { UseSessionNavigationReturn, UseSessionNavigationDeps } from './useSessionNavigation';
 export type { UseAutoRunUndoReturn, UseAutoRunUndoDeps, UndoState } from './useAutoRunUndo';
 export type { UseAutoRunImageHandlingReturn, UseAutoRunImageHandlingDeps } from './useAutoRunImageHandling';
+export type { UseGitStatusPollingReturn, UseGitStatusPollingOptions } from './useGitStatusPolling';

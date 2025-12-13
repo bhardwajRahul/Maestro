@@ -8,9 +8,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { Session, Group, Theme, Shortcut, AutoRunStats } from '../types';
 import { CONDUCTOR_BADGES, getBadgeForTime } from '../constants/conductorBadges';
 import { getStatusColor, getContextColor, formatActiveTime } from '../utils/theme';
-import { gitService } from '../services/git';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { SessionItem } from './SessionItem';
+import { useGitStatusPolling } from '../hooks';
 
 // ============================================================================
 // SessionContextMenu - Right-click context menu for session items
@@ -510,81 +510,8 @@ export function SessionList(props: SessionListProps) {
     return () => window.removeEventListener('tour:action', handleTourAction);
   }, []);
 
-  // Track git file change counts per session
-  const [gitFileCounts, setGitFileCounts] = useState<Map<string, number>>(new Map());
-
-  // Poll git status for all Git sessions - optimized to reduce CPU usage
-  // - Only polls when app is visible (pauses when in background)
-  // - Uses 30-second interval instead of 10 seconds
-  // - Only polls sessions that are git repos
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-
-    const pollGitStatus = async () => {
-      // Skip polling if document is hidden (app in background)
-      if (document.hidden) return;
-
-      const gitSessions = sessions.filter(s => s.isGitRepo);
-      if (gitSessions.length === 0) return;
-
-      // Parallelize git status calls for better performance
-      // Sequential calls with 10 sessions = 1-2s, parallel = 200-300ms
-      const results = await Promise.all(
-        gitSessions.map(async (session) => {
-          try {
-            const cwd = session.inputMode === 'terminal' ? (session.shellCwd || session.cwd) : session.cwd;
-            const status = await gitService.getStatus(cwd);
-            return [session.id, status.files.length] as const;
-          } catch {
-            return null;
-          }
-        })
-      );
-
-      const newCounts = new Map<string, number>();
-      for (const result of results) {
-        if (result) {
-          newCounts.set(result[0], result[1]);
-        }
-      }
-
-      setGitFileCounts(newCounts);
-    };
-
-    const startPolling = () => {
-      pollGitStatus();
-      intervalId = setInterval(pollGitStatus, 30000); // Poll every 30 seconds (was 10)
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    // Handle visibility changes - pause polling when app is in background
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // Resume polling and immediately refresh when becoming visible
-        startPolling();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Start polling if document is visible
-    if (!document.hidden) {
-      startPolling();
-    }
-
-    return () => {
-      stopPolling();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [sessions]);
+  // Track git file change counts per session using extracted hook
+  const { gitFileCounts } = useGitStatusPolling(sessions);
 
   // Filter sessions based on search query (searches session name AND AI tab names)
   const filteredSessions = sessionFilter
