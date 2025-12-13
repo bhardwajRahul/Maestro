@@ -1,12 +1,8 @@
 import React, { useRef, useEffect, useMemo, forwardRef, useState, useCallback, memo } from 'react';
-import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, Volume2, Square, Check, ArrowDown, Eye, FileText, Clipboard, RotateCcw } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Filter, PlusCircle, MinusCircle, Trash2, Copy, Volume2, Square, Check, ArrowDown, Eye, FileText, RotateCcw } from 'lucide-react';
 import type { Session, Theme, LogEntry } from '../types';
 import Convert from 'ansi-to-html';
 import DOMPurify from 'dompurify';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { getActiveTab } from '../utils/tabHelpers';
@@ -18,52 +14,7 @@ import {
   getCachedAnsiHtml,
   stripMarkdown
 } from '../utils/textProcessing';
-
-// ============================================================================
-// CodeBlockWithCopy - Code block with copy button overlay
-// ============================================================================
-
-interface CodeBlockWithCopyProps {
-  language: string;
-  codeContent: string;
-  theme: Theme;
-  onCopy: (text: string) => void;
-}
-
-const CodeBlockWithCopy = memo(({ language, codeContent, theme, onCopy }: CodeBlockWithCopyProps) => {
-  return (
-    <div className="relative group/codeblock">
-      <button
-        onClick={() => onCopy(codeContent)}
-        className="absolute bottom-2 right-2 p-1.5 rounded opacity-0 group-hover/codeblock:opacity-70 hover:!opacity-100 transition-opacity z-10"
-        style={{
-          backgroundColor: theme.colors.bgActivity,
-          color: theme.colors.textDim,
-          border: `1px solid ${theme.colors.border}`
-        }}
-        title="Copy code"
-      >
-        <Clipboard className="w-3.5 h-3.5" />
-      </button>
-      <SyntaxHighlighter
-        language={language}
-        style={vscDarkPlus}
-        customStyle={{
-          margin: '0.5em 0',
-          padding: '1em',
-          background: theme.colors.bgSidebar,
-          fontSize: '0.9em',
-          borderRadius: '6px',
-        }}
-        PreTag="div"
-      >
-        {codeContent}
-      </SyntaxHighlighter>
-    </div>
-  );
-});
-
-CodeBlockWithCopy.displayName = 'CodeBlockWithCopy';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 // ============================================================================
 // LogItem - Memoized component for individual log entries
@@ -486,49 +437,11 @@ const LogItemComponent = memo(({
                 <div className="overflow-x-auto scrollbar-thin" dangerouslySetInnerHTML={{ __html: displayHtmlContent }} />
               ) : isAIMode && !markdownEditMode ? (
                 // Collapsed markdown preview with rendered markdown
-                // Note: prose styles are injected once at TerminalOutput container level for performance
-                <div className="prose prose-sm max-w-none" style={{ color: theme.colors.textMain, lineHeight: 1.4, paddingLeft: '0.5em' }}>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({ node, href, children, ...props }) => (
-                        <a
-                          href={href}
-                          {...props}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (href) {
-                              window.maestro.shell.openExternal(href);
-                            }
-                          }}
-                          style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
-                        >
-                          {children}
-                        </a>
-                      ),
-                      code: ({ node, inline, className, children, ...props }: any) => {
-                        const match = (className || '').match(/language-(\w+)/);
-                        const language = match ? match[1] : 'text';
-                        const codeContent = String(children).replace(/\n$/, '');
-
-                        return !inline && match ? (
-                          <CodeBlockWithCopy
-                            language={language}
-                            codeContent={codeContent}
-                            theme={theme}
-                            onCopy={copyToClipboard}
-                          />
-                        ) : (
-                          <code className={className} {...props}>
-                            {children}
-                          </code>
-                        );
-                      }
-                    }}
-                  >
-                    {displayText}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownRenderer
+                  content={displayText}
+                  theme={theme}
+                  onCopy={copyToClipboard}
+                />
               ) : (
                 displayText
               )}
@@ -600,49 +513,11 @@ const LogItemComponent = memo(({
                 </div>
               ) : isAIMode && !markdownEditMode ? (
                 // Expanded markdown rendering
-                // Note: prose styles are injected once at TerminalOutput container level for performance
-                <div className="prose prose-sm max-w-none text-sm" style={{ color: theme.colors.textMain, lineHeight: 1.4, paddingLeft: '0.5em' }}>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({ node, href, children, ...props }) => (
-                        <a
-                          href={href}
-                          {...props}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (href) {
-                              window.maestro.shell.openExternal(href);
-                            }
-                          }}
-                          style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
-                        >
-                          {children}
-                        </a>
-                      ),
-                      code: ({ node, inline, className, children, ...props }: any) => {
-                        const match = (className || '').match(/language-(\w+)/);
-                        const language = match ? match[1] : 'text';
-                        const codeContent = String(children).replace(/\n$/, '');
-
-                        return !inline && match ? (
-                          <CodeBlockWithCopy
-                            language={language}
-                            codeContent={codeContent}
-                            theme={theme}
-                            onCopy={copyToClipboard}
-                          />
-                        ) : (
-                          <code className={className} {...props}>
-                            {children}
-                          </code>
-                        );
-                      }
-                    }}
-                  >
-                    {filteredText}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownRenderer
+                  content={filteredText}
+                  theme={theme}
+                  onCopy={copyToClipboard}
+                />
               ) : (
                 <div>{highlightMatches(filteredText, outputSearchQuery)}</div>
               )}
@@ -696,49 +571,11 @@ const LogItemComponent = memo(({
               </div>
             ) : isAIMode && !markdownEditMode ? (
               // Rendered markdown for AI responses
-              // Note: prose styles are injected once at TerminalOutput container level for performance
-              <div className="prose prose-sm max-w-none text-sm" style={{ color: theme.colors.textMain, lineHeight: 1.4, paddingLeft: '0.5em' }}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    a: ({ node, href, children, ...props }) => (
-                      <a
-                        href={href}
-                        {...props}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (href) {
-                            window.maestro.shell.openExternal(href);
-                          }
-                        }}
-                        style={{ color: theme.colors.accent, textDecoration: 'underline', cursor: 'pointer' }}
-                      >
-                        {children}
-                      </a>
-                    ),
-                    code: ({ node, inline, className, children, ...props }: any) => {
-                      const match = (className || '').match(/language-(\w+)/);
-                      const language = match ? match[1] : 'text';
-                      const codeContent = String(children).replace(/\n$/, '');
-
-                      return !inline && match ? (
-                        <CodeBlockWithCopy
-                          language={language}
-                          codeContent={codeContent}
-                          theme={theme}
-                          onCopy={copyToClipboard}
-                        />
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                  }}
-                >
-                  {filteredText}
-                </ReactMarkdown>
-              </div>
+              <MarkdownRenderer
+                content={filteredText}
+                theme={theme}
+                onCopy={copyToClipboard}
+              />
             ) : (
               // Plain text mode (strip markdown formatting for readability)
               <div className="whitespace-pre-wrap text-sm break-all" style={{ color: theme.colors.textMain }}>
