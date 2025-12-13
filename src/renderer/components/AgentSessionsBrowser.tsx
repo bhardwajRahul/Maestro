@@ -6,6 +6,7 @@ import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { SessionActivityGraph, type ActivityEntry } from './SessionActivityGraph';
 import { formatSize, formatNumber, formatTokens, formatRelativeTime } from '../utils/formatters';
 import { useSessionViewer, type ClaudeSession, type SessionMessage } from '../hooks/useSessionViewer';
+import { useSessionPagination } from '../hooks/useSessionPagination';
 
 type SearchMode = 'title' | 'user' | 'assistant' | 'all';
 
@@ -50,8 +51,25 @@ export function AgentSessionsBrowser({
     setViewingSession,
   } = useSessionViewer({ cwd: activeSession?.cwd });
 
-  const [sessions, setSessions] = useState<ClaudeSession[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Starred sessions state (needs to be before pagination hook for callback)
+  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
+
+  // Session pagination hook for paginated loading
+  const {
+    sessions,
+    loading,
+    hasMoreSessions,
+    isLoadingMoreSessions,
+    totalSessionCount,
+    handleSessionsScroll,
+    sessionsContainerRef,
+    updateSession,
+    setSessions,
+  } = useSessionPagination({
+    cwd: activeSession?.cwd,
+    onStarredSessionsLoaded: setStarredSessions,
+  });
+
   const [search, setSearch] = useState('');
   const [searchMode, setSearchMode] = useState<SearchMode>('all');
   const [showAllSessions, setShowAllSessions] = useState(false);
@@ -60,19 +78,12 @@ export function AgentSessionsBrowser({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   // Activity graph vs search toggle state - default to search since graph needs data to load first
   const [showSearchPanel, setShowSearchPanel] = useState(true);
   const [graphLookbackHours, setGraphLookbackHours] = useState<number | null>(null); // null = all time (default)
-
-  // Pagination state for sessions list
-  const [hasMoreSessions, setHasMoreSessions] = useState(false);
-  const [isLoadingMoreSessions, setIsLoadingMoreSessions] = useState(false);
-  const [totalSessionCount, setTotalSessionCount] = useState(0);
-  const nextCursorRef = useRef<string | null>(null);
 
   // Aggregate stats for ALL sessions (calculated progressively)
   const [aggregateStats, setAggregateStats] = useState<{
@@ -88,7 +99,6 @@ export function AgentSessionsBrowser({
   const inputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLButtonElement>(null);
-  const sessionsContainerRef = useRef<HTMLDivElement>(null);
   const searchModeDropdownRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const layerIdRef = useRef<string>();
@@ -159,49 +169,9 @@ export function AgentSessionsBrowser({
     prevViewingSessionRef.current = viewingSession;
   }, [viewingSession]);
 
-  // Load sessions on mount
+  // Reset aggregate stats when cwd changes (session loading is handled by useSessionPagination)
   useEffect(() => {
-    // Reset pagination state
-    setSessions([]);
-    setHasMoreSessions(false);
-    setTotalSessionCount(0);
-    nextCursorRef.current = null;
     setAggregateStats({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null, isComplete: false });
-
-    const loadSessions = async () => {
-      if (!activeSession?.cwd) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Load session metadata (starred status) from Claude session origins
-        const origins = await window.maestro.claude.getSessionOrigins(activeSession.cwd);
-        const starredFromOrigins = new Set<string>();
-        for (const [sessionId, originData] of Object.entries(origins)) {
-          if (typeof originData === 'object' && originData?.starred) {
-            starredFromOrigins.add(sessionId);
-          }
-        }
-        setStarredSessions(starredFromOrigins);
-
-        // Use paginated API for better performance with many sessions
-        const result = await window.maestro.claude.listSessionsPaginated(activeSession.cwd, { limit: 100 });
-        setSessions(result.sessions);
-        setHasMoreSessions(result.hasMore);
-        setTotalSessionCount(result.totalCount);
-        nextCursorRef.current = result.nextCursor;
-
-        // Start fetching aggregate stats for ALL sessions (runs in background with progressive updates)
-        window.maestro.claude.getProjectStats(activeSession.cwd);
-      } catch (error) {
-        console.error('Failed to load sessions:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSessions();
   }, [activeSession?.cwd]);
 
   // Listen for progressive stats updates
@@ -225,46 +195,6 @@ export function AgentSessionsBrowser({
 
     return unsubscribe;
   }, [activeSession?.cwd]);
-
-  // Load more sessions when scrolling near bottom
-  const loadMoreSessions = useCallback(async () => {
-    if (!activeSession?.cwd || !hasMoreSessions || isLoadingMoreSessions || !nextCursorRef.current) return;
-
-    setIsLoadingMoreSessions(true);
-    try {
-      const result = await window.maestro.claude.listSessionsPaginated(activeSession.cwd, {
-        cursor: nextCursorRef.current,
-        limit: 100,
-      });
-
-      // Append new sessions, avoiding duplicates
-      setSessions(prev => {
-        const existingIds = new Set(prev.map(s => s.sessionId));
-        const newSessions = result.sessions.filter(s => !existingIds.has(s.sessionId));
-        return [...prev, ...newSessions];
-      });
-      setHasMoreSessions(result.hasMore);
-      nextCursorRef.current = result.nextCursor;
-    } catch (error) {
-      console.error('Failed to load more sessions:', error);
-    } finally {
-      setIsLoadingMoreSessions(false);
-    }
-  }, [activeSession?.cwd, hasMoreSessions, isLoadingMoreSessions]);
-
-  // Handle scroll for sessions list pagination - load more at 70% scroll
-  const handleSessionsScroll = useCallback(() => {
-    const container = sessionsContainerRef.current;
-    if (!container) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-    const atSeventyPercent = scrollPercentage >= 0.7;
-
-    if (atSeventyPercent && hasMoreSessions && !isLoadingMoreSessions) {
-      loadMoreSessions();
-    }
-  }, [hasMoreSessions, isLoadingMoreSessions, loadMoreSessions]);
 
   // Toggle star status for a session
   const toggleStar = useCallback(async (sessionId: string, e: React.MouseEvent) => {
@@ -320,12 +250,8 @@ export function AgentSessionsBrowser({
         trimmedName
       );
 
-      // Update local state
-      setSessions(prev => prev.map(s =>
-        s.sessionId === sessionId
-          ? { ...s, sessionName: trimmedName || undefined }
-          : s
-      ));
+      // Update local state using the hook's updateSession function
+      updateSession(sessionId, { sessionName: trimmedName || undefined });
 
       // Also update viewingSession if we're renaming the currently viewed session
       if (viewingSession?.sessionId === sessionId) {
@@ -339,7 +265,7 @@ export function AgentSessionsBrowser({
     }
 
     cancelRename();
-  }, [activeSession?.cwd, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab]);
+  }, [activeSession?.cwd, renameValue, viewingSession?.sessionId, cancelRename, onUpdateTab, updateSession]);
 
   // Auto-view session when activeClaudeSessionId is provided (e.g., from history panel click)
   useEffect(() => {
@@ -429,18 +355,6 @@ export function AgentSessionsBrowser({
     // Hide sessions that start with "agent-" (only show UUID-style sessions by default)
     return !session.sessionId.startsWith('agent-');
   }, [showAllSessions, namedOnly]);
-
-  // Auto-load ALL remaining sessions in background after initial load
-  // This ensures full search capability and accurate stats
-  useEffect(() => {
-    if (!loading && !isLoadingMoreSessions && hasMoreSessions && sessions.length > 0) {
-      // Small delay to let UI render first, then continue loading
-      const timer = setTimeout(() => {
-        loadMoreSessions();
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, isLoadingMoreSessions, hasMoreSessions, sessions.length, loadMoreSessions]);
 
   // Stats always show totals for ALL sessions (fetched progressively from backend)
   const stats = useMemo(() => {

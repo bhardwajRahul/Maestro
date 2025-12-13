@@ -15,6 +15,7 @@ export { useLiveOverlay } from './useLiveOverlay';
 export { usePlaybookManagement } from './usePlaybookManagement';
 export { useWorktreeValidation } from './useWorktreeValidation';
 export { useSessionViewer } from './useSessionViewer';
+export { useSessionPagination } from './useSessionPagination';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -31,3 +32,4 @@ export type { UseLiveOverlayReturn, TunnelStatus, UrlTab } from './useLiveOverla
 export type { UsePlaybookManagementReturn, UsePlaybookManagementDeps, PlaybookConfigState } from './usePlaybookManagement';
 export type { UseWorktreeValidationReturn, UseWorktreeValidationDeps } from './useWorktreeValidation';
 export type { UseSessionViewerReturn, UseSessionViewerDeps, ClaudeSession, SessionMessage } from './useSessionViewer';
+export type { UseSessionPaginationReturn, UseSessionPaginationDeps } from './useSessionPagination';
