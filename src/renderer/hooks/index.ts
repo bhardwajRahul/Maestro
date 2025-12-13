@@ -12,6 +12,7 @@ export { useAutoRunUndo } from './useAutoRunUndo';
 export { useAutoRunImageHandling, imageCache } from './useAutoRunImageHandling';
 export { useGitStatusPolling } from './useGitStatusPolling';
 export { useLiveOverlay } from './useLiveOverlay';
+export { usePlaybookManagement } from './usePlaybookManagement';
 
 export type { UseSettingsReturn } from './useSettings';
 export type { UseSessionManagerReturn } from './useSessionManager';
@@ -25,3 +26,4 @@ export type { UseAutoRunUndoReturn, UseAutoRunUndoDeps, UndoState } from './useA
 export type { UseAutoRunImageHandlingReturn, UseAutoRunImageHandlingDeps } from './useAutoRunImageHandling';
 export type { UseGitStatusPollingReturn, UseGitStatusPollingOptions } from './useGitStatusPolling';
 export type { UseLiveOverlayReturn, TunnelStatus, UrlTab } from './useLiveOverlay';
+export type { UsePlaybookManagementReturn, UsePlaybookManagementDeps, PlaybookConfigState } from './usePlaybookManagement';

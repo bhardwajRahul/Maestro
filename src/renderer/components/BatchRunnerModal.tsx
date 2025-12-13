@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, RotateCcw, Play, Variable, ChevronDown, ChevronRight, Save, FolderOpen, Bookmark, Maximize2, Download, Upload } from 'lucide-react';
-import type { Theme, BatchDocumentEntry, BatchRunConfig, Playbook, PlaybookDocumentEntry, WorktreeConfig } from '../types';
+import type { Theme, BatchDocumentEntry, BatchRunConfig } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { TEMPLATE_VARIABLES } from '../utils/templateVariables';
@@ -9,6 +9,7 @@ import { PlaybookNameModal } from './PlaybookNameModal';
 import { AgentPromptComposerModal } from './AgentPromptComposerModal';
 import { DocumentsPanel } from './DocumentsPanel';
 import { GitWorktreeSection, WorktreeValidationState, GhCliStatus } from './GitWorktreeSection';
+import { usePlaybookManagement } from '../hooks/usePlaybookManagement';
 
 // Default batch processing prompt
 export const DEFAULT_BATCH_PROMPT = `# Context
@@ -168,16 +169,68 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   const [promptComposerOpen, setPromptComposerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Playbook state
-  const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
-  const [loadedPlaybook, setLoadedPlaybook] = useState<Playbook | null>(null);
-  const [loadingPlaybooks, setLoadingPlaybooks] = useState(true);
-  const [showPlaybookDropdown, setShowPlaybookDropdown] = useState(false);
-  const [showSavePlaybookModal, setShowSavePlaybookModal] = useState(false);
-  const [savingPlaybook, setSavingPlaybook] = useState(false);
-  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-  const [playbookToDelete, setPlaybookToDelete] = useState<Playbook | null>(null);
-  const playbackDropdownRef = useRef<HTMLDivElement>(null);
+  // Playbook management callback to apply loaded playbook configuration
+  const handleApplyPlaybook = useCallback((data: {
+    documents: BatchDocumentEntry[];
+    loopEnabled: boolean;
+    maxLoops: number | null;
+    prompt: string;
+    worktreeEnabled: boolean;
+    branchName: string;
+    createPROnCompletion: boolean;
+    prTargetBranch: string;
+  }) => {
+    setDocuments(data.documents);
+    setLoopEnabled(data.loopEnabled);
+    setMaxLoops(data.maxLoops);
+    setPrompt(data.prompt);
+    setWorktreeEnabled(data.worktreeEnabled);
+    setBranchName(data.branchName);
+    setCreatePROnCompletion(data.createPROnCompletion);
+    if (data.prTargetBranch) {
+      setPrTargetBranch(data.prTargetBranch);
+    }
+  }, []);
+
+  // Playbook management hook
+  const {
+    playbooks,
+    loadedPlaybook,
+    loadingPlaybooks,
+    savingPlaybook,
+    isPlaybookModified,
+    showPlaybookDropdown,
+    setShowPlaybookDropdown,
+    showSavePlaybookModal,
+    setShowSavePlaybookModal,
+    showDeleteConfirmModal,
+    playbookToDelete,
+    playbackDropdownRef,
+    handleLoadPlaybook,
+    handleDeletePlaybook,
+    handleConfirmDeletePlaybook,
+    handleCancelDeletePlaybook,
+    handleExportPlaybook,
+    handleImportPlaybook,
+    handleSaveAsPlaybook,
+    handleSaveUpdate,
+    handleDiscardChanges,
+  } = usePlaybookManagement({
+    sessionId,
+    folderPath,
+    allDocuments,
+    config: {
+      documents,
+      loopEnabled,
+      maxLoops,
+      prompt,
+      worktreeEnabled,
+      branchName,
+      createPROnCompletion,
+      prTargetBranch,
+    },
+    onApplyPlaybook: handleApplyPlaybook,
+  });
 
   // Git worktree state - only show worktree section for git repos
   const [isGitRepo, setIsGitRepo] = useState(false);
@@ -224,24 +277,6 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
     loadTaskCounts();
   }, [allDocuments]);
-
-  // Load playbooks on mount
-  useEffect(() => {
-    const loadPlaybooks = async () => {
-      setLoadingPlaybooks(true);
-      try {
-        const result = await window.maestro.playbooks.list(sessionId);
-        if (result.success) {
-          setPlaybooks(result.playbooks);
-        }
-      } catch (error) {
-        console.error('Failed to load playbooks:', error);
-      }
-      setLoadingPlaybooks(false);
-    };
-
-    loadPlaybooks();
-  }, [sessionId]);
 
   // Check if session cwd is a git repo on mount (for worktree support)
   useEffect(() => {
@@ -400,51 +435,6 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
   const missingDocCount = documents.filter(doc => doc.isMissing).length;
   const hasMissingDocs = missingDocCount > 0;
 
-  // Track if the current configuration differs from the loaded playbook
-  const isPlaybookModified = useMemo(() => {
-    if (!loadedPlaybook) return false;
-
-    // Compare documents
-    const currentDocs = documents.map(d => ({
-      filename: d.filename,
-      resetOnCompletion: d.resetOnCompletion
-    }));
-    const savedDocs = loadedPlaybook.documents;
-
-    if (currentDocs.length !== savedDocs.length) return true;
-    for (let i = 0; i < currentDocs.length; i++) {
-      if (currentDocs[i].filename !== savedDocs[i].filename ||
-          currentDocs[i].resetOnCompletion !== savedDocs[i].resetOnCompletion) {
-        return true;
-      }
-    }
-
-    // Compare loop setting
-    if (loopEnabled !== loadedPlaybook.loopEnabled) return true;
-
-    // Compare maxLoops setting
-    const savedMaxLoops = loadedPlaybook.maxLoops ?? null;
-    if (maxLoops !== savedMaxLoops) return true;
-
-    // Compare prompt
-    if (prompt !== loadedPlaybook.prompt) return true;
-
-    // Compare worktree settings
-    const savedWorktree = loadedPlaybook.worktreeSettings;
-    if (savedWorktree) {
-      // Playbook has worktree settings - check if current state differs
-      if (!worktreeEnabled) return true;
-      if (branchName !== savedWorktree.branchNameTemplate) return true;
-      if (createPROnCompletion !== savedWorktree.createPROnCompletion) return true;
-      if (savedWorktree.prTargetBranch && prTargetBranch !== savedWorktree.prTargetBranch) return true;
-    } else {
-      // Playbook doesn't have worktree settings - modified if worktree is now enabled with a branch
-      if (worktreeEnabled && branchName) return true;
-    }
-
-    return false;
-  }, [documents, loopEnabled, maxLoops, prompt, loadedPlaybook, worktreeEnabled, branchName, createPROnCompletion, prTargetBranch]);
-
   // Register layer on mount
   useEffect(() => {
     const id = registerLayer({
@@ -452,8 +442,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
       priority: MODAL_PRIORITIES.BATCH_RUNNER,
       onEscape: () => {
         if (showDeleteConfirmModal) {
-          setShowDeleteConfirmModal(false);
-          setPlaybookToDelete(null);
+          handleCancelDeletePlaybook();
         } else if (showSavePlaybookModal) {
           setShowSavePlaybookModal(false);
         } else {
@@ -468,15 +457,14 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         unregisterLayer(layerIdRef.current);
       }
     };
-  }, [registerLayer, unregisterLayer, showSavePlaybookModal, showDeleteConfirmModal]);
+  }, [registerLayer, unregisterLayer, showSavePlaybookModal, showDeleteConfirmModal, handleCancelDeletePlaybook]);
 
   // Update handler when dependencies change
   useEffect(() => {
     if (layerIdRef.current) {
       updateLayerHandler(layerIdRef.current, () => {
         if (showDeleteConfirmModal) {
-          setShowDeleteConfirmModal(false);
-          setPlaybookToDelete(null);
+          handleCancelDeletePlaybook();
         } else if (showSavePlaybookModal) {
           setShowSavePlaybookModal(false);
         } else {
@@ -484,7 +472,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
         }
       });
     }
-  }, [onClose, updateLayerHandler, showSavePlaybookModal, showDeleteConfirmModal]);
+  }, [onClose, updateLayerHandler, showSavePlaybookModal, showDeleteConfirmModal, handleCancelDeletePlaybook]);
 
   // Focus textarea on mount
   useEffect(() => {
@@ -538,212 +526,6 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
   const isModified = prompt !== DEFAULT_BATCH_PROMPT;
   const hasUnsavedChanges = prompt !== savedPrompt && prompt !== DEFAULT_BATCH_PROMPT;
-
-  // Handle loading a playbook
-  const handleLoadPlaybook = useCallback((playbook: Playbook) => {
-    // Convert stored entries to BatchDocumentEntry with IDs
-    // Also detect missing documents (documents in playbook that don't exist in allDocuments)
-    const allDocsSet = new Set(allDocuments);
-
-    const entries: BatchDocumentEntry[] = playbook.documents.map((doc, index) => ({
-      id: crypto.randomUUID(),
-      filename: doc.filename,
-      resetOnCompletion: doc.resetOnCompletion,
-      // Mark as duplicate if same filename appears earlier
-      isDuplicate: playbook.documents.slice(0, index).some(d => d.filename === doc.filename),
-      // Mark as missing if document doesn't exist in the folder
-      isMissing: !allDocsSet.has(doc.filename)
-    }));
-
-    setDocuments(entries);
-    setLoopEnabled(playbook.loopEnabled);
-    setMaxLoops(playbook.maxLoops ?? null);
-    setPrompt(playbook.prompt);
-    setLoadedPlaybook(playbook);
-    setShowPlaybookDropdown(false);
-
-    // Restore worktree settings if present
-    if (playbook.worktreeSettings) {
-      setWorktreeEnabled(true);
-      setBranchName(playbook.worktreeSettings.branchNameTemplate);
-      setCreatePROnCompletion(playbook.worktreeSettings.createPROnCompletion);
-      if (playbook.worktreeSettings.prTargetBranch) {
-        setPrTargetBranch(playbook.worktreeSettings.prTargetBranch);
-      }
-    } else {
-      // Clear worktree settings if playbook doesn't have them
-      setWorktreeEnabled(false);
-      setBranchName('');
-      setCreatePROnCompletion(false);
-    }
-  }, [allDocuments]);
-
-  // Handle opening the delete confirmation modal
-  const handleDeletePlaybook = useCallback((playbook: Playbook, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPlaybookToDelete(playbook);
-    setShowDeleteConfirmModal(true);
-  }, []);
-
-  // Handle confirming the delete action
-  const handleConfirmDeletePlaybook = useCallback(async () => {
-    if (!playbookToDelete) return;
-
-    try {
-      const result = await window.maestro.playbooks.delete(sessionId, playbookToDelete.id);
-      if (result.success) {
-        setPlaybooks(prev => prev.filter(p => p.id !== playbookToDelete.id));
-        // If the deleted playbook was loaded, clear it
-        if (loadedPlaybook?.id === playbookToDelete.id) {
-          setLoadedPlaybook(null);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete playbook:', error);
-    }
-
-    setShowDeleteConfirmModal(false);
-    setPlaybookToDelete(null);
-  }, [sessionId, playbookToDelete, loadedPlaybook]);
-
-  // Handle canceling the delete action
-  const handleCancelDeletePlaybook = useCallback(() => {
-    setShowDeleteConfirmModal(false);
-    setPlaybookToDelete(null);
-  }, []);
-
-  // Handle exporting a playbook
-  const handleExportPlaybook = useCallback(async (playbook: Playbook) => {
-    try {
-      const result = await window.maestro.playbooks.export(sessionId, playbook.id, folderPath);
-      if (!result.success && result.error !== 'Export cancelled') {
-        console.error('Failed to export playbook:', result.error);
-      }
-    } catch (error) {
-      console.error('Failed to export playbook:', error);
-    }
-  }, [sessionId, folderPath]);
-
-  // Handle importing a playbook
-  const handleImportPlaybook = useCallback(async () => {
-    try {
-      const result = await window.maestro.playbooks.import(sessionId, folderPath);
-      if (result.success && result.playbook) {
-        // Add to local playbooks list
-        setPlaybooks(prev => [...prev, result.playbook]);
-        // Load the imported playbook
-        handleLoadPlaybook(result.playbook);
-      } else if (result.error && result.error !== 'Import cancelled') {
-        console.error('Failed to import playbook:', result.error);
-      }
-    } catch (error) {
-      console.error('Failed to import playbook:', error);
-    }
-  }, [sessionId, folderPath, handleLoadPlaybook]);
-
-  // Handle saving a new playbook
-  const handleSaveAsPlaybook = useCallback(async (name: string) => {
-    if (savingPlaybook) return;
-
-    setSavingPlaybook(true);
-    try {
-      // Build playbook data, including worktree settings if enabled
-      const playbookData: Parameters<typeof window.maestro.playbooks.create>[1] = {
-        name,
-        documents: documents.map(d => ({
-          filename: d.filename,
-          resetOnCompletion: d.resetOnCompletion
-        })),
-        loopEnabled,
-        maxLoops,
-        prompt
-      };
-
-      // Include worktree settings if worktree is enabled
-      // Note: We store branchName as the template - users can modify it when loading
-      if (worktreeEnabled && branchName) {
-        playbookData.worktreeSettings = {
-          branchNameTemplate: branchName,
-          createPROnCompletion,
-          prTargetBranch
-        };
-      }
-
-      const result = await window.maestro.playbooks.create(sessionId, playbookData);
-
-      if (result.success) {
-        setPlaybooks(prev => [...prev, result.playbook]);
-        setLoadedPlaybook(result.playbook);
-        setShowSavePlaybookModal(false);
-      }
-    } catch (error) {
-      console.error('Failed to save playbook:', error);
-    }
-    setSavingPlaybook(false);
-  }, [sessionId, documents, loopEnabled, maxLoops, prompt, worktreeEnabled, branchName, createPROnCompletion, prTargetBranch, savingPlaybook]);
-
-  // Handle updating an existing playbook
-  const handleSaveUpdate = useCallback(async () => {
-    if (!loadedPlaybook || savingPlaybook) return;
-
-    setSavingPlaybook(true);
-    try {
-      // Build update data, including worktree settings if enabled
-      const updateData: Parameters<typeof window.maestro.playbooks.update>[2] = {
-        documents: documents.map(d => ({
-          filename: d.filename,
-          resetOnCompletion: d.resetOnCompletion
-        })),
-        loopEnabled,
-        maxLoops,
-        prompt,
-        updatedAt: Date.now()
-      };
-
-      // Include worktree settings if worktree is enabled, otherwise clear them
-      if (worktreeEnabled && branchName) {
-        updateData.worktreeSettings = {
-          branchNameTemplate: branchName,
-          createPROnCompletion,
-          prTargetBranch
-        };
-      } else {
-        // Explicitly set to undefined to clear previous worktree settings
-        updateData.worktreeSettings = undefined;
-      }
-
-      const result = await window.maestro.playbooks.update(sessionId, loadedPlaybook.id, updateData);
-
-      if (result.success) {
-        setLoadedPlaybook(result.playbook);
-        setPlaybooks(prev => prev.map(p => p.id === result.playbook.id ? result.playbook : p));
-      }
-    } catch (error) {
-      console.error('Failed to update playbook:', error);
-    }
-    setSavingPlaybook(false);
-  }, [sessionId, loadedPlaybook, documents, loopEnabled, maxLoops, prompt, worktreeEnabled, branchName, createPROnCompletion, prTargetBranch, savingPlaybook]);
-
-  // Handle discarding changes and reloading original playbook configuration
-  const handleDiscardChanges = useCallback(() => {
-    if (loadedPlaybook) {
-      handleLoadPlaybook(loadedPlaybook);
-    }
-  }, [loadedPlaybook, handleLoadPlaybook]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (playbackDropdownRef.current && !playbackDropdownRef.current.contains(e.target as Node)) {
-        setShowPlaybookDropdown(false);
-      }
-    };
-
-    if (showPlaybookDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showPlaybookDropdown]);
 
   return (
     <div
