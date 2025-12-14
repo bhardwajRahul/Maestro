@@ -160,17 +160,13 @@ export function useAutoRunHandlers(
   }, [activeSession?.autoRunFolderPath]);
 
   // Auto Run document content change handler
+  // Note: This only updates the shared state. File saving is handled by AutoRun component
+  // directly, which uses the correct folderPath/selectedFile from its props (not activeSession).
+  // This prevents content from being saved to the wrong session when switching between sessions
+  // that have documents with the same name.
   const handleAutoRunContentChange = useCallback(async (content: string) => {
     setAutoRunContent(content);
-    // Auto-save to file
-    if (activeSession?.autoRunFolderPath && activeSession?.autoRunSelectedFile) {
-      await window.maestro.autorun.writeDoc(
-        activeSession.autoRunFolderPath,
-        activeSession.autoRunSelectedFile + '.md',
-        content
-      );
-    }
-  }, [activeSession?.autoRunFolderPath, activeSession?.autoRunSelectedFile, setAutoRunContent]);
+  }, [setAutoRunContent]);
 
   // Auto Run mode change handler
   const handleAutoRunModeChange = useCallback((mode: 'edit' | 'preview') => {

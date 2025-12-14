@@ -372,6 +372,17 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
         <span className="opacity-50 truncate min-w-0 flex-1" title={session.cwd}>{session.cwd}</span>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
+            onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+            className="p-1 rounded hover:bg-white/10 transition-colors"
+            title={showHiddenFiles ? "Hide dotfiles" : "Show dotfiles"}
+            style={{
+              color: showHiddenFiles ? theme.colors.accent : theme.colors.textDim,
+              backgroundColor: showHiddenFiles ? `${theme.colors.accent}20` : 'transparent'
+            }}
+          >
+            {showHiddenFiles ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          </button>
+          <button
             ref={refreshButtonRef}
             onClick={handleRefresh}
             onMouseEnter={handleRefreshMouseEnter}
@@ -406,17 +417,6 @@ export function FileExplorerPanel(props: FileExplorerPanelProps) {
               <ChevronDown className="w-3.5 h-3.5" />
               <ChevronUp className="w-3.5 h-3.5" />
             </div>
-          </button>
-          <button
-            onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
-            title={showHiddenFiles ? "Hide dotfiles" : "Show dotfiles"}
-            style={{
-              color: showHiddenFiles ? theme.colors.accent : theme.colors.textDim,
-              backgroundColor: showHiddenFiles ? `${theme.colors.accent}20` : 'transparent'
-            }}
-          >
-            {showHiddenFiles ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
           </button>
         </div>
       </div>

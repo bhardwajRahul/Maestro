@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Minimize2, Eye, Edit, Play, Square, Loader2, Image } from 'lucide-react';
-import type { Theme, BatchRunState, SessionState } from '../types';
+import type { Theme, BatchRunState, SessionState, Shortcut } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { AutoRun, AutoRunHandle } from './AutoRun';
+import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 interface AutoRunExpandedModalProps {
   theme: Theme;
@@ -38,6 +39,7 @@ interface AutoRunExpandedModalProps {
   onOpenBatchRunner?: () => void;
   onStopBatchRun?: () => void;
   sessionState?: SessionState;
+  shortcuts?: Record<string, Shortcut>;
 }
 
 export function AutoRunExpandedModal({
@@ -49,6 +51,7 @@ export function AutoRunExpandedModal({
   onOpenBatchRunner,
   onStopBatchRun,
   sessionState,
+  shortcuts,
   ...autoRunProps
 }: AutoRunExpandedModalProps) {
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -232,7 +235,7 @@ export function AutoRunExpandedModal({
               onClick={onClose}
               className="flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors hover:bg-white/10"
               style={{ color: theme.colors.textDim }}
-              title="Collapse (Esc)"
+              title={`Collapse${shortcuts?.toggleAutoRunExpanded ? ` (${formatShortcutKeys(shortcuts.toggleAutoRunExpanded.keys)})` : ' (Esc)'}`}
             >
               <Minimize2 className="w-4 h-4" />
               Collapse

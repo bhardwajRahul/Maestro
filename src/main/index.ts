@@ -2876,13 +2876,15 @@ function setupIpcHandlers() {
         longestRunMs?: number;
         longestRunDate?: string;
         theme?: string;
+        clientToken?: string; // Client-generated token for polling auth status
+        authToken?: string;   // Required for confirmed email addresses
       }
     ): Promise<{
       success: boolean;
       message: string;
-      requiresConfirmation?: boolean;
-      confirmationUrl?: string;
+      pendingEmailConfirmation?: boolean;
       error?: string;
+      authTokenRequired?: boolean; // True if 401 due to missing token
       ranking?: {
         cumulative: {
           rank: number;
@@ -2903,6 +2905,8 @@ function setupIpcHandlers() {
           displayName: data.displayName,
           email: data.email.substring(0, 3) + '***',
           badgeLevel: data.badgeLevel,
+          hasClientToken: !!data.clientToken,
+          hasAuthToken: !!data.authToken,
         });
 
         const response = await fetch('https://runmaestro.ai/api/m4estr0/submit', {
@@ -2917,8 +2921,7 @@ function setupIpcHandlers() {
         const result = await response.json() as {
           success?: boolean;
           message?: string;
-          requiresConfirmation?: boolean;
-          confirmationUrl?: string;
+          pendingEmailConfirmation?: boolean;
           error?: string;
           ranking?: {
             cumulative: {
@@ -2938,15 +2941,25 @@ function setupIpcHandlers() {
 
         if (response.ok) {
           logger.info('Leaderboard submission successful', 'Leaderboard', {
-            requiresConfirmation: result.requiresConfirmation,
+            pendingEmailConfirmation: result.pendingEmailConfirmation,
             ranking: result.ranking,
           });
           return {
             success: true,
             message: result.message || 'Submission received',
-            requiresConfirmation: result.requiresConfirmation,
-            confirmationUrl: result.confirmationUrl,
+            pendingEmailConfirmation: result.pendingEmailConfirmation,
             ranking: result.ranking,
+          };
+        } else if (response.status === 401) {
+          // Auth token required or invalid
+          logger.warn('Leaderboard submission requires auth token', 'Leaderboard', {
+            error: result.error || result.message,
+          });
+          return {
+            success: false,
+            message: result.message || 'Authentication required',
+            error: result.error || 'Auth token required for confirmed email addresses',
+            authTokenRequired: true,
           };
         } else {
           logger.warn('Leaderboard submission failed', 'Leaderboard', {
@@ -2964,6 +2977,61 @@ function setupIpcHandlers() {
         return {
           success: false,
           message: 'Failed to connect to leaderboard server',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    }
+  );
+
+  // Poll for auth token after email confirmation
+  ipcMain.handle(
+    'leaderboard:pollAuthStatus',
+    async (
+      _event,
+      clientToken: string
+    ): Promise<{
+      status: 'pending' | 'confirmed' | 'expired' | 'error';
+      authToken?: string;
+      message?: string;
+      error?: string;
+    }> => {
+      try {
+        logger.debug('Polling leaderboard auth status', 'Leaderboard');
+
+        const response = await fetch(
+          `https://runmaestro.ai/api/m4estr0/auth-status?clientToken=${encodeURIComponent(clientToken)}`,
+          {
+            headers: {
+              'User-Agent': `Maestro/${app.getVersion()}`,
+            },
+          }
+        );
+
+        const result = await response.json() as {
+          status: 'pending' | 'confirmed' | 'expired';
+          authToken?: string;
+          message?: string;
+        };
+
+        if (response.ok) {
+          if (result.status === 'confirmed' && result.authToken) {
+            logger.info('Leaderboard auth token received', 'Leaderboard');
+          }
+          return {
+            status: result.status,
+            authToken: result.authToken,
+            message: result.message,
+          };
+        } else {
+          return {
+            status: 'error',
+            error: result.message || `Server error: ${response.status}`,
+          };
+        }
+      } catch (error) {
+        logger.error('Error polling leaderboard auth status', 'Leaderboard', error);
+        return {
+          status: 'error',
           error: error instanceof Error ? error.message : 'Unknown error',
         };
       }
@@ -3072,60 +3140,6 @@ function setupIpcHandlers() {
         logger.error('Error fetching longest runs leaderboard', 'Leaderboard', error);
         return {
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
-      }
-    }
-  );
-
-  // Opt out from leaderboard (request removal)
-  ipcMain.handle(
-    'leaderboard:optOut',
-    async (
-      _event,
-      email: string
-    ): Promise<{
-      success: boolean;
-      message?: string;
-      error?: string;
-    }> => {
-      try {
-        logger.info('Requesting leaderboard opt-out', 'Leaderboard', {
-          email: email.substring(0, 3) + '***',
-        });
-
-        const response = await fetch('https://runmaestro.ai/api/leaderboard/opt-out', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': `Maestro/${app.getVersion()}`,
-          },
-          body: JSON.stringify({ email }),
-        });
-
-        if (response.ok) {
-          const result = await response.json() as { message?: string };
-          return {
-            success: true,
-            message: result.message || 'Successfully opted out from leaderboard',
-          };
-        } else {
-          // Even if API fails, we still want to clear local registration
-          // So we return success but with a note
-          logger.warn('Leaderboard opt-out API returned error', 'Leaderboard', {
-            status: response.status,
-          });
-          return {
-            success: true, // Still consider it "success" locally
-            message: 'Local registration cleared. Server removal may be pending.',
-          };
-        }
-      } catch (error) {
-        logger.error('Error opting out from leaderboard', 'Leaderboard', error);
-        // Still return success to clear local registration
-        return {
-          success: true,
-          message: 'Local registration cleared. Could not reach server.',
           error: error instanceof Error ? error.message : 'Unknown error',
         };
       }

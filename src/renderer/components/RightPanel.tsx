@@ -11,6 +11,7 @@ import { formatShortcutKeys } from '../utils/shortcutFormatter';
 export interface RightPanelHandle {
   refreshHistoryPanel: () => void;
   focusAutoRun: () => void;
+  toggleAutoRunExpanded: () => void;
 }
 
 interface RightPanelProps {
@@ -113,7 +114,25 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
   // Expanded modal state for Auto Run
   const [autoRunExpanded, setAutoRunExpanded] = useState(false);
   const handleExpandAutoRun = useCallback(() => setAutoRunExpanded(true), []);
-  const handleCollapseAutoRun = useCallback(() => setAutoRunExpanded(false), []);
+  const handleCollapseAutoRun = useCallback(() => {
+    setAutoRunExpanded(false);
+    // Refocus the AutoRun panel after modal closes
+    requestAnimationFrame(() => {
+      autoRunRef.current?.focus();
+    });
+  }, []);
+  const toggleAutoRunExpanded = useCallback(() => {
+    setAutoRunExpanded(prev => {
+      const newValue = !prev;
+      // If collapsing, refocus the AutoRun panel
+      if (!newValue) {
+        requestAnimationFrame(() => {
+          autoRunRef.current?.focus();
+        });
+      }
+      return newValue;
+    });
+  }, []);
 
   useEffect(() => {
     if (!currentSessionBatchState?.isRunning || !currentSessionBatchState?.startTime) {
@@ -148,8 +167,9 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     },
     focusAutoRun: () => {
       autoRunRef.current?.focus();
-    }
-  }), []);
+    },
+    toggleAutoRunExpanded
+  }), [toggleAutoRunExpanded]);
 
   // Focus the history panel when switching to history tab
   useEffect(() => {
@@ -338,6 +358,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
             onStopBatchRun={onStopBatchRun}
             sessionState={session.state}
             onExpand={handleExpandAutoRun}
+            shortcuts={shortcuts}
           />
           </div>
         )}
@@ -371,6 +392,7 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           onOpenBatchRunner={onOpenBatchRunner}
           onStopBatchRun={onStopBatchRun}
           sessionState={session.state}
+          shortcuts={shortcuts}
         />
       )}
 
@@ -460,13 +482,13 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           </div>
 
           {/* Overall completed count with loop info */}
-          <div className="mt-2 flex items-center justify-between">
+          <div className="mt-2 flex items-center justify-center gap-2">
             <span className="text-[10px]" style={{ color: theme.colors.textDim }}>
               {currentSessionBatchState.isStopping
                 ? 'Waiting for current task to complete before stopping...'
                 : currentSessionBatchState.totalTasksAcrossAllDocs > 0
-                  ? `${currentSessionBatchState.completedTasksAcrossAllDocs} / ${currentSessionBatchState.totalTasksAcrossAllDocs} total tasks completed`
-                  : `${currentSessionBatchState.completedTasks} / ${currentSessionBatchState.totalTasks} tasks completed`
+                  ? `${currentSessionBatchState.completedTasksAcrossAllDocs} of ${currentSessionBatchState.totalTasksAcrossAllDocs} tasks completed`
+                  : `${currentSessionBatchState.completedTasks} of ${currentSessionBatchState.totalTasks} tasks completed`
               }
             </span>
             {/* Loop iteration indicator */}

@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Trophy, Mail, User, Loader2, Check, AlertCircle, ExternalLink, UserX } from 'lucide-react';
+import { X, Trophy, Mail, User, Loader2, Check, AlertCircle, ExternalLink, UserX, Key, RefreshCw } from 'lucide-react';
 import type { Theme, AutoRunStats, LeaderboardRegistration } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -41,7 +41,12 @@ interface LeaderboardRegistrationModalProps {
   onOptOut: () => void;
 }
 
-type SubmitState = 'idle' | 'submitting' | 'success' | 'awaiting_confirmation' | 'error' | 'opting_out' | 'opted_out';
+type SubmitState = 'idle' | 'submitting' | 'success' | 'awaiting_confirmation' | 'polling' | 'error' | 'opted_out';
+
+// Generate a random client token for polling
+function generateClientToken(): string {
+  return crypto.randomUUID();
+}
 
 export function LeaderboardRegistrationModal({
   theme,
@@ -70,6 +75,15 @@ export function LeaderboardRegistrationModal({
   const [successMessage, setSuccessMessage] = useState('');
   const [showOptOutConfirm, setShowOptOutConfirm] = useState(false);
 
+  // Polling state - generate clientToken once if not already persisted
+  const [clientToken] = useState(() => existingRegistration?.clientToken || generateClientToken());
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Manual token entry state
+  const [showManualTokenEntry, setShowManualTokenEntry] = useState(false);
+  const [manualToken, setManualToken] = useState('');
+
   // Get current badge info
   const currentBadge = getBadgeForTime(autoRunStats.cumulativeTimeMs);
   const badgeLevel = currentBadge?.level || 0;
@@ -83,6 +97,65 @@ export function LeaderboardRegistrationModal({
 
   // Check if form is valid
   const isFormValid = displayName.trim().length > 0 && email.trim().length > 0 && isValidEmail(email);
+
+  // Stop polling
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsPolling(false);
+  }, []);
+
+  // Poll for auth token
+  const pollForAuthToken = useCallback(async (token: string) => {
+    try {
+      const result = await window.maestro.leaderboard.pollAuthStatus(token);
+
+      if (result.status === 'confirmed' && result.authToken) {
+        stopPolling();
+        // Save the auth token
+        const registration: LeaderboardRegistration = {
+          email: email.trim(),
+          displayName: displayName.trim(),
+          twitterHandle: twitterHandle.trim() || undefined,
+          githubUsername: githubUsername.trim() || undefined,
+          linkedinHandle: linkedinHandle.trim() || undefined,
+          registeredAt: existingRegistration?.registeredAt || Date.now(),
+          emailConfirmed: true,
+          lastSubmissionAt: Date.now(),
+          clientToken: token,
+          authToken: result.authToken,
+        };
+        onSave(registration);
+        setSubmitState('success');
+        setSuccessMessage('Email confirmed! Your stats have been submitted to the leaderboard.');
+      } else if (result.status === 'expired') {
+        stopPolling();
+        setSubmitState('error');
+        setErrorMessage('Confirmation link expired. Please submit again to receive a new confirmation email.');
+      } else if (result.status === 'error') {
+        // Don't stop polling on transient errors, just log
+        console.warn('Polling error:', result.error);
+      }
+      // 'pending' status - continue polling
+    } catch (error) {
+      console.warn('Poll request failed:', error);
+      // Continue polling on network errors
+    }
+  }, [email, displayName, twitterHandle, githubUsername, linkedinHandle, existingRegistration, onSave, stopPolling]);
+
+  // Start polling for confirmation
+  const startPolling = useCallback((token: string) => {
+    setIsPolling(true);
+    setSubmitState('polling');
+
+    // Poll immediately, then every 5 seconds
+    pollForAuthToken(token);
+    pollingIntervalRef.current = setInterval(() => {
+      pollForAuthToken(token);
+    }, 5000);
+  }, [pollForAuthToken]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
@@ -111,29 +184,40 @@ export function LeaderboardRegistrationModal({
         longestRunMs: autoRunStats.longestRunMs || undefined,
         longestRunDate,
         theme: theme.id,
+        clientToken,
+        authToken: existingRegistration?.authToken,
       });
 
       if (result.success) {
-        // Save registration locally
+        // Save registration locally with clientToken (persists the token)
         const registration: LeaderboardRegistration = {
           email: email.trim(),
           displayName: displayName.trim(),
           twitterHandle: twitterHandle.trim() || undefined,
           githubUsername: githubUsername.trim() || undefined,
           linkedinHandle: linkedinHandle.trim() || undefined,
-          registeredAt: Date.now(),
-          emailConfirmed: !result.requiresConfirmation,
+          registeredAt: existingRegistration?.registeredAt || Date.now(),
+          emailConfirmed: !result.pendingEmailConfirmation,
           lastSubmissionAt: Date.now(),
+          clientToken,
+          authToken: existingRegistration?.authToken,
         };
         onSave(registration);
 
-        if (result.requiresConfirmation) {
+        if (result.pendingEmailConfirmation) {
           setSubmitState('awaiting_confirmation');
-          setSuccessMessage('Please check your email to confirm your registration. Your submission will be queued for approval once confirmed.');
+          setSuccessMessage('Please check your email to confirm your registration.');
+          // Start polling for confirmation
+          startPolling(clientToken);
         } else {
           setSubmitState('success');
           setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
         }
+      } else if (result.authTokenRequired) {
+        // Email is confirmed but we're missing the auth token - show manual entry
+        setSubmitState('error');
+        setShowManualTokenEntry(true);
+        setErrorMessage('Your email is confirmed but we need your auth token. Enter it below or check your confirmation email.');
       } else {
         setSubmitState('error');
         setErrorMessage(result.error || result.message || 'Submission failed');
@@ -142,30 +226,82 @@ export function LeaderboardRegistrationModal({
       setSubmitState('error');
       setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
-  }, [isFormValid, email, displayName, githubUsername, twitterHandle, linkedinHandle, badgeLevel, badgeName, autoRunStats, onSave]);
+  }, [isFormValid, email, displayName, githubUsername, twitterHandle, linkedinHandle, badgeLevel, badgeName, autoRunStats, existingRegistration, onSave, theme.id, clientToken, startPolling]);
 
-  // Handle opt-out
-  const handleOptOut = useCallback(async () => {
-    setSubmitState('opting_out');
-    setErrorMessage('');
+  // Handle manual token submission
+  const handleManualTokenSubmit = useCallback(async () => {
+    if (!manualToken.trim()) return;
 
+    // Save the manually entered token and retry submission
+    const registration: LeaderboardRegistration = {
+      email: email.trim(),
+      displayName: displayName.trim(),
+      twitterHandle: twitterHandle.trim() || undefined,
+      githubUsername: githubUsername.trim() || undefined,
+      linkedinHandle: linkedinHandle.trim() || undefined,
+      registeredAt: existingRegistration?.registeredAt || Date.now(),
+      emailConfirmed: true,
+      lastSubmissionAt: Date.now(),
+      clientToken,
+      authToken: manualToken.trim(),
+    };
+    onSave(registration);
+    setShowManualTokenEntry(false);
+    setManualToken('');
+
+    // Now submit with the token
+    setSubmitState('submitting');
     try {
-      // Call API to request removal (uses registered email)
-      if (existingRegistration?.email) {
-        await window.maestro.leaderboard.optOut(existingRegistration.email);
+      let longestRunDate: string | undefined;
+      if (autoRunStats.longestRunTimestamp > 0) {
+        longestRunDate = new Date(autoRunStats.longestRunTimestamp).toISOString().split('T')[0];
       }
 
-      // Clear local registration regardless of API result
-      onOptOut();
-      setSubmitState('opted_out');
-      setSuccessMessage('You have been removed from the leaderboard. Your local stats are preserved.');
+      const result = await window.maestro.leaderboard.submit({
+        email: email.trim(),
+        displayName: displayName.trim(),
+        githubUsername: githubUsername.trim() || undefined,
+        twitterHandle: twitterHandle.trim() || undefined,
+        linkedinHandle: linkedinHandle.trim() || undefined,
+        badgeLevel,
+        badgeName,
+        cumulativeTimeMs: autoRunStats.cumulativeTimeMs,
+        totalRuns: autoRunStats.totalRuns,
+        longestRunMs: autoRunStats.longestRunMs || undefined,
+        longestRunDate,
+        theme: theme.id,
+        clientToken,
+        authToken: manualToken.trim(),
+      });
+
+      if (result.success) {
+        setSubmitState('success');
+        setSuccessMessage('Your stats have been submitted! Your entry is now queued for manual approval.');
+      } else {
+        setSubmitState('error');
+        setErrorMessage(result.error || result.message || 'Submission failed. Please check your auth token.');
+      }
     } catch (error) {
-      // Still clear local registration even if API call fails
-      onOptOut();
-      setSubmitState('opted_out');
-      setSuccessMessage('Local registration cleared. If you were on the leaderboard, email support@runmaestro.ai to request removal.');
+      setSubmitState('error');
+      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
     }
-  }, [existingRegistration?.email, onOptOut]);
+  }, [manualToken, email, displayName, twitterHandle, githubUsername, linkedinHandle, existingRegistration, clientToken, onSave, autoRunStats, badgeLevel, badgeName, theme.id]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Handle opt-out (clears local registration)
+  const handleOptOut = useCallback(() => {
+    onOptOut();
+    setSubmitState('opted_out');
+    setSuccessMessage('You have opted out of the leaderboard. Your local stats are preserved.');
+  }, [onOptOut]);
 
   // Register layer on mount
   useEffect(() => {
@@ -392,7 +528,70 @@ export function LeaderboardRegistrationModal({
             </div>
           )}
 
-          {(submitState === 'success' || submitState === 'awaiting_confirmation' || submitState === 'opted_out') && (
+          {/* Polling status */}
+          {(submitState === 'awaiting_confirmation' || submitState === 'polling') && (
+            <div
+              className="flex items-start gap-2 p-3 rounded-lg"
+              style={{ backgroundColor: `${theme.colors.accent}15`, border: `1px solid ${theme.colors.accent}30` }}
+            >
+              <RefreshCw className="w-4 h-4 flex-shrink-0 mt-0.5 animate-spin" style={{ color: theme.colors.accent }} />
+              <div className="flex-1">
+                <p className="text-xs" style={{ color: theme.colors.textMain }}>
+                  {successMessage || 'Waiting for email confirmation...'}
+                </p>
+                <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+                  Click the link in your email to complete registration. This will update automatically.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Manual token entry */}
+          {showManualTokenEntry && (
+            <div
+              className="p-3 rounded-lg space-y-3"
+              style={{ backgroundColor: `${theme.colors.accent}10`, border: `1px solid ${theme.colors.accent}30` }}
+            >
+              <div className="flex items-start gap-2">
+                <Key className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.accent }} />
+                <div>
+                  <p className="text-xs font-medium" style={{ color: theme.colors.textMain }}>
+                    Enter Auth Token
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: theme.colors.textDim }}>
+                    Copy the token from your confirmation email or the confirmation page.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualToken}
+                  onChange={(e) => setManualToken(e.target.value)}
+                  placeholder="Paste your 64-character auth token"
+                  className="flex-1 px-3 py-2 text-xs rounded border outline-none focus:ring-1 font-mono"
+                  style={{
+                    backgroundColor: theme.colors.bgActivity,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.textMain,
+                  }}
+                />
+                <button
+                  onClick={handleManualTokenSubmit}
+                  disabled={!manualToken.trim()}
+                  className="px-3 py-2 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                  style={{
+                    backgroundColor: theme.colors.accent,
+                    color: '#fff',
+                  }}
+                >
+                  Submit
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(submitState === 'success' || submitState === 'opted_out') && (
             <div
               className="flex items-start gap-2 p-3 rounded-lg"
               style={{ backgroundColor: `${theme.colors.success}15`, border: `1px solid ${theme.colors.success}30` }}
@@ -454,17 +653,21 @@ export function LeaderboardRegistrationModal({
           {/* Right side - Cancel/Close and Submit */}
           <div className="flex gap-2">
             <button
-              onClick={onClose}
+              onClick={() => {
+                stopPolling();
+                onClose();
+              }}
               className="px-4 py-2 text-sm rounded hover:bg-white/10 transition-colors"
               style={{ color: theme.colors.textDim }}
-              disabled={submitState === 'submitting' || submitState === 'opting_out'}
+              disabled={submitState === 'submitting'}
             >
-              {submitState === 'success' || submitState === 'awaiting_confirmation' || submitState === 'opted_out' ? 'Close' : 'Cancel'}
+              {submitState === 'success' || submitState === 'opted_out' ? 'Close' :
+               submitState === 'awaiting_confirmation' || submitState === 'polling' ? 'Close (Continue in Background)' : 'Cancel'}
             </button>
-            {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'opted_out' && (
+            {submitState !== 'success' && submitState !== 'awaiting_confirmation' && submitState !== 'polling' && submitState !== 'opted_out' && (
               <button
                 onClick={handleSubmit}
-                disabled={!isFormValid || submitState === 'submitting' || submitState === 'opting_out' || showOptOutConfirm}
+                disabled={!isFormValid || submitState === 'submitting' || showOptOutConfirm || showManualTokenEntry}
                 className="px-4 py-2 text-sm font-medium rounded transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   backgroundColor: theme.colors.accent,
@@ -475,11 +678,6 @@ export function LeaderboardRegistrationModal({
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Submitting...
-                  </>
-                ) : submitState === 'opting_out' ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Removing...
                   </>
                 ) : (
                   <>

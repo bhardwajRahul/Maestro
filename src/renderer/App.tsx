@@ -4574,7 +4574,7 @@ export default function MaestroConsole() {
     setRenameTabModalOpen, navigateToNextTab, navigateToPrevTab, navigateToTabByIndex, navigateToLastTab,
     setFileTreeFilterOpen, isShortcut, isTabShortcut, handleNavBack, handleNavForward, toggleUnreadFilter,
     setTabSwitcherOpen, showUnreadOnly, stagedImages, handleSetLightboxImage, setMarkdownEditMode,
-    toggleTabStar, setPromptComposerOpen, openWizardModal,
+    toggleTabStar, setPromptComposerOpen, openWizardModal, rightPanelRef,
     // Navigation handlers from useKeyboardNavigation hook
     handleSidebarNavigation, handleTabNavigation, handleEnterToActivate, handleEscapeInMain
   };

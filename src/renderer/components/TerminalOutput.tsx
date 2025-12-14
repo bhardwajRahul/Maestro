@@ -1349,7 +1349,7 @@ export const TerminalOutput = forwardRef<HTMLDivElement, TerminalOutputProps>((p
             type="text"
             value={outputSearchQuery}
             onChange={(e) => setOutputSearchQuery(e.target.value)}
-            placeholder="Filter output... (Esc to close)"
+            placeholder={isAIMode ? "Filter output... (Esc to close)" : "Search output... (Esc to close)"}
             className="w-full px-3 py-2 rounded border bg-transparent outline-none text-sm"
             style={{ borderColor: theme.colors.accent, color: theme.colors.textMain, backgroundColor: theme.colors.bgSidebar }}
             autoFocus

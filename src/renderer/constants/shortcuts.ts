@@ -19,6 +19,7 @@ export const DEFAULT_SHORTCUTS: Record<string, Shortcut> = {
   goToAutoRun: { id: 'goToAutoRun', label: 'Go to Auto Run Tab', keys: ['Meta', 'Shift', '1'] },
   copyFilePath: { id: 'copyFilePath', label: 'Copy File Path (in Preview)', keys: ['Meta', 'p'] },
   toggleMarkdownMode: { id: 'toggleMarkdownMode', label: 'Toggle Edit/Preview', keys: ['Meta', 'e'] },
+  toggleAutoRunExpanded: { id: 'toggleAutoRunExpanded', label: 'Toggle Auto Run Expanded', keys: ['Meta', 'Shift', 'e'] },
   focusInput: { id: 'focusInput', label: 'Toggle Input/Output Focus', keys: ['Meta', '.'] },
   focusSidebar: { id: 'focusSidebar', label: 'Focus Left Panel', keys: ['Meta', 'Shift', 'a'] },
   viewGitDiff: { id: 'viewGitDiff', label: 'View Git Diff', keys: ['Meta', 'Shift', 'd'] },

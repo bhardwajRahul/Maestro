@@ -68,7 +68,7 @@ export function AutoRunSearchBar({
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Search... (⌘F to open, Enter: next, Shift+Enter: prev)"
+        placeholder="Search..."
         className="flex-1 bg-transparent outline-none text-sm"
         style={{ color: theme.colors.textMain }}
         autoFocus

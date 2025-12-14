@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, memo,
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Eye, Edit, Play, Square, HelpCircle, Loader2, Image, X, Search, ChevronDown, ChevronRight, FolderOpen, FileText, RefreshCw, Maximize2 } from 'lucide-react';
-import type { BatchRunState, SessionState, Theme } from '../types';
+import type { BatchRunState, SessionState, Theme, Shortcut } from '../types';
 import { AutoRunnerHelpModal } from './AutoRunnerHelpModal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { AutoRunDocumentSelector } from './AutoRunDocumentSelector';
@@ -13,6 +13,7 @@ import { useAutoRunUndo } from '../hooks/useAutoRunUndo';
 import { useAutoRunImageHandling, imageCache } from '../hooks/useAutoRunImageHandling';
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 import { generateAutoRunProseStyles, createMarkdownComponents } from '../utils/markdownConfig';
+import { formatShortcutKeys } from '../utils/shortcutFormatter';
 
 // Memoize remarkPlugins array - it never changes
 const REMARK_PLUGINS = [remarkGfm];
@@ -64,6 +65,9 @@ interface AutoRunProps {
 
   // Expand to modal callback
   onExpand?: () => void;
+
+  // Shortcuts for displaying hotkey hints
+  shortcuts?: Record<string, Shortcut>;
 
   // Hide top controls (when rendered in expanded modal with controls in header)
   hideTopControls?: boolean;
@@ -385,6 +389,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   onStopBatchRun,
   sessionState,
   onExpand,
+  shortcuts,
   hideTopControls = false,
   onChange,  // Legacy prop for backwards compatibility
 }, ref) {
@@ -423,6 +428,12 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Track contentVersion to detect external file changes (from disk watcher)
   const prevContentVersionRef = useRef(contentVersion);
 
+  // Track previous folder/file paths to save pending changes to the CORRECT session when switching
+  // These are separate from prevSelectedFileRef (used for document change detection) because
+  // we need to track the OLD session's paths during session switches, not just document changes.
+  const sessionSwitchFolderRef = useRef(folderPath);
+  const sessionSwitchFileRef = useRef(selectedFile);
+
   // Sync local content from prop when session changes (switching sessions)
   // or when content changes externally (e.g., switching documents, batch run modifying tasks)
   // or when file changes on disk (contentVersion increments)
@@ -432,12 +443,34 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     const versionChanged = contentVersion !== prevContentVersionRef.current;
 
     if (sessionChanged) {
+      // CRITICAL: Before switching sessions, save any unsaved changes to the OLD session's file
+      // This prevents content from "leaking" to the new session when documents have the same name
+      const prevFolder = sessionSwitchFolderRef.current;
+      const prevFile = sessionSwitchFileRef.current;
+      const prevContent = prevContentForSyncRef.current;
+
+      // Only save if there are unsaved local changes and we have a valid path
+      if (prevFolder && prevFile && localContent !== prevContent && localContent !== lastSavedContentRef.current) {
+        // Save to the OLD session's file path, not the new one
+        window.maestro.autorun.writeDoc(prevFolder, prevFile + '.md', localContent)
+          .catch(err => console.error('Failed to save pending changes before session switch:', err));
+      }
+
+      // Clear any pending auto-save timer (it would save to wrong session)
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
+
       // Reset editing flag so content can sync properly when returning to this session
       isEditingRef.current = false;
       setLocalContent(content);
       prevSessionIdRef.current = sessionId;
       prevContentForSyncRef.current = content;
       prevContentVersionRef.current = contentVersion;
+      sessionSwitchFolderRef.current = folderPath;
+      sessionSwitchFileRef.current = selectedFile;
+      lastSavedContentRef.current = content;
     } else if (versionChanged) {
       // External file change detected (disk watcher) - force sync regardless of editing state
       // This is authoritative - the file on disk is the source of truth
@@ -452,15 +485,30 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       setLocalContent(content);
       prevContentForSyncRef.current = content;
     }
-  }, [sessionId, content, contentVersion]);
 
-  // Sync local content to parent on blur
+    // Always keep folder/file refs in sync (for non-session-change updates)
+    if (!sessionChanged) {
+      sessionSwitchFolderRef.current = folderPath;
+      sessionSwitchFileRef.current = selectedFile;
+    }
+  }, [sessionId, content, contentVersion, folderPath, selectedFile, localContent]);
+
+  // Sync local content to parent on blur - saves to disk immediately
   const syncContentToParent = useCallback(() => {
     isEditingRef.current = false;
     if (localContent !== content) {
       handleContentChange(localContent);
     }
-  }, [localContent, content, handleContentChange]);
+    // Save to disk immediately on blur (don't wait for 5-second auto-save)
+    // Use current folderPath/selectedFile props which are the correct session's paths
+    if (folderPath && selectedFile && localContent !== lastSavedContentRef.current && localContent) {
+      window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent)
+        .then(() => {
+          lastSavedContentRef.current = localContent;
+        })
+        .catch(err => console.error('Failed to save on blur:', err));
+    }
+  }, [localContent, content, handleContentChange, folderPath, selectedFile]);
 
   // Auto-save to disk with 5-second debounce
   useEffect(() => {
@@ -938,8 +986,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       return;
     }
 
-    // Command-E to toggle between edit and preview
-    if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+    // Command-E to toggle between edit and preview (without Shift)
+    // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+    if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
       toggleMode();
@@ -1108,7 +1157,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       className="h-full flex flex-col outline-none relative"
       tabIndex={-1}
       onKeyDown={(e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        // CMD+E to toggle edit/preview (without Shift)
+        // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+        if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
           e.preventDefault();
           e.stopPropagation();
           toggleMode();
@@ -1151,7 +1202,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
               color: theme.colors.textDim,
               border: `1px solid ${theme.colors.border}`
             }}
-            title="Expand to full screen"
+            title={`Expand to full screen${shortcuts?.toggleAutoRunExpanded ? ` (${formatShortcutKeys(shortcuts.toggleAutoRunExpanded.keys)})` : ''}`}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
@@ -1426,13 +1477,16 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             className="border rounded p-4 prose prose-sm max-w-none outline-none"
             tabIndex={0}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+              // CMD+E to toggle edit/preview (without Shift)
+              // Cmd+Shift+E is allowed to propagate to global handler for "Toggle Auto Run Expanded"
+              if ((e.metaKey || e.ctrlKey) && e.key === 'e' && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
                 toggleMode();
               }
-              // Cmd+F to open search in preview mode (same as edit mode)
-              if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
+              // Cmd+F to open search in preview mode (without Shift)
+              // Cmd+Shift+F is allowed to propagate to global handler for "Go to Files"
+              if (e.key === 'f' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
                 openSearch();
@@ -1470,7 +1524,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
       {/* Task Count Panel - shown when there are tasks */}
       {taskCounts.total > 0 && (
         <div
-          className="flex-shrink-0 px-3 py-2 text-xs border-t"
+          className="flex-shrink-0 px-3 py-2 text-xs border-t text-center"
           style={{
             backgroundColor: theme.colors.bgActivity,
             borderColor: theme.colors.border,

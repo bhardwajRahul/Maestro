@@ -464,6 +464,9 @@ export interface LeaderboardRegistration {
   registeredAt: number;          // Timestamp when registered
   emailConfirmed: boolean;       // Whether email has been confirmed
   lastSubmissionAt?: number;     // Last successful submission timestamp
+  // Authentication
+  clientToken?: string;          // Client-generated token for polling auth status
+  authToken?: string;            // 64-character token received after email confirmation
 }
 
 // Ranking info for a single leaderboard category

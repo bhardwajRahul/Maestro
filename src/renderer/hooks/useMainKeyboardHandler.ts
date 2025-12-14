@@ -270,6 +270,11 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
           ctx.setMarkdownEditMode(!ctx.markdownEditMode);
         }
       }
+      else if (ctx.isShortcut(e, 'toggleAutoRunExpanded')) {
+        // Toggle Auto Run expanded/contracted view
+        e.preventDefault();
+        ctx.rightPanelRef?.current?.toggleAutoRunExpanded();
+      }
 
       // Opt+Cmd+NUMBER: Jump to visible session by number (1-9, 0=10th)
       // Use e.code instead of e.key because Option key on macOS produces special characters
