@@ -80,6 +80,9 @@ interface AutoRunProps {
 export interface AutoRunHandle {
   focus: () => void;
   switchMode: (mode: 'edit' | 'preview') => void;
+  isDirty: () => boolean;
+  save: () => Promise<void>;
+  revert: () => void;
 }
 
 // Custom image component that loads images from the Auto Run folder or external URLs
@@ -413,172 +416,69 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   // Use onContentChange if provided, otherwise fall back to legacy onChange
   const handleContentChange = onContentChange || onChange || (() => {});
 
-  // Local content state for responsive typing - syncs to parent on blur
+  // Local content state for responsive typing
   const [localContent, setLocalContent] = useState(content);
+
+  // Track the saved content to detect dirty state (unsaved changes)
+  const [savedContent, setSavedContent] = useState(content);
+
+  // Dirty state: true when localContent differs from savedContent
+  const isDirty = localContent !== savedContent;
+
+  // Track previous session/document to detect switches
   const prevSessionIdRef = useRef(sessionId);
-  // Track if user is actively editing (to avoid overwriting their changes)
-  const isEditingRef = useRef(false);
-
-  // Auto-save timer ref for 5-second debounce
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Track the last saved content to avoid unnecessary saves
-  const lastSavedContentRef = useRef<string>(content);
-
-  // Track content prop to detect external changes (for session switch sync)
-  const prevContentForSyncRef = useRef(content);
-  // Track contentVersion to detect external file changes (from disk watcher)
+  const prevSelectedFileRef = useRef(selectedFile);
   const prevContentVersionRef = useRef(contentVersion);
 
-  // Track previous folder/file paths to save pending changes to the CORRECT document when switching
-  // These are used for BOTH session switches AND document switches within the same session
-  const prevSwitchFolderRef = useRef(folderPath);
-  const prevSwitchFileRef = useRef(selectedFile);
-
-  // Track the folder/file that the current localContent belongs to
-  // CRITICAL: These refs track where localContent should be saved, independent of current props.
-  // This prevents saving old session's content to new session's folder when switching sessions.
-  const localContentFolderRef = useRef(folderPath);
-  const localContentFileRef = useRef(selectedFile);
-
-  // Sync local content from prop when session changes (switching sessions)
-  // or when document changes within the same session
-  // or when content changes externally (e.g., batch run modifying tasks)
-  // or when file changes on disk (contentVersion increments)
+  // Sync local content when session/document changes or external file changes
   useEffect(() => {
     const sessionChanged = sessionId !== prevSessionIdRef.current;
-    const documentChanged = selectedFile !== prevSwitchFileRef.current;
-    const contentChanged = content !== prevContentForSyncRef.current;
+    const documentChanged = selectedFile !== prevSelectedFileRef.current;
     const versionChanged = contentVersion !== prevContentVersionRef.current;
 
-    // Handle session switch OR document switch - both need to save pending changes to the OLD document
-    if (sessionChanged || documentChanged) {
-      // CRITICAL: Before switching, save any unsaved changes to the OLD document's file
-      // This prevents content from "leaking" between documents or sessions
-      const prevFolder = prevSwitchFolderRef.current;
-      const prevFile = prevSwitchFileRef.current;
-
-      // Only save if there are unsaved local changes and we have a valid path
-      // AND localContent is not empty (prevent wiping files during initial load)
-      if (prevFolder && prevFile && localContent && localContent !== lastSavedContentRef.current) {
-        // Save to the OLD document's file path, not the new one
-        window.maestro.autorun.writeDoc(prevFolder, prevFile + '.md', localContent)
-          .then(() => {
-            // Update lastSavedContent for the OLD document
-            // Note: This runs asynchronously, after the refs have been updated to new document
-          })
-          .catch(err => console.error('Failed to save pending changes before switch:', err));
-      }
-
-      // Clear any pending auto-save timer (it would save to wrong document)
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-        autoSaveTimeoutRef.current = null;
-      }
-
-      // Reset editing flag so content can sync properly for the new document
-      isEditingRef.current = false;
+    if (sessionChanged || documentChanged || versionChanged) {
+      // Reset to the new content from props (discard any unsaved changes)
       setLocalContent(content);
+      setSavedContent(content);
       prevSessionIdRef.current = sessionId;
-      prevContentForSyncRef.current = content;
+      prevSelectedFileRef.current = selectedFile;
       prevContentVersionRef.current = contentVersion;
-      prevSwitchFolderRef.current = folderPath;
-      prevSwitchFileRef.current = selectedFile;
-      lastSavedContentRef.current = content;
-      // Update localContent tracking refs to match the new document
-      // This ensures future saves go to the correct file
-      localContentFolderRef.current = folderPath;
-      localContentFileRef.current = selectedFile;
-    } else if (versionChanged) {
-      // External file change detected (disk watcher) - force sync regardless of editing state
-      // This is authoritative - the file on disk is the source of truth
-      isEditingRef.current = false;
-      setLocalContent(content);
-      prevContentForSyncRef.current = content;
-      prevContentVersionRef.current = contentVersion;
-      // Also update lastSavedContentRef to prevent auto-save from overwriting
-      lastSavedContentRef.current = content;
-      // Keep localContent tracking refs in sync
-      localContentFolderRef.current = folderPath;
-      localContentFileRef.current = selectedFile;
-    } else if (contentChanged && !isEditingRef.current) {
-      // Content changed externally (batch run, etc.) - sync if not editing
-      setLocalContent(content);
-      prevContentForSyncRef.current = content;
-      // Keep localContent tracking refs in sync
-      localContentFolderRef.current = folderPath;
-      localContentFileRef.current = selectedFile;
     }
-  }, [sessionId, content, contentVersion, folderPath, selectedFile, localContent]);
+  }, [sessionId, selectedFile, contentVersion, content]);
 
-  // Sync local content to parent on blur - saves to disk immediately
-  const syncContentToParent = useCallback(() => {
-    isEditingRef.current = false;
-    if (localContent !== content) {
+  // Save function - writes to disk
+  const handleSave = useCallback(async () => {
+    if (!folderPath || !selectedFile || !isDirty) return;
+
+    try {
+      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent);
+      setSavedContent(localContent);
       handleContentChange(localContent);
+    } catch (err) {
+      console.error('Failed to save:', err);
     }
-    // Save to disk immediately on blur (don't wait for 5-second auto-save)
-    // CRITICAL: Use the tracked folder/file refs, NOT the current props!
-    // When switching sessions by clicking, the blur event fires after props update
-    // but before state updates, causing content to be saved to the wrong session.
-    // The refs track where localContent belongs, ensuring correct file targeting.
-    const targetFolder = localContentFolderRef.current;
-    const targetFile = localContentFileRef.current;
-    if (targetFolder && targetFile && localContent !== lastSavedContentRef.current && localContent) {
-      window.maestro.autorun.writeDoc(targetFolder, targetFile + '.md', localContent)
-        .then(() => {
-          lastSavedContentRef.current = localContent;
-        })
-        .catch(err => console.error('Failed to save on blur:', err));
-    }
-  }, [localContent, content, handleContentChange]);
+  }, [folderPath, selectedFile, localContent, isDirty, handleContentChange]);
 
-  // Auto-save to disk with 5-second debounce
+  // Revert function - discard changes
+  const handleRevert = useCallback(() => {
+    setLocalContent(savedContent);
+  }, [savedContent]);
+
+  // Handle Cmd+S to save
   useEffect(() => {
-    // Only save if we have a folder and selected file tracked
-    // Use refs to ensure we save to the correct file for the current localContent
-    const targetFolder = localContentFolderRef.current;
-    const targetFile = localContentFileRef.current;
-    if (!targetFolder || !targetFile) return;
-
-    // Never auto-save empty content - this prevents wiping files during load
-    if (!localContent) return;
-
-    // Only save if content has actually changed from last saved
-    if (localContent === lastSavedContentRef.current) return;
-
-    // Clear any existing timeout
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-
-    // Schedule save after 5 seconds of inactivity
-    // Capture the target folder/file from refs at schedule time to ensure correct targeting
-    const saveFolder = targetFolder;
-    const saveFile = targetFile;
-    autoSaveTimeoutRef.current = setTimeout(async () => {
-      // Double-check content hasn't been externally synced
-      if (localContent !== lastSavedContentRef.current) {
-        try {
-          await window.maestro.autorun.writeDoc(saveFolder, saveFile + '.md', localContent);
-          lastSavedContentRef.current = localContent;
-          // Also sync to parent state so UI stays consistent
-          handleContentChange(localContent);
-        } catch (err) {
-          console.error('Auto-save failed:', err);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        // Only handle if we're in edit mode and have focus
+        if (mode === 'edit' && isDirty) {
+          e.preventDefault();
+          handleSave();
         }
       }
-    }, 5000);
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
     };
-  // Note: folderPath/selectedFile removed from deps since we use refs now
-  // This prevents unnecessary re-scheduling when props change but localContent is still valid
-  }, [localContent, handleContentChange]);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, isDirty, handleSave]);
 
   // Track mode before auto-run to restore when it ends
   const modeBeforeAutoRunRef = useRef<'edit' | 'preview' | null>(null);
@@ -627,15 +527,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     textareaRef,
   });
 
-  // Clear auto-save timer and update lastSavedContent when document changes (session or file change)
+  // Reset undo history when document changes (session or file change)
   useEffect(() => {
-    // Clear pending auto-save when document changes
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-      autoSaveTimeoutRef.current = null;
-    }
-    // Reset lastSavedContent to the new content
-    lastSavedContentRef.current = content;
     // Reset undo history snapshot to the new content (so first edit creates a proper undo point)
     resetUndoHistory(content);
   }, [selectedFile, sessionId, content, resetUndoHistory]);
@@ -718,7 +611,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     switchMode(mode === 'edit' ? 'preview' : 'edit');
   }, [mode, switchMode]);
 
-  // Expose focus and switchMode methods to parent via ref
+  // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     focus: () => {
       // Focus the appropriate element based on current mode
@@ -728,8 +621,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         previewRef.current.focus();
       }
     },
-    switchMode
-  }), [mode, switchMode]);
+    switchMode,
+    isDirty: () => isDirty,
+    save: handleSave,
+    revert: handleRevert,
+  }), [mode, switchMode, isDirty, handleSave, handleRevert]);
 
   // Auto-switch to preview mode when auto-run starts, restore when it ends
   useEffect(() => {
@@ -1178,9 +1074,9 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         }
       }}
     >
-      {/* Select Folder Button - shown when no folder is configured */}
-      {!folderPath && !hideTopControls && (
-        <div className="pt-2 flex justify-center">
+      {/* No folder selected - show centered button only */}
+      {!folderPath && (
+        <div className="flex-1 flex items-center justify-center">
           <button
             onClick={onOpenSetup}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors hover:opacity-90"
@@ -1195,8 +1091,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         </div>
       )}
 
-      {/* Mode Toggle - hidden when controls are in modal header */}
-      {!hideTopControls && (
+      {/* All controls and content - only shown when folder is selected */}
+      {folderPath && !hideTopControls && (
       <div className="flex gap-2 mb-3 justify-center pt-2">
         {/* Expand button */}
         {onExpand && (
@@ -1212,6 +1108,22 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
         )}
+        {/* Image upload button - always visible, ghosted in preview mode */}
+        <button
+          onClick={() => mode === 'edit' && !isLocked && fileInputRef.current?.click()}
+          disabled={mode !== 'edit' || isLocked}
+          className={`flex items-center justify-center w-8 h-8 rounded text-xs transition-colors ${
+            mode === 'edit' && !isLocked ? 'hover:opacity-80' : 'opacity-30 cursor-not-allowed'
+          }`}
+          style={{
+            backgroundColor: 'transparent',
+            color: theme.colors.textDim,
+            border: `1px solid ${theme.colors.border}`
+          }}
+          title={mode === 'edit' && !isLocked ? 'Add image (or paste from clipboard)' : 'Switch to Edit mode to add images'}
+        >
+          <Image className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={() => !isLocked && switchMode('edit')}
           disabled={isLocked}
@@ -1243,21 +1155,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           <Eye className="w-3.5 h-3.5" />
           Preview
         </button>
-        {/* Image upload button (edit mode only) */}
-        {mode === 'edit' && !isLocked && (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded text-xs transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'transparent',
-              color: theme.colors.textDim,
-              border: `1px solid ${theme.colors.border}`
-            }}
-            title="Add image (or paste from clipboard)"
-          >
-            <Image className="w-3.5 h-3.5" />
-          </button>
-        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -1288,9 +1185,10 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         ) : (
           <button
             onClick={() => {
-              // Sync local content to parent before opening batch runner
-              // This ensures Run uses the latest edits, not stale content
-              syncContentToParent();
+              // Save before opening batch runner if dirty
+              if (isDirty) {
+                handleSave();
+              }
               onOpenBatchRunner?.();
             }}
             disabled={isAgentBusy}
@@ -1339,8 +1237,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         </div>
       )}
 
-      {/* Attached Images Preview (edit mode) */}
-      {mode === 'edit' && attachmentsList.length > 0 && (
+      {/* Attached Images Preview (edit mode) - only when folder selected */}
+      {folderPath && mode === 'edit' && attachmentsList.length > 0 && (
         <div
           className="px-2 py-2 mx-2 mb-2 rounded"
           style={{ backgroundColor: theme.colors.bgActivity }}
@@ -1388,10 +1286,11 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
         />
       )}
 
-      {/* Content Area */}
+      {/* Content Area - only shown when folder is selected */}
+      {folderPath && (
       <div className="flex-1 min-h-0 overflow-y-auto">
         {/* Empty folder state - show when folder is configured but has no documents */}
-        {folderPath && documentList.length === 0 && !isLoadingDocuments ? (
+        {documentList.length === 0 && !isLoadingDocuments ? (
           <div
             className="h-full flex flex-col items-center justify-center text-center px-6"
             style={{ color: theme.colors.textDim }}
@@ -1447,7 +1346,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
               value={localContent}
               onChange={(e) => {
                 if (!isLocked) {
-                  isEditingRef.current = true;
                   // Schedule undo snapshot with current content before the change
                   const previousContent = localContent;
                   const previousCursor = textareaRef.current?.selectionStart || 0;
@@ -1456,8 +1354,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
                   scheduleUndoSnapshot(previousContent, previousCursor);
                 }
               }}
-              onFocus={() => { isEditingRef.current = true; }}
-              onBlur={syncContentToParent}
+              onFocus={() => { /* no-op, manual save only */ }}
               onKeyDown={!isLocked ? handleKeyDown : undefined}
               onPaste={handlePaste}
               placeholder="Capture notes, images, and tasks in Markdown. (type {{ for variables)"
@@ -1526,18 +1423,72 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           </div>
         )}
       </div>
+      )}
 
-      {/* Task Count Panel - shown when there are tasks */}
-      {taskCounts.total > 0 && (
+      {/* Bottom Panel - shown when folder selected AND (there are tasks OR unsaved changes) */}
+      {folderPath && (taskCounts.total > 0 || (isDirty && mode === 'edit' && !isLocked)) && (
         <div
-          className="flex-shrink-0 px-3 py-2 text-xs border-t text-center"
+          className="flex-shrink-0 px-3 py-1.5 text-xs border-t flex items-center justify-between"
           style={{
             backgroundColor: theme.colors.bgActivity,
             borderColor: theme.colors.border,
-            color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim,
           }}
         >
-          {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
+          {/* Revert button - left side */}
+          {isDirty && mode === 'edit' && !isLocked ? (
+            <button
+              onClick={handleRevert}
+              className="px-2 py-0.5 rounded text-xs transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: 'transparent',
+                color: theme.colors.textDim,
+                border: `1px solid ${theme.colors.border}`
+              }}
+              title="Discard changes"
+            >
+              Revert
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {/* Task count - center */}
+          {taskCounts.total > 0 ? (
+            <span style={{ color: taskCounts.completed === taskCounts.total ? theme.colors.success : theme.colors.textDim }}>
+              {taskCounts.completed} of {taskCounts.total} task{taskCounts.total !== 1 ? 's' : ''} completed
+            </span>
+          ) : (
+            <span style={{ color: theme.colors.textDim }}>Unsaved changes</span>
+          )}
+
+          {/* Save button - right side */}
+          {isDirty && mode === 'edit' && !isLocked ? (
+            <button
+              onClick={handleSave}
+              className="group relative px-2 py-0.5 rounded text-xs transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: theme.colors.accent,
+                color: theme.colors.accentForeground,
+                border: `1px solid ${theme.colors.accent}`
+              }}
+              title="Save changes"
+            >
+              Save
+              {/* Keyboard shortcut overlay on hover */}
+              <span
+                className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style={{
+                  backgroundColor: theme.colors.bgMain,
+                  color: theme.colors.textDim,
+                  border: `1px solid ${theme.colors.border}`,
+                }}
+              >
+                ⌘S
+              </span>
+            </button>
+          ) : (
+            <div />
+          )}
         </div>
       )}
 

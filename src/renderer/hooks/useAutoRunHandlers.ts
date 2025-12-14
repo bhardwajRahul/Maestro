@@ -19,7 +19,6 @@ export interface UseAutoRunHandlersDeps {
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
   setAutoRunDocumentList: React.Dispatch<React.SetStateAction<string[]>>;
   setAutoRunDocumentTree: React.Dispatch<React.SetStateAction<AutoRunTreeNode[]>>;
-  setAutoRunContent: React.Dispatch<React.SetStateAction<string>>;
   setAutoRunIsLoadingDocuments: React.Dispatch<React.SetStateAction<boolean>>;
   setAutoRunSetupModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setBatchRunnerModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -29,7 +28,6 @@ export interface UseAutoRunHandlersDeps {
   setSuccessFlashNotification: React.Dispatch<React.SetStateAction<string | null>>;
 
   // Current state values
-  autoRunContent: string;
   autoRunDocumentList: string[];
 
   // Batch processor hook
@@ -83,7 +81,6 @@ export function useAutoRunHandlers(
     setSessions,
     setAutoRunDocumentList,
     setAutoRunDocumentTree,
-    setAutoRunContent,
     setAutoRunIsLoadingDocuments,
     setAutoRunSetupModalOpen,
     setBatchRunnerModalOpen,
@@ -91,7 +88,6 @@ export function useAutoRunHandlers(
     setRightPanelOpen,
     setActiveFocus,
     setSuccessFlashNotification,
-    autoRunContent,
     autoRunDocumentList,
     startBatchRun,
   } = deps;
@@ -107,26 +103,30 @@ export function useAutoRunHandlers(
       setAutoRunDocumentTree((result.tree as AutoRunTreeNode[]) || []);
       // Auto-select first document if available
       const firstFile = result.files?.[0];
+      // Load content of first document
+      let firstFileContent = '';
+      if (firstFile) {
+        const contentResult = await window.maestro.autorun.readDoc(folderPath, firstFile + '.md');
+        if (contentResult.success) {
+          firstFileContent = contentResult.content || '';
+        }
+      }
+      // Update session with folder, file, AND content (atomically)
       setSessions(prev => prev.map(s =>
         s.id === activeSession.id
           ? {
               ...s,
               autoRunFolderPath: folderPath,
               autoRunSelectedFile: firstFile,
+              autoRunContent: firstFileContent,
+              autoRunContentVersion: (s.autoRunContentVersion || 0) + 1,
             }
           : s
       ));
-      // Load content of first document
-      if (firstFile) {
-        const contentResult = await window.maestro.autorun.readDoc(folderPath, firstFile + '.md');
-        if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-        }
-      }
     } else {
       setSessions(prev => prev.map(s =>
         s.id === activeSession.id
-          ? { ...s, autoRunFolderPath: folderPath }
+          ? { ...s, autoRunFolderPath: folderPath, autoRunContent: '', autoRunContentVersion: (s.autoRunContentVersion || 0) + 1 }
           : s
       ));
     }
@@ -135,7 +135,7 @@ export function useAutoRunHandlers(
     setActiveRightTab('autorun');
     setRightPanelOpen(true);
     setActiveFocus('right');
-  }, [activeSession, setSessions, setAutoRunDocumentList, setAutoRunDocumentTree, setAutoRunContent, setAutoRunSetupModalOpen, setActiveRightTab, setRightPanelOpen, setActiveFocus]);
+  }, [activeSession, setSessions, setAutoRunDocumentList, setAutoRunDocumentTree, setAutoRunSetupModalOpen, setActiveRightTab, setRightPanelOpen, setActiveFocus]);
 
   // Handler to start batch run from modal with multi-document support
   const handleStartBatchRun = useCallback((config: BatchRunConfig) => {
@@ -160,13 +160,13 @@ export function useAutoRunHandlers(
   }, [activeSession?.autoRunFolderPath]);
 
   // Auto Run document content change handler
-  // Note: This only updates the shared state. File saving is handled by AutoRun component
-  // directly, which uses the correct folderPath/selectedFile from its props (not activeSession).
-  // This prevents content from being saved to the wrong session when switching between sessions
-  // that have documents with the same name.
+  // Updates content in the session state (per-session, not global)
   const handleAutoRunContentChange = useCallback(async (content: string) => {
-    setAutoRunContent(content);
-  }, [setAutoRunContent]);
+    if (!activeSession) return;
+    setSessions(prev => prev.map(s =>
+      s.id === activeSession.id ? { ...s, autoRunContent: content } : s
+    ));
+  }, [activeSession, setSessions]);
 
   // Auto Run mode change handler
   const handleAutoRunModeChange = useCallback((mode: 'edit' | 'preview') => {
@@ -196,32 +196,30 @@ export function useAutoRunHandlers(
   }, [activeSession, setSessions]);
 
   // Auto Run document selection handler
-  // NOTE: Saving the current document's pending changes is handled by AutoRun.tsx's
-  // useEffect that detects selectedFile changes. This handler only:
-  // 1. Loads the new document's content
-  // 2. Updates the selectedFile in session state
-  // The AutoRun component saves localContent (which may differ from autoRunContent shared state)
-  // to the OLD document before this handler's changes take effect.
+  // Updates both selectedFile AND content atomically in session state
   const handleAutoRunSelectDocument = useCallback(async (filename: string) => {
     if (!activeSession?.autoRunFolderPath) return;
 
-    // Load new document content FIRST (before updating selectedFile)
-    // This ensures content prop updates atomically with the file selection
+    // Load new document content
     const result = await window.maestro.autorun.readDoc(
       activeSession.autoRunFolderPath,
       filename + '.md'
     );
     const newContent = result.success ? (result.content || '') : '';
 
-    // Update content first, then selected file
-    // This prevents the AutoRun component from seeing mismatched file/content
-    setAutoRunContent(newContent);
-
-    // Then update the selected file
+    // Update both selectedFile and content atomically in session state
+    // This prevents any race conditions or mismatched file/content
     setSessions(prev => prev.map(s =>
-      s.id === activeSession.id ? { ...s, autoRunSelectedFile: filename } : s
+      s.id === activeSession.id
+        ? {
+            ...s,
+            autoRunSelectedFile: filename,
+            autoRunContent: newContent,
+            autoRunContentVersion: (s.autoRunContentVersion || 0) + 1,
+          }
+        : s
     ));
-  }, [activeSession, setAutoRunContent, setSessions]);
+  }, [activeSession, setSessions]);
 
   // Auto Run refresh handler - reload document list and show flash notification
   const handleAutoRunRefresh = useCallback(async () => {
@@ -276,19 +274,18 @@ export function useAutoRunHandlers(
           setAutoRunDocumentList(listResult.files || []);
         }
 
-        // Select the new document and switch to edit mode
+        // Select the new document, set content, and switch to edit mode (atomically)
         setSessions(prev => prev.map(s =>
-          s.id === activeSession.id ? { ...s, autoRunSelectedFile: filename, autoRunMode: 'edit' } : s
+          s.id === activeSession.id
+            ? {
+                ...s,
+                autoRunSelectedFile: filename,
+                autoRunContent: '',
+                autoRunContentVersion: (s.autoRunContentVersion || 0) + 1,
+                autoRunMode: 'edit',
+              }
+            : s
         ));
-
-        // Load the new document content
-        const contentResult = await window.maestro.autorun.readDoc(
-          activeSession.autoRunFolderPath,
-          filename + '.md'
-        );
-        if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-        }
 
         return true;
       }
@@ -297,7 +294,7 @@ export function useAutoRunHandlers(
       console.error('Failed to create document:', error);
       return false;
     }
-  }, [activeSession, setSessions, setAutoRunDocumentList, setAutoRunContent]);
+  }, [activeSession, setSessions, setAutoRunDocumentList]);
 
   return {
     handleAutoRunFolderSelected,

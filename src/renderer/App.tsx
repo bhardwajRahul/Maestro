@@ -360,11 +360,9 @@ export default function MaestroConsole() {
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [webInterfaceUrl, setWebInterfaceUrl] = useState<string | null>(null);
 
-  // Auto Run document management state
+  // Auto Run document management state (content is per-session in session.autoRunContent)
   const [autoRunDocumentList, setAutoRunDocumentList] = useState<string[]>([]);
   const [autoRunDocumentTree, setAutoRunDocumentTree] = useState<AutoRunTreeNode[]>([]);
-  const [autoRunContent, setAutoRunContent] = useState<string>('');
-  const [autoRunContentVersion, setAutoRunContentVersion] = useState(0);  // Incremented on external file changes
   const [autoRunIsLoadingDocuments, setAutoRunIsLoadingDocuments] = useState(false);
   const [autoRunDocumentTaskCounts, setAutoRunDocumentTaskCounts] = useState<Map<string, { completed: number; total: number }>>(new Map());
 
@@ -2201,7 +2199,6 @@ export default function MaestroConsole() {
     setSessions,
     setAutoRunDocumentList,
     setAutoRunDocumentTree,
-    setAutoRunContent,
     setAutoRunIsLoadingDocuments,
     setAutoRunSetupModalOpen,
     setBatchRunnerModalOpen,
@@ -2209,7 +2206,6 @@ export default function MaestroConsole() {
     setRightPanelOpen,
     setActiveFocus,
     setSuccessFlashNotification,
-    autoRunContent,
     autoRunDocumentList,
     startBatchRun,
   });
@@ -2374,13 +2370,13 @@ export default function MaestroConsole() {
     return counts;
   }, [countTasksInContent]);
 
-  // Load Auto Run document list and content when session changes or autorun tab becomes active
+  // Load Auto Run document list when session changes or autorun folder changes
+  // Note: Content is stored per-session, so we only load it if session doesn't already have it
   useEffect(() => {
     const loadAutoRunData = async () => {
       if (!activeSession?.autoRunFolderPath) {
         setAutoRunDocumentList([]);
         setAutoRunDocumentTree([]);
-        setAutoRunContent('');
         setAutoRunDocumentTaskCounts(new Map());
         return;
       }
@@ -2399,19 +2395,19 @@ export default function MaestroConsole() {
       }
       setAutoRunIsLoadingDocuments(false);
 
-      // Load content of selected document
-      if (activeSession.autoRunSelectedFile) {
+      // Load content of selected document if session doesn't already have content loaded
+      // (content is already per-session, so we only need to load if it's undefined/empty and a file is selected)
+      if (activeSession.autoRunSelectedFile && activeSession.autoRunContent === undefined) {
         const contentResult = await window.maestro.autorun.readDoc(
           activeSession.autoRunFolderPath,
           activeSession.autoRunSelectedFile + '.md'
         );
-        if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-        } else {
-          setAutoRunContent('');
-        }
-      } else {
-        setAutoRunContent('');
+        const newContent = contentResult.success ? (contentResult.content || '') : '';
+        setSessions(prev => prev.map(s =>
+          s.id === activeSession.id
+            ? { ...s, autoRunContent: newContent, autoRunContentVersion: (s.autoRunContentVersion || 0) + 1 }
+            : s
+        ));
       }
     };
 
@@ -2421,11 +2417,12 @@ export default function MaestroConsole() {
   // File watching for Auto Run - watch whenever a folder is configured
   // Updates reflect immediately whether from batch runs, terminal commands, or external editors
   useEffect(() => {
+    const sessionId = activeSession?.id;
     const folderPath = activeSession?.autoRunFolderPath;
     const selectedFile = activeSession?.autoRunSelectedFile;
 
     // Only watch if folder is set
-    if (!folderPath) return;
+    if (!folderPath || !sessionId) return;
 
     // Start watching the folder
     window.maestro.autorun.watchFolder(folderPath);
@@ -2448,15 +2445,23 @@ export default function MaestroConsole() {
       }
 
       // If we have a selected document and it matches the changed file, reload its content
+      // Update in session state (per-session, not global)
       if (selectedFile && data.filename === selectedFile) {
         const contentResult = await window.maestro.autorun.readDoc(
           folderPath,
           selectedFile + '.md'
         );
         if (contentResult.success) {
-          setAutoRunContent(contentResult.content || '');
-          // Increment version to force AutoRun editor to sync (even if user was editing)
-          setAutoRunContentVersion(v => v + 1);
+          // Update content in the specific session that owns this folder
+          setSessions(prev => prev.map(s =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  autoRunContent: contentResult.content || '',
+                  autoRunContentVersion: (s.autoRunContentVersion || 0) + 1,
+                }
+              : s
+          ));
         }
       }
     });
@@ -2466,7 +2471,7 @@ export default function MaestroConsole() {
       window.maestro.autorun.unwatchFolder(folderPath);
       unsubscribe();
     };
-  }, [activeSession?.autoRunFolderPath, activeSession?.autoRunSelectedFile, loadTaskCounts]);
+  }, [activeSession?.id, activeSession?.autoRunFolderPath, activeSession?.autoRunSelectedFile, loadTaskCounts]);
 
   // Auto-scroll logs
   const activeTabLogs = activeSession ? getActiveTab(activeSession)?.logs : undefined;
@@ -5713,8 +5718,8 @@ export default function MaestroConsole() {
             setShowHiddenFiles={setShowHiddenFiles}
             autoRunDocumentList={autoRunDocumentList}
             autoRunDocumentTree={autoRunDocumentTree}
-            autoRunContent={autoRunContent}
-            autoRunContentVersion={autoRunContentVersion}
+            autoRunContent={activeSession?.autoRunContent || ''}
+            autoRunContentVersion={activeSession?.autoRunContentVersion || 0}
             autoRunIsLoadingDocuments={autoRunIsLoadingDocuments}
             autoRunDocumentTaskCounts={autoRunDocumentTaskCounts}
             onAutoRunContentChange={handleAutoRunContentChange}
