@@ -107,14 +107,25 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
   });
 
   ipcMain.handle('sessions:setAll', async (_, sessions: any[]) => {
-    // Debug: log autoRunFolderPath values received from renderer
-    const autoRunPaths = sessions.map((s: any) => ({ id: s.id, name: s.name, autoRunFolderPath: s.autoRunFolderPath }));
-    logger.debug('[Sessions:setAll] Received sessions with autoRunFolderPaths:', 'Sessions', autoRunPaths);
-
     // Get previous sessions to detect changes
     const previousSessions = sessionsStore.get('sessions', []);
     const previousSessionMap = new Map(previousSessions.map((s: any) => [s.id, s]));
     const currentSessionMap = new Map(sessions.map((s: any) => [s.id, s]));
+
+    // Log session lifecycle events at DEBUG level
+    for (const session of sessions) {
+      const prevSession = previousSessionMap.get(session.id);
+      if (!prevSession) {
+        // New session created
+        logger.debug('Session created', 'Sessions', { sessionId: session.id, name: session.name, toolType: session.toolType, cwd: session.cwd });
+      }
+    }
+    for (const prevSession of previousSessions) {
+      if (!currentSessionMap.has(prevSession.id)) {
+        // Session destroyed
+        logger.debug('Session destroyed', 'Sessions', { sessionId: prevSession.id, name: prevSession.name });
+      }
+    }
 
     const webServer = getWebServer();
     // Detect and broadcast changes to web clients
@@ -158,11 +169,6 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
     }
 
     sessionsStore.set('sessions', sessions);
-
-    // Debug: verify what was stored
-    const storedSessions = sessionsStore.get('sessions', []);
-    const storedAutoRunPaths = storedSessions.map((s: any) => ({ id: s.id, name: s.name, autoRunFolderPath: s.autoRunFolderPath }));
-    logger.debug('[Sessions:setAll] After store, autoRunFolderPaths:', 'Sessions', storedAutoRunPaths);
 
     return true;
   });

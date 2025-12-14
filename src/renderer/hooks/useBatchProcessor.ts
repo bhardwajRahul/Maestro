@@ -348,11 +348,13 @@ ${docList}
    */
   const startBatchRun = useCallback(async (sessionId: string, config: BatchRunConfig, folderPath: string) => {
     console.log('[BatchProcessor] startBatchRun called:', { sessionId, folderPath, config });
+    window.maestro.logger.log('info', 'startBatchRun called', 'BatchProcessor', { sessionId, folderPath, documentsCount: config.documents.length, worktreeEnabled: config.worktree?.enabled });
 
     // Use sessionsRef to get latest sessions (handles case where session was just created)
     const session = sessionsRef.current.find(s => s.id === sessionId);
     if (!session) {
       console.error('[BatchProcessor] Session not found for batch processing:', sessionId);
+      window.maestro.logger.log('error', 'Session not found for batch processing', 'BatchProcessor', { sessionId });
       return;
     }
 
@@ -361,6 +363,7 @@ ${docList}
 
     if (documents.length === 0) {
       console.warn('[BatchProcessor] No documents provided for batch processing:', sessionId);
+      window.maestro.logger.log('warn', 'No documents provided for batch processing', 'BatchProcessor', { sessionId });
       return;
     }
 
@@ -388,6 +391,11 @@ ${docList}
 
     if (worktree?.enabled && worktree.path && worktree.branchName) {
       console.log('[BatchProcessor] Setting up worktree at', worktree.path, 'with branch', worktree.branchName);
+      window.maestro.logger.log('info', 'Setting up worktree', 'BatchProcessor', {
+        worktreePath: worktree.path,
+        branchName: worktree.branchName,
+        sessionCwd: session.cwd
+      });
 
       try {
         // Set up or reuse the worktree
@@ -397,15 +405,22 @@ ${docList}
           worktree.branchName
         );
 
+        window.maestro.logger.log('info', 'worktreeSetup result', 'BatchProcessor', {
+          success: setupResult.success,
+          error: setupResult.error,
+          branchMismatch: setupResult.branchMismatch
+        });
+
         if (!setupResult.success) {
           console.error('[BatchProcessor] Failed to set up worktree:', setupResult.error);
-          // Show error to user and abort
+          window.maestro.logger.log('error', 'Failed to set up worktree', 'BatchProcessor', { error: setupResult.error });
           return;
         }
 
         // If worktree exists but on different branch, checkout the requested branch
         if (setupResult.branchMismatch) {
           console.log('[BatchProcessor] Worktree exists with different branch, checking out', worktree.branchName);
+          window.maestro.logger.log('info', 'Worktree branch mismatch, checking out requested branch', 'BatchProcessor', { branchName: worktree.branchName });
 
           const checkoutResult = await window.maestro.git.worktreeCheckout(
             worktree.path,
@@ -413,13 +428,20 @@ ${docList}
             true // createIfMissing
           );
 
+          window.maestro.logger.log('info', 'worktreeCheckout result', 'BatchProcessor', {
+            success: checkoutResult.success,
+            error: checkoutResult.error,
+            hasUncommittedChanges: checkoutResult.hasUncommittedChanges
+          });
+
           if (!checkoutResult.success) {
             if (checkoutResult.hasUncommittedChanges) {
               console.error('[BatchProcessor] Cannot checkout: worktree has uncommitted changes');
-              // Abort - user needs to handle uncommitted changes first
+              window.maestro.logger.log('error', 'Cannot checkout: worktree has uncommitted changes', 'BatchProcessor', { worktreePath: worktree.path });
               return;
             } else {
               console.error('[BatchProcessor] Failed to checkout branch:', checkoutResult.error);
+              window.maestro.logger.log('error', 'Failed to checkout branch', 'BatchProcessor', { error: checkoutResult.error });
               return;
             }
           }
@@ -432,11 +454,19 @@ ${docList}
         worktreeBranch = worktree.branchName;
 
         console.log('[BatchProcessor] Worktree ready at', effectiveCwd);
+        window.maestro.logger.log('info', 'Worktree ready', 'BatchProcessor', { effectiveCwd, worktreeBranch });
 
       } catch (error) {
         console.error('[BatchProcessor] Error setting up worktree:', error);
+        window.maestro.logger.log('error', 'Exception setting up worktree', 'BatchProcessor', { error: String(error) });
         return;
       }
+    } else if (worktree?.enabled) {
+      // Worktree enabled but missing path or branch
+      window.maestro.logger.log('warn', 'Worktree enabled but missing configuration', 'BatchProcessor', {
+        hasPath: !!worktree.path,
+        hasBranchName: !!worktree.branchName
+      });
     }
 
     // Get git branch for template variable substitution

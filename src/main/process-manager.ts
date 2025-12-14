@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import { stripControlSequences } from './utils/terminalFilter';
+import { logger } from './utils/logger';
 
 interface ProcessConfig {
   sessionId: string;
@@ -115,7 +116,7 @@ export class ProcessManager extends EventEmitter {
       finalArgs = args;
     }
 
-    console.log('[ProcessManager] spawn() config:', {
+    logger.debug('[ProcessManager] spawn() config', 'ProcessManager', {
       sessionId,
       toolType,
       hasPrompt: !!prompt,
@@ -202,7 +203,7 @@ export class ProcessManager extends EventEmitter {
           // Strip terminal control sequences and filter prompts/echoes
           const managedProc = this.processes.get(sessionId);
           const cleanedData = stripControlSequences(data, managedProc?.lastCommand, isTerminal);
-          console.log(`[ProcessManager] PTY onData for session ${sessionId} (PID ${ptyProcess.pid}):`, cleanedData.substring(0, 100));
+          logger.debug('[ProcessManager] PTY onData', 'ProcessManager', { sessionId, pid: ptyProcess.pid, dataPreview: cleanedData.substring(0, 100) });
           // Only emit if there's actual content after filtering
           if (cleanedData.trim()) {
             this.emit('data', sessionId, cleanedData);
@@ -210,12 +211,12 @@ export class ProcessManager extends EventEmitter {
         });
 
         ptyProcess.onExit(({ exitCode }) => {
-          console.log(`[ProcessManager] PTY onExit for session ${sessionId}:`, exitCode);
+          logger.debug('[ProcessManager] PTY onExit', 'ProcessManager', { sessionId, exitCode });
           this.emit('exit', sessionId, exitCode);
           this.processes.delete(sessionId);
         });
 
-        console.log(`[ProcessManager] PTY process created:`, {
+        logger.debug('[ProcessManager] PTY process created', 'ProcessManager', {
           sessionId,
           toolType,
           isTerminal,
@@ -244,7 +245,7 @@ export class ProcessManager extends EventEmitter {
           env.PATH = standardPaths;
         }
 
-        console.log('[ProcessManager] About to spawn child process:', {
+        logger.debug('[ProcessManager] About to spawn child process', 'ProcessManager', {
           command,
           finalArgs,
           cwd,
@@ -259,7 +260,7 @@ export class ProcessManager extends EventEmitter {
           stdio: ['pipe', 'pipe', 'pipe'], // Explicitly set stdio to pipe
         });
 
-        console.log('[ProcessManager] Child process spawned:', {
+        logger.debug('[ProcessManager] Child process spawned', 'ProcessManager', {
           pid: childProcess.pid,
           hasStdout: !!childProcess.stdout,
           hasStderr: !!childProcess.stderr,
@@ -287,16 +288,18 @@ export class ProcessManager extends EventEmitter {
 
         this.processes.set(sessionId, managedProcess);
 
-        console.log('[ProcessManager] Setting up stdout/stderr/exit handlers for session:', sessionId);
-        console.log('[ProcessManager] childProcess.stdout:', childProcess.stdout ? 'exists' : 'null');
-        console.log('[ProcessManager] childProcess.stderr:', childProcess.stderr ? 'exists' : 'null');
+        logger.debug('[ProcessManager] Setting up stdout/stderr/exit handlers', 'ProcessManager', {
+          sessionId,
+          hasStdout: childProcess.stdout ? 'exists' : 'null',
+          hasStderr: childProcess.stderr ? 'exists' : 'null'
+        });
 
         // Handle stdout
         if (childProcess.stdout) {
-          console.log('[ProcessManager] Attaching stdout data listener...');
+          logger.debug('[ProcessManager] Attaching stdout data listener', 'ProcessManager', { sessionId });
           childProcess.stdout.setEncoding('utf8'); // Ensure proper encoding
           childProcess.stdout.on('error', (err) => {
-            console.error('[ProcessManager] stdout error:', err);
+            logger.error('[ProcessManager] stdout error', 'ProcessManager', { sessionId, error: String(err) });
           });
           childProcess.stdout.on('data', (data: Buffer | string) => {
           const output = data.toString();
@@ -321,7 +324,7 @@ export class ProcessManager extends EventEmitter {
                 // Only emit once per process to prevent duplicates
                 if (msg.type === 'result' && msg.result && !managedProcess.resultEmitted) {
                   managedProcess.resultEmitted = true;
-                  console.log(`[ProcessManager] Emitting result data for session ${sessionId}, length: ${msg.result.length}`);
+                  logger.debug('[ProcessManager] Emitting result data', 'ProcessManager', { sessionId, resultLength: msg.result.length });
                   this.emit('data', sessionId, msg.result);
                 }
                 // Skip 'assistant' type - we prefer the complete 'result' over streaming chunks
@@ -387,32 +390,32 @@ export class ProcessManager extends EventEmitter {
           } else if (isBatchMode) {
             // In regular batch mode, accumulate JSON output
             managedProcess.jsonBuffer = (managedProcess.jsonBuffer || '') + output;
-            console.log('[ProcessManager] Accumulated JSON buffer length:', managedProcess.jsonBuffer.length);
+            logger.debug('[ProcessManager] Accumulated JSON buffer', 'ProcessManager', { sessionId, bufferLength: managedProcess.jsonBuffer.length });
           } else {
             // In interactive mode, emit data immediately
             this.emit('data', sessionId, output);
           }
           });
         } else {
-          console.log('[ProcessManager] WARNING: childProcess.stdout is null!');
+          logger.warn('[ProcessManager] childProcess.stdout is null', 'ProcessManager', { sessionId });
         }
 
         // Handle stderr
         if (childProcess.stderr) {
-          console.log('[ProcessManager] Attaching stderr data listener...');
+          logger.debug('[ProcessManager] Attaching stderr data listener', 'ProcessManager', { sessionId });
           childProcess.stderr.setEncoding('utf8');
           childProcess.stderr.on('error', (err) => {
-            console.error('[ProcessManager] stderr error:', err);
+            logger.error('[ProcessManager] stderr error', 'ProcessManager', { sessionId, error: String(err) });
           });
           childProcess.stderr.on('data', (data: Buffer | string) => {
-            console.log('[ProcessManager] >>> STDERR EVENT FIRED <<<', data.toString().substring(0, 100));
+            logger.debug('[ProcessManager] stderr event fired', 'ProcessManager', { sessionId, dataPreview: data.toString().substring(0, 100) });
             this.emit('data', sessionId, `[stderr] ${data.toString()}`);
           });
         }
 
         // Handle exit
         childProcess.on('exit', (code) => {
-          console.log('[ProcessManager] Child process exit event:', {
+          logger.debug('[ProcessManager] Child process exit event', 'ProcessManager', {
             sessionId,
             code,
             isBatchMode,
@@ -486,7 +489,7 @@ export class ProcessManager extends EventEmitter {
                 this.emit('usage', sessionId, usageStats);
               }
             } catch (error) {
-              console.error('[ProcessManager] Failed to parse JSON response:', error);
+              logger.error('[ProcessManager] Failed to parse JSON response', 'ProcessManager', { sessionId, error: String(error) });
               // Emit raw buffer as fallback
               this.emit('data', sessionId, managedProcess.jsonBuffer);
             }
@@ -497,6 +500,7 @@ export class ProcessManager extends EventEmitter {
         });
 
         childProcess.on('error', (error) => {
+          logger.error('[ProcessManager] Child process error', 'ProcessManager', { sessionId, error: error.message });
           this.emit('data', sessionId, `[error] ${error.message}`);
           this.emit('exit', sessionId, 1); // Ensure exit is emitted on error
           this.processes.delete(sessionId);
@@ -506,7 +510,7 @@ export class ProcessManager extends EventEmitter {
         if (isStreamJsonMode && prompt && images) {
           // Stream-json mode with images: send the message via stdin
           const streamJsonMessage = buildStreamJsonMessage(prompt, images);
-          console.log('[ProcessManager] Sending stream-json message with images:', {
+          logger.debug('[ProcessManager] Sending stream-json message with images', 'ProcessManager', {
             sessionId,
             messageLength: streamJsonMessage.length,
             imageCount: images.length
@@ -516,14 +520,14 @@ export class ProcessManager extends EventEmitter {
         } else if (isBatchMode) {
           // Regular batch mode: close stdin immediately since prompt is passed as CLI arg
           // Some CLIs wait for stdin to close before processing
-          console.log('[ProcessManager] Closing stdin for batch mode (prompt passed as CLI arg)');
+          logger.debug('[ProcessManager] Closing stdin for batch mode', 'ProcessManager', { sessionId });
           childProcess.stdin?.end();
         }
 
         return { pid: childProcess.pid || -1, success: true };
       }
     } catch (error: any) {
-      console.error('Failed to spawn process:', error);
+      logger.error('[ProcessManager] Failed to spawn process', 'ProcessManager', { error: String(error) });
       return { pid: -1, success: false };
     }
   }
@@ -534,11 +538,11 @@ export class ProcessManager extends EventEmitter {
   write(sessionId: string, data: string): boolean {
     const process = this.processes.get(sessionId);
     if (!process) {
-      console.error(`[ProcessManager] write() - No process found for session: ${sessionId}`);
+      logger.error('[ProcessManager] write() - No process found for session', 'ProcessManager', { sessionId });
       return false;
     }
 
-    console.log('[ProcessManager] write() - Process info:', {
+    logger.debug('[ProcessManager] write() - Process info', 'ProcessManager', {
       sessionId,
       toolType: process.toolType,
       isTerminal: process.isTerminal,
@@ -552,7 +556,7 @@ export class ProcessManager extends EventEmitter {
 
     try {
       if (process.isTerminal && process.ptyProcess) {
-        console.log(`[ProcessManager] Writing to PTY process (PID ${process.pid})`);
+        logger.debug('[ProcessManager] Writing to PTY process', 'ProcessManager', { sessionId, pid: process.pid });
         // Track the command for filtering echoes (remove trailing newline for comparison)
         const command = data.replace(/\r?\n$/, '');
         if (command.trim()) {
@@ -561,14 +565,14 @@ export class ProcessManager extends EventEmitter {
         process.ptyProcess.write(data);
         return true;
       } else if (process.childProcess?.stdin) {
-        console.log(`[ProcessManager] Writing to child process stdin (PID ${process.pid})`);
+        logger.debug('[ProcessManager] Writing to child process stdin', 'ProcessManager', { sessionId, pid: process.pid });
         process.childProcess.stdin.write(data);
         return true;
       }
-      console.error(`[ProcessManager] No valid input stream for session: ${sessionId}`);
+      logger.error('[ProcessManager] No valid input stream for session', 'ProcessManager', { sessionId });
       return false;
     } catch (error) {
-      console.error('Failed to write to process:', error);
+      logger.error('[ProcessManager] Failed to write to process', 'ProcessManager', { sessionId, error: String(error) });
       return false;
     }
   }
@@ -584,7 +588,7 @@ export class ProcessManager extends EventEmitter {
       process.ptyProcess.resize(cols, rows);
       return true;
     } catch (error) {
-      console.error('Failed to resize terminal:', error);
+      logger.error('[ProcessManager] Failed to resize terminal', 'ProcessManager', { sessionId, error: String(error) });
       return false;
     }
   }
@@ -596,26 +600,26 @@ export class ProcessManager extends EventEmitter {
   interrupt(sessionId: string): boolean {
     const process = this.processes.get(sessionId);
     if (!process) {
-      console.error(`[ProcessManager] interrupt() - No process found for session: ${sessionId}`);
+      logger.error('[ProcessManager] interrupt() - No process found for session', 'ProcessManager', { sessionId });
       return false;
     }
 
     try {
       if (process.isTerminal && process.ptyProcess) {
         // For PTY processes, send Ctrl+C character
-        console.log(`[ProcessManager] Sending Ctrl+C to PTY process (PID ${process.pid})`);
+        logger.debug('[ProcessManager] Sending Ctrl+C to PTY process', 'ProcessManager', { sessionId, pid: process.pid });
         process.ptyProcess.write('\x03'); // Ctrl+C
         return true;
       } else if (process.childProcess) {
         // For child processes, send SIGINT signal
-        console.log(`[ProcessManager] Sending SIGINT to child process (PID ${process.pid})`);
+        logger.debug('[ProcessManager] Sending SIGINT to child process', 'ProcessManager', { sessionId, pid: process.pid });
         process.childProcess.kill('SIGINT');
         return true;
       }
-      console.error(`[ProcessManager] No valid process to interrupt for session: ${sessionId}`);
+      logger.error('[ProcessManager] No valid process to interrupt for session', 'ProcessManager', { sessionId });
       return false;
     } catch (error) {
-      console.error('Failed to interrupt process:', error);
+      logger.error('[ProcessManager] Failed to interrupt process', 'ProcessManager', { sessionId, error: String(error) });
       return false;
     }
   }
@@ -636,7 +640,7 @@ export class ProcessManager extends EventEmitter {
       this.processes.delete(sessionId);
       return true;
     } catch (error) {
-      console.error('Failed to kill process:', error);
+      logger.error('[ProcessManager] Failed to kill process', 'ProcessManager', { sessionId, error: String(error) });
       return false;
     }
   }
@@ -682,7 +686,7 @@ export class ProcessManager extends EventEmitter {
     shell: string = 'bash'
   ): Promise<{ exitCode: number }> {
     return new Promise((resolve) => {
-      console.log('[ProcessManager] runCommand():', { sessionId, command, cwd, shell });
+      logger.debug('[ProcessManager] runCommand()', 'ProcessManager', { sessionId, command, cwd, shell });
 
       // Build the command with shell config sourcing
       // This ensures PATH, aliases, and functions are available
@@ -737,7 +741,7 @@ export class ProcessManager extends EventEmitter {
         }
       }
 
-      console.log('[ProcessManager] runCommand spawning:', { shell, shellPath, wrappedCommand, cwd, PATH: env.PATH?.substring(0, 100) });
+      logger.debug('[ProcessManager] runCommand spawning', 'ProcessManager', { shell, shellPath, wrappedCommand, cwd, PATH: env.PATH?.substring(0, 100) });
 
       const childProcess = spawn(wrappedCommand, [], {
         cwd,
@@ -751,7 +755,7 @@ export class ProcessManager extends EventEmitter {
       // Handle stdout - emit data events for real-time streaming
       childProcess.stdout?.on('data', (data: Buffer) => {
         let output = data.toString();
-        console.log('[ProcessManager] runCommand stdout RAW:', { sessionId, rawLength: output.length, raw: output.substring(0, 200) });
+        logger.debug('[ProcessManager] runCommand stdout RAW', 'ProcessManager', { sessionId, rawLength: output.length, rawPreview: output.substring(0, 200) });
 
         // Filter out shell integration sequences that may appear in interactive shells
         // These include iTerm2, VSCode, and other terminal emulator integration markers
@@ -762,15 +766,15 @@ export class ProcessManager extends EventEmitter {
         // Remove OSC sequences for window title, etc.
         output = output.replace(/\x1b?\][0-9];[^\x07\x1b\n]*(\x07|\x1b\\)?/g, '');
 
-        console.log('[ProcessManager] runCommand stdout FILTERED:', { sessionId, filteredLength: output.length, filtered: output.substring(0, 200), trimmedEmpty: !output.trim() });
+        logger.debug('[ProcessManager] runCommand stdout FILTERED', 'ProcessManager', { sessionId, filteredLength: output.length, filteredPreview: output.substring(0, 200), trimmedEmpty: !output.trim() });
 
         // Only emit if there's actual content after filtering
         if (output.trim()) {
           stdoutBuffer += output;
-          console.log('[ProcessManager] runCommand EMITTING data event:', { sessionId, outputLength: output.length });
+          logger.debug('[ProcessManager] runCommand EMITTING data event', 'ProcessManager', { sessionId, outputLength: output.length });
           this.emit('data', sessionId, output);
         } else {
-          console.log('[ProcessManager] runCommand SKIPPED emit (empty after trim):', { sessionId });
+          logger.debug('[ProcessManager] runCommand SKIPPED emit (empty after trim)', 'ProcessManager', { sessionId });
         }
       });
 
@@ -784,14 +788,14 @@ export class ProcessManager extends EventEmitter {
 
       // Handle process exit
       childProcess.on('exit', (code) => {
-        console.log('[ProcessManager] runCommand exit:', { sessionId, exitCode: code });
+        logger.debug('[ProcessManager] runCommand exit', 'ProcessManager', { sessionId, exitCode: code });
         this.emit('command-exit', sessionId, code || 0);
         resolve({ exitCode: code || 0 });
       });
 
       // Handle errors (e.g., spawn failures)
       childProcess.on('error', (error) => {
-        console.error('[ProcessManager] runCommand error:', error);
+        logger.error('[ProcessManager] runCommand error', 'ProcessManager', { sessionId, error: error.message });
         this.emit('stderr', sessionId, `Error: ${error.message}`);
         this.emit('command-exit', sessionId, 1);
         resolve({ exitCode: 1 });

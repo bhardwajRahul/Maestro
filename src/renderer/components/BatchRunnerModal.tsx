@@ -359,6 +359,14 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
       };
     }
 
+    console.log('[BatchRunnerModal] handleGo - calling onGo with config:', config);
+    window.maestro.logger.log('info', 'Go button clicked', 'BatchRunnerModal', {
+      documentsCount: validDocuments.length,
+      worktreeEnabled: config.worktree?.enabled,
+      worktreePath: config.worktree?.path,
+      branchName: config.worktree?.branchName
+    });
+
     onGo(config);
     onClose();
   };

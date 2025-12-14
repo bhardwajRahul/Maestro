@@ -140,11 +140,21 @@ export function useAutoRunHandlers(
   // Handler to start batch run from modal with multi-document support
   const handleStartBatchRun = useCallback((config: BatchRunConfig) => {
     console.log('[useAutoRunHandlers] handleStartBatchRun called with config:', config);
+    window.maestro.logger.log('info', 'handleStartBatchRun called', 'AutoRunHandlers', {
+      hasActiveSession: !!activeSession,
+      sessionId: activeSession?.id,
+      autoRunFolderPath: activeSession?.autoRunFolderPath,
+      worktreeEnabled: config.worktree?.enabled,
+      worktreePath: config.worktree?.path,
+      worktreeBranch: config.worktree?.branchName
+    });
     if (!activeSession || !activeSession.autoRunFolderPath) {
       console.log('[useAutoRunHandlers] handleStartBatchRun early return - no active session or autoRunFolderPath');
+      window.maestro.logger.log('warn', 'handleStartBatchRun early return - missing session or folder', 'AutoRunHandlers');
       return;
     }
     console.log('[useAutoRunHandlers] Starting batch run for session:', activeSession.id, 'folder:', activeSession.autoRunFolderPath);
+    window.maestro.logger.log('info', 'Starting batch run', 'AutoRunHandlers', { sessionId: activeSession.id, folderPath: activeSession.autoRunFolderPath });
     setBatchRunnerModalOpen(false);
     startBatchRun(activeSession.id, config, activeSession.autoRunFolderPath);
   }, [activeSession, startBatchRun, setBatchRunnerModalOpen]);
