@@ -28,7 +28,8 @@ export type ThemeId =
   | 'pedurple'
   | 'maestros-choice'
   | 'dre-synth'
-  | 'inquest';
+  | 'inquest'
+  | 'custom';
 
 /**
  * Theme mode indicating the overall brightness/style
@@ -103,6 +104,7 @@ export function isValidThemeId(id: string): id is ThemeId {
     'maestros-choice',
     'dre-synth',
     'inquest',
+    'custom',
   ];
   return validIds.includes(id as ThemeId);
 }

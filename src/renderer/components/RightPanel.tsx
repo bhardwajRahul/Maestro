@@ -114,6 +114,33 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
   // Elapsed time for Auto Run display (updates every second when current session is running)
   const [elapsedTime, setElapsedTime] = useState<string>('');
 
+  // Shared draft state for Auto Run (shared between panel and expanded modal)
+  // This ensures edits in one view are immediately visible in the other
+  const [sharedLocalContent, setSharedLocalContent] = useState(autoRunContent);
+  const [sharedSavedContent, setSharedSavedContent] = useState(autoRunContent);
+
+  // Sync shared state when the source content changes (e.g., document switch, external file change)
+  const prevAutoRunContentRef = useRef(autoRunContent);
+  const prevAutoRunContentVersionRef = useRef(autoRunContentVersion);
+  const prevSessionIdRef = useRef(session?.id);
+  const prevSelectedFileRef = useRef(session?.autoRunSelectedFile);
+
+  useEffect(() => {
+    const contentChanged = autoRunContent !== prevAutoRunContentRef.current;
+    const versionChanged = autoRunContentVersion !== prevAutoRunContentVersionRef.current;
+    const sessionChanged = session?.id !== prevSessionIdRef.current;
+    const fileChanged = session?.autoRunSelectedFile !== prevSelectedFileRef.current;
+
+    if (contentChanged || versionChanged || sessionChanged || fileChanged) {
+      setSharedLocalContent(autoRunContent);
+      setSharedSavedContent(autoRunContent);
+      prevAutoRunContentRef.current = autoRunContent;
+      prevAutoRunContentVersionRef.current = autoRunContentVersion;
+      prevSessionIdRef.current = session?.id;
+      prevSelectedFileRef.current = session?.autoRunSelectedFile;
+    }
+  }, [autoRunContent, autoRunContentVersion, session?.id, session?.autoRunSelectedFile]);
+
   // Expanded modal state for Auto Run
   const [autoRunExpanded, setAutoRunExpanded] = useState(false);
   const handleExpandAutoRun = useCallback(() => setAutoRunExpanded(true), []);
@@ -137,31 +164,94 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
     });
   }, []);
 
+  // Track accumulated elapsed time with visibility-aware pausing
+  // This prevents counting time when laptop is closed/suspended
+  const accumulatedTimeRef = useRef<number>(0);
+  const lastActiveTimestampRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!currentSessionBatchState?.isRunning || !currentSessionBatchState?.startTime) {
       setElapsedTime('');
+      accumulatedTimeRef.current = 0;
+      lastActiveTimestampRef.current = null;
       return;
     }
 
-    const updateElapsed = () => {
-      const elapsed = Date.now() - currentSessionBatchState.startTime!;
-      const seconds = Math.floor(elapsed / 1000);
+    // Initialize from batch state
+    accumulatedTimeRef.current = currentSessionBatchState.accumulatedElapsedMs || 0;
+    lastActiveTimestampRef.current = currentSessionBatchState.lastActiveTimestamp || Date.now();
+
+    const formatElapsed = (ms: number) => {
+      const seconds = Math.floor(ms / 1000);
       const minutes = Math.floor(seconds / 60);
       const hours = Math.floor(minutes / 60);
 
       if (hours > 0) {
-        setElapsedTime(`${hours}h ${minutes % 60}m`);
+        return `${hours}h ${minutes % 60}m`;
       } else if (minutes > 0) {
-        setElapsedTime(`${minutes}m ${seconds % 60}s`);
+        return `${minutes}m ${seconds % 60}s`;
       } else {
-        setElapsedTime(`${seconds}s`);
+        return `${seconds}s`;
       }
     };
 
-    updateElapsed(); // Initial update
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [currentSessionBatchState?.isRunning, currentSessionBatchState?.startTime]);
+    const updateElapsed = () => {
+      if (document.hidden || lastActiveTimestampRef.current === null) {
+        // When hidden, just display the accumulated time without adding more
+        setElapsedTime(formatElapsed(accumulatedTimeRef.current));
+        return;
+      }
+
+      const now = Date.now();
+      const currentSessionTime = now - lastActiveTimestampRef.current;
+      const totalElapsed = accumulatedTimeRef.current + currentSessionTime;
+      setElapsedTime(formatElapsed(totalElapsed));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Going hidden: accumulate the time since last active timestamp
+        if (lastActiveTimestampRef.current !== null) {
+          const now = Date.now();
+          accumulatedTimeRef.current += now - lastActiveTimestampRef.current;
+          lastActiveTimestampRef.current = null;
+        }
+        // Stop the interval to save resources
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      } else {
+        // Becoming visible: reset the last active timestamp to now
+        lastActiveTimestampRef.current = Date.now();
+        // Restart the interval
+        if (!intervalRef.current) {
+          intervalRef.current = setInterval(updateElapsed, 1000);
+        }
+      }
+      updateElapsed();
+    };
+
+    // Initial update
+    updateElapsed();
+
+    // Start interval only if visible
+    if (!document.hidden) {
+      intervalRef.current = setInterval(updateElapsed, 1000);
+    }
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [currentSessionBatchState?.isRunning, currentSessionBatchState?.startTime, currentSessionBatchState?.accumulatedElapsedMs, currentSessionBatchState?.lastActiveTimestamp]);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
@@ -345,6 +435,10 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
             content={autoRunContent}
             contentVersion={autoRunContentVersion}
             onContentChange={onAutoRunContentChange}
+            externalLocalContent={sharedLocalContent}
+            onExternalLocalContentChange={setSharedLocalContent}
+            externalSavedContent={sharedSavedContent}
+            onExternalSavedContentChange={setSharedSavedContent}
             mode={session.autoRunMode || 'edit'}
             onModeChange={onAutoRunModeChange}
             initialCursorPosition={session.autoRunCursorPosition || 0}
@@ -381,6 +475,10 @@ export const RightPanel = forwardRef<RightPanelHandle, RightPanelProps>(function
           content={autoRunContent}
           contentVersion={autoRunContentVersion}
           onContentChange={onAutoRunContentChange}
+          externalLocalContent={sharedLocalContent}
+          onExternalLocalContentChange={setSharedLocalContent}
+          externalSavedContent={sharedSavedContent}
+          onExternalSavedContentChange={setSharedSavedContent}
           mode={session.autoRunMode || 'edit'}
           onModeChange={onAutoRunModeChange}
           initialCursorPosition={session.autoRunCursorPosition || 0}

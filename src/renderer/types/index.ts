@@ -164,6 +164,8 @@ export interface BatchRunState {
   customPrompt?: string; // User's custom prompt if modified
   sessionIds: string[]; // Claude session IDs from each iteration
   startTime?: number; // Timestamp when batch run started
+  accumulatedElapsedMs?: number; // Accumulated active elapsed time (excludes sleep/suspend time)
+  lastActiveTimestamp?: number; // Last timestamp when actively tracking (for pause/resume calculation)
 }
 
 // Document entry within a playbook (similar to BatchDocumentEntry but for storage)

@@ -41,6 +41,17 @@ vi.mock('../../../renderer/components/AICommandsPanel', () => ({
   ),
 }));
 
+// Mock CustomThemeBuilder
+vi.mock('../../../renderer/components/CustomThemeBuilder', () => ({
+  CustomThemeBuilder: ({ isSelected, onSelect }: { isSelected: boolean; onSelect: () => void }) => (
+    <div data-testid="custom-theme-builder">
+      <button onClick={onSelect} data-theme-id="custom" className={isSelected ? 'ring-2' : ''}>
+        Custom Theme
+      </button>
+    </div>
+  ),
+}));
+
 // Sample theme for testing
 const mockTheme: Theme = {
   id: 'dracula',
@@ -55,6 +66,7 @@ const mockTheme: Theme = {
     textDim: '#6272a4',
     accent: '#bd93f9',
     accentDim: '#bd93f920',
+    accentText: '#ff79c6',
     accentForeground: '#ffffff',
     success: '#50fa7b',
     warning: '#ffb86c',
@@ -75,6 +87,7 @@ const mockLightTheme: Theme = {
     textDim: '#586069',
     accent: '#0366d6',
     accentDim: '#0366d620',
+    accentText: '#0366d6',
     accentForeground: '#ffffff',
     success: '#28a745',
     warning: '#f59e0b',
@@ -95,6 +108,7 @@ const mockVibeTheme: Theme = {
     textDim: '#a8a8a8',
     accent: '#e94560',
     accentDim: '#e9456020',
+    accentText: '#ff8dc7',
     accentForeground: '#ffffff',
     success: '#50fa7b',
     warning: '#ffb86c',
@@ -121,6 +135,10 @@ const createDefaultProps = (overrides = {}) => ({
   themes: mockThemes,
   activeThemeId: 'dracula',
   setActiveThemeId: vi.fn(),
+  customThemeColors: mockTheme.colors,
+  setCustomThemeColors: vi.fn(),
+  customThemeBaseId: 'dracula' as const,
+  setCustomThemeBaseId: vi.fn(),
   llmProvider: 'openrouter',
   setLlmProvider: vi.fn(),
   modelSlug: '',

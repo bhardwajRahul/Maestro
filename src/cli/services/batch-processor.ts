@@ -15,39 +15,11 @@ import { addHistoryEntry, readGroups } from './storage';
 import { substituteTemplateVariables, TemplateContext } from '../../shared/templateVariables';
 import { registerCliActivity, updateCliActivity, unregisterCliActivity } from '../../shared/cli-activity';
 import { logger } from '../../main/utils/logger';
+import { autorunSynopsisPrompt } from '../../prompts';
+import { parseSynopsis } from '../../shared/synopsis';
 
 // Synopsis prompt for batch tasks
-const BATCH_SYNOPSIS_PROMPT = `Provide a brief synopsis of what you just accomplished in this task using this exact format:
-
-**Summary:** [1-2 sentences describing the key outcome]
-
-**Details:** [A paragraph with more specifics about what was done, files changed, etc.]
-
-Rules:
-- Be specific about what was actually accomplished, not what was attempted.
-- Focus only on meaningful work that was done. Omit filler phrases like "the task is complete", "no further action needed", "everything is working", etc.
-- If nothing meaningful was accomplished, respond with only: **Summary:** No changes made.`;
-
-/**
- * Parse a synopsis response into short summary and full synopsis
- */
-function parseSynopsis(response: string): { shortSummary: string; fullSynopsis: string } {
-  const clean = response
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/─+/g, '')
-    .replace(/[│┌┐└┘├┤┬┴┼]/g, '')
-    .trim();
-
-  const summaryMatch = clean.match(/\*\*Summary:\*\*\s*(.+?)(?=\*\*Details:\*\*|$)/is);
-  const detailsMatch = clean.match(/\*\*Details:\*\*\s*(.+?)$/is);
-
-  const shortSummary = summaryMatch?.[1]?.trim() || clean.split('\n')[0]?.trim() || 'Task completed';
-  const details = detailsMatch?.[1]?.trim() || '';
-
-  const fullSynopsis = details ? `${shortSummary}\n\n${details}` : shortSummary;
-
-  return { shortSummary, fullSynopsis };
-}
+const BATCH_SYNOPSIS_PROMPT = autorunSynopsisPrompt;
 
 /**
  * Generate a UUID (simple implementation without uuid package)

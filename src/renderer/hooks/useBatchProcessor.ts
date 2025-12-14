@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { BatchRunState, BatchRunConfig, BatchDocumentEntry, Session, HistoryEntry, UsageStats, Group, AutoRunStats } from '../types';
 import { substituteTemplateVariables, TemplateContext } from '../utils/templateVariables';
 import { getBadgeForTime, getNextBadge, formatTimeRemaining } from '../constants/conductorBadges';
+import { autorunSynopsisPrompt } from '../../prompts';
+import { parseSynopsis } from '../../shared/synopsis';
 
 // Regex to count unchecked markdown checkboxes: - [ ] task
 const UNCHECKED_TASK_REGEX = /^[\s]*-\s*\[\s*\]\s*.+$/gm;
@@ -35,7 +37,10 @@ const DEFAULT_BATCH_STATE: BatchRunState = {
   completedTasks: 0,
   currentTaskIndex: 0,
   originalContent: '',
-  sessionIds: []
+  sessionIds: [],
+  // Time tracking (excludes sleep/suspend time)
+  accumulatedElapsedMs: 0,
+  lastActiveTimestamp: undefined
 };
 
 interface BatchCompleteInfo {
@@ -193,43 +198,7 @@ export function uncheckAllTasks(content: string): string {
  * Hook for managing batch processing of scratchpad tasks across multiple sessions
  */
 // Synopsis prompt for batch tasks - requests a two-part response
-const BATCH_SYNOPSIS_PROMPT = `Provide a brief synopsis of what you just accomplished in this task using this exact format:
-
-**Summary:** [1-2 sentences describing the key outcome]
-
-**Details:** [A paragraph with more specifics about what was done, files changed, etc.]
-
-Rules:
-- Be specific about what was actually accomplished, not what was attempted.
-- Focus only on meaningful work that was done. Omit filler phrases like "the task is complete", "no further action needed", "everything is working", etc.
-- If nothing meaningful was accomplished, respond with only: **Summary:** No changes made.`;
-
-/**
- * Parse a synopsis response into short summary and full synopsis
- * Expected format:
- *   **Summary:** Short 1-2 sentence summary
- *   **Details:** Detailed paragraph...
- */
-function parseSynopsis(response: string): { shortSummary: string; fullSynopsis: string } {
-  // Clean up ANSI codes and box drawing characters
-  const clean = response
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .replace(/─+/g, '')
-    .replace(/[│┌┐└┘├┤┬┴┼]/g, '')
-    .trim();
-
-  // Try to extract Summary and Details sections
-  const summaryMatch = clean.match(/\*\*Summary:\*\*\s*(.+?)(?=\*\*Details:\*\*|$)/is);
-  const detailsMatch = clean.match(/\*\*Details:\*\*\s*(.+?)$/is);
-
-  const shortSummary = summaryMatch?.[1]?.trim() || clean.split('\n')[0]?.trim() || 'Task completed';
-  const details = detailsMatch?.[1]?.trim() || '';
-
-  // Full synopsis includes both parts
-  const fullSynopsis = details ? `${shortSummary}\n\n${details}` : shortSummary;
-
-  return { shortSummary, fullSynopsis };
-}
+const BATCH_SYNOPSIS_PROMPT = autorunSynopsisPrompt;
 
 export function useBatchProcessor({
   sessions,
@@ -256,6 +225,11 @@ export function useBatchProcessor({
   // Ref to always have access to latest sessions (fixes stale closure in startBatchRun)
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+
+  // Visibility-based time tracking refs (per session)
+  // Tracks accumulated time and last active timestamp for accurate elapsed time
+  const accumulatedTimeRefs = useRef<Record<string, number>>({});
+  const lastActiveTimestampRefs = useRef<Record<string, number | null>>({});
 
   // Helper to get batch state for a session
   const getBatchState = useCallback((sessionId: string): BatchRunState => {
@@ -292,6 +266,54 @@ export function useBatchProcessor({
         window.maestro.web.broadcastAutoRunState(sessionId, null);
       }
     });
+  }, [batchRunStates]);
+
+  // Helper to get current accumulated elapsed time for a session (visibility-aware)
+  const getAccumulatedElapsedMs = useCallback((sessionId: string): number => {
+    const accumulated = accumulatedTimeRefs.current[sessionId] || 0;
+    const lastActive = lastActiveTimestampRefs.current[sessionId];
+    if (lastActive !== null && lastActive !== undefined && !document.hidden) {
+      // Add time since last active timestamp
+      return accumulated + (Date.now() - lastActive);
+    }
+    return accumulated;
+  }, []);
+
+  // Visibility change handler to pause/resume time tracking
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const now = Date.now();
+
+      // Update time tracking for all running batch sessions
+      Object.entries(batchRunStates).forEach(([sessionId, state]) => {
+        if (!state.isRunning) return;
+
+        if (document.hidden) {
+          // Going hidden: accumulate the time since last active timestamp
+          const lastActive = lastActiveTimestampRefs.current[sessionId];
+          if (lastActive !== null && lastActive !== undefined) {
+            accumulatedTimeRefs.current[sessionId] = (accumulatedTimeRefs.current[sessionId] || 0) + (now - lastActive);
+            lastActiveTimestampRefs.current[sessionId] = null;
+          }
+        } else {
+          // Becoming visible: reset the last active timestamp to now
+          lastActiveTimestampRefs.current[sessionId] = now;
+        }
+
+        // Update batch state with new accumulated time
+        setBatchRunStates(prev => ({
+          ...prev,
+          [sessionId]: {
+            ...prev[sessionId],
+            accumulatedElapsedMs: accumulatedTimeRefs.current[sessionId] || 0,
+            lastActiveTimestamp: lastActiveTimestampRefs.current[sessionId] ?? undefined
+          }
+        }));
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [batchRunStates]);
 
   /**
@@ -350,6 +372,10 @@ ${docList}
 
     // Track batch start time for completion notification
     const batchStartTime = Date.now();
+
+    // Initialize visibility-based time tracking for this session
+    accumulatedTimeRefs.current[sessionId] = 0;
+    lastActiveTimestampRefs.current[sessionId] = batchStartTime;
 
     // Reset stop flag for this session
     stopRequestedRefs.current[sessionId] = false;
@@ -472,7 +498,10 @@ ${docList}
         originalContent: '',
         customPrompt: prompt !== '' ? prompt : undefined,
         sessionIds: [],
-        startTime: batchStartTime
+        startTime: batchStartTime,
+        // Time tracking (excludes sleep/suspend time)
+        accumulatedElapsedMs: 0,
+        lastActiveTimestamp: batchStartTime
       }
     }));
 
@@ -1069,7 +1098,12 @@ ${docList}
     }
 
     // Add final Auto Run summary entry (no sessionId - this is a standalone synopsis)
-    const totalElapsedMs = Date.now() - batchStartTime;
+    // Calculate visibility-aware elapsed time (excludes time when laptop was sleeping/suspended)
+    const finalAccumulatedTime = accumulatedTimeRefs.current[sessionId] || 0;
+    const finalLastActive = lastActiveTimestampRefs.current[sessionId];
+    const totalElapsedMs = finalLastActive !== null && finalLastActive !== undefined && !document.hidden
+      ? finalAccumulatedTime + (Date.now() - finalLastActive)
+      : finalAccumulatedTime;
     const loopsCompleted = loopEnabled ? loopIteration + 1 : 1;
     const statusText = stalledDueToNoProgress ? 'stalled' : wasStopped ? 'stopped' : 'completed';
 
@@ -1161,9 +1195,13 @@ ${docList}
         completedTasks: totalCompletedTasks,
         totalTasks: initialTotalTasks,
         wasStopped,
-        elapsedTimeMs: Date.now() - batchStartTime
+        elapsedTimeMs: totalElapsedMs
       });
     }
+
+    // Clean up time tracking refs
+    delete accumulatedTimeRefs.current[sessionId];
+    delete lastActiveTimestampRefs.current[sessionId];
   }, [onUpdateSession, onSpawnAgent, onSpawnSynopsis, onAddHistoryEntry, onComplete, onPRResult, audioFeedbackEnabled, audioFeedbackCommand]);
 
   /**

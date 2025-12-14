@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { LLMProvider, ThemeId, Shortcut, CustomAICommand, GlobalStats, AutoRunStats, OnboardingStats, LeaderboardRegistration } from '../types';
+import type { LLMProvider, ThemeId, ThemeColors, Shortcut, CustomAICommand, GlobalStats, AutoRunStats, OnboardingStats, LeaderboardRegistration } from '../types';
+import { DEFAULT_CUSTOM_THEME_COLORS } from '../constants/themes';
 import { DEFAULT_SHORTCUTS } from '../constants/shortcuts';
+import { commitCommandPrompt } from '../../prompts';
 
 // Default global stats
 const DEFAULT_GLOBAL_STATS: GlobalStats = {
@@ -63,18 +65,7 @@ const DEFAULT_AI_COMMANDS: CustomAICommand[] = [
     id: 'commit',
     command: '/commit',
     description: 'Commit outstanding changes and push up',
-    prompt: `Examine the current git diff and determine if we need to make any updates to the README.md or CLAUDE.md files.
-
-Then create a sensible git commit message. IMPORTANT: The commit message MUST include the agent session ID "{{AGENT_SESSION_ID}}" somewhere in the commit body (not the subject line). This allows us to trace commits back to their original conversation for context and continuity.
-
-Example commit format:
-<subject line summarizing changes>
-
-<detailed description>
-
-Session: {{AGENT_SESSION_ID}}
-
-After committing, push all changes up to origin.`,
+    prompt: commitCommandPrompt,
     isBuiltIn: true,
   },
 ];
@@ -114,6 +105,10 @@ export interface UseSettingsReturn {
   // UI settings
   activeThemeId: ThemeId;
   setActiveThemeId: (value: ThemeId) => void;
+  customThemeColors: ThemeColors;
+  setCustomThemeColors: (value: ThemeColors) => void;
+  customThemeBaseId: ThemeId;
+  setCustomThemeBaseId: (value: ThemeId) => void;
   enterToSendAI: boolean;
   setEnterToSendAI: (value: boolean) => void;
   enterToSendTerminal: boolean;
@@ -242,6 +237,8 @@ export function useSettings(): UseSettingsReturn {
 
   // UI Config
   const [activeThemeId, setActiveThemeIdState] = useState<ThemeId>('dracula');
+  const [customThemeColors, setCustomThemeColorsState] = useState<ThemeColors>(DEFAULT_CUSTOM_THEME_COLORS);
+  const [customThemeBaseId, setCustomThemeBaseIdState] = useState<ThemeId>('dracula');
   const [enterToSendAI, setEnterToSendAIState] = useState(false); // AI mode defaults to Command+Enter
   const [enterToSendTerminal, setEnterToSendTerminalState] = useState(true); // Terminal defaults to Enter
   const [defaultSaveToHistory, setDefaultSaveToHistoryState] = useState(true); // History toggle defaults to on
@@ -348,6 +345,16 @@ export function useSettings(): UseSettingsReturn {
   const setActiveThemeId = useCallback((value: ThemeId) => {
     setActiveThemeIdState(value);
     window.maestro.settings.set('activeThemeId', value);
+  }, []);
+
+  const setCustomThemeColors = useCallback((value: ThemeColors) => {
+    setCustomThemeColorsState(value);
+    window.maestro.settings.set('customThemeColors', value);
+  }, []);
+
+  const setCustomThemeBaseId = useCallback((value: ThemeId) => {
+    setCustomThemeBaseIdState(value);
+    window.maestro.settings.set('customThemeBaseId', value);
   }, []);
 
   const setEnterToSendAI = useCallback((value: boolean) => {
@@ -844,6 +851,8 @@ export function useSettings(): UseSettingsReturn {
       const savedShowHiddenFiles = await window.maestro.settings.get('showHiddenFiles');
       const savedShortcuts = await window.maestro.settings.get('shortcuts');
       const savedActiveThemeId = await window.maestro.settings.get('activeThemeId');
+      const savedCustomThemeColors = await window.maestro.settings.get('customThemeColors');
+      const savedCustomThemeBaseId = await window.maestro.settings.get('customThemeBaseId');
       const savedTerminalWidth = await window.maestro.settings.get('terminalWidth');
       const savedLogLevel = await window.maestro.logger.getLogLevel();
       const savedMaxLogBuffer = await window.maestro.logger.getMaxLogBuffer();
@@ -882,6 +891,8 @@ export function useSettings(): UseSettingsReturn {
       if (savedMarkdownEditMode !== undefined) setMarkdownEditModeState(savedMarkdownEditMode);
       if (savedShowHiddenFiles !== undefined) setShowHiddenFilesState(savedShowHiddenFiles);
       if (savedActiveThemeId !== undefined) setActiveThemeIdState(savedActiveThemeId);
+      if (savedCustomThemeColors !== undefined) setCustomThemeColorsState(savedCustomThemeColors);
+      if (savedCustomThemeBaseId !== undefined) setCustomThemeBaseIdState(savedCustomThemeBaseId);
       if (savedTerminalWidth !== undefined) setTerminalWidthState(savedTerminalWidth);
       if (savedLogLevel !== undefined) setLogLevelState(savedLogLevel);
       if (savedMaxLogBuffer !== undefined) setMaxLogBufferState(savedMaxLogBuffer);
@@ -1035,6 +1046,10 @@ export function useSettings(): UseSettingsReturn {
     setCustomFonts,
     activeThemeId,
     setActiveThemeId,
+    customThemeColors,
+    setCustomThemeColors,
+    customThemeBaseId,
+    setCustomThemeBaseId,
     enterToSendAI,
     setEnterToSendAI,
     enterToSendTerminal,
@@ -1116,6 +1131,8 @@ export function useSettings(): UseSettingsReturn {
     fontSize,
     customFonts,
     activeThemeId,
+    customThemeColors,
+    customThemeBaseId,
     enterToSendAI,
     enterToSendTerminal,
     defaultSaveToHistory,
@@ -1153,6 +1170,8 @@ export function useSettings(): UseSettingsReturn {
     setFontSize,
     setCustomFonts,
     setActiveThemeId,
+    setCustomThemeColors,
+    setCustomThemeBaseId,
     setEnterToSendAI,
     setEnterToSendTerminal,
     setDefaultSaveToHistory,

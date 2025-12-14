@@ -323,5 +323,29 @@ export const THEMES: Record<ThemeId, Theme> = {
       warning: '#cc0033',
       error: '#cc0033'
     }
+  },
+  // Custom theme - user-configurable, defaults to Dracula
+  custom: {
+    id: 'custom',
+    name: 'Custom',
+    mode: 'dark',
+    colors: {
+      bgMain: '#282a36',
+      bgSidebar: '#21222c',
+      bgActivity: '#343746',
+      border: '#44475a',
+      textMain: '#f8f8f2',
+      textDim: '#6272a4',
+      accent: '#bd93f9',
+      accentDim: 'rgba(189, 147, 249, 0.2)',
+      accentText: '#ff79c6',
+      accentForeground: '#282a36',
+      success: '#50fa7b',
+      warning: '#ffb86c',
+      error: '#ff5555'
+    }
   }
 };
+
+// Default custom theme colors (Dracula-based)
+export const DEFAULT_CUSTOM_THEME_COLORS = THEMES.dracula.colors;

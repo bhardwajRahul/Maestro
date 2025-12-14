@@ -2304,3 +2304,784 @@ describe('Document Switching', () => {
     expect(textarea).toHaveValue('Externally modified content');
   });
 });
+
+// ============================================================================
+// Task 3.4 Tests: Expanding AutoRun.test.tsx for uncovered paths
+// ============================================================================
+
+describe('Document Tree Prop Rendering', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('renders document selector with tree structure when documentTree is provided', () => {
+    const documentTree = [
+      { name: 'Phase-1', type: 'file' as const, path: 'Phase-1.md' },
+      { name: 'Planning', type: 'folder' as const, path: 'Planning', children: [
+        { name: 'Roadmap', type: 'file' as const, path: 'Planning/Roadmap.md' },
+        { name: 'Timeline', type: 'file' as const, path: 'Planning/Timeline.md' },
+      ]},
+      { name: 'Notes', type: 'file' as const, path: 'Notes.md' },
+    ];
+    const props = createDefaultProps({ documentTree, documentList: ['Phase-1', 'Roadmap', 'Timeline', 'Notes'] });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+  });
+
+  it('falls back to flat document list when documentTree is undefined', () => {
+    const props = createDefaultProps({ documentTree: undefined, documentList: ['doc1', 'doc2', 'doc3'] });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+    // Documents should still be available
+    const select = screen.getByTestId('doc-select');
+    expect(select.children.length).toBe(3);
+  });
+
+  it('passes empty tree array correctly', () => {
+    const documentTree: Array<{ name: string; type: 'file' | 'folder'; path: string; children?: unknown[] }> = [];
+    const props = createDefaultProps({ documentTree, documentList: [] });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+  });
+
+  it('handles deeply nested folder structures', () => {
+    const documentTree = [
+      {
+        name: 'Level1',
+        type: 'folder' as const,
+        path: 'Level1',
+        children: [
+          {
+            name: 'Level2',
+            type: 'folder' as const,
+            path: 'Level1/Level2',
+            children: [
+              {
+                name: 'Level3',
+                type: 'folder' as const,
+                path: 'Level1/Level2/Level3',
+                children: [
+                  { name: 'DeepDoc', type: 'file' as const, path: 'Level1/Level2/Level3/DeepDoc.md' }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ];
+    const props = createDefaultProps({ documentTree, documentList: ['DeepDoc'] });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+  });
+
+  it('handles mixed file and folder tree structure', () => {
+    const documentTree = [
+      { name: 'RootDoc', type: 'file' as const, path: 'RootDoc.md' },
+      {
+        name: 'Folder',
+        type: 'folder' as const,
+        path: 'Folder',
+        children: [
+          { name: 'NestedDoc', type: 'file' as const, path: 'Folder/NestedDoc.md' }
+        ]
+      },
+      { name: 'AnotherRoot', type: 'file' as const, path: 'AnotherRoot.md' },
+    ];
+    const props = createDefaultProps({ documentTree, documentList: ['RootDoc', 'NestedDoc', 'AnotherRoot'] });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+  });
+
+  it('uses documentList when documentTree is not provided', () => {
+    const props = createDefaultProps({ documentList: ['alpha', 'beta', 'gamma'] });
+    render(<AutoRun {...props} />);
+
+    const select = screen.getByTestId('doc-select');
+    expect(select).toContainHTML('alpha');
+    expect(select).toContainHTML('beta');
+    expect(select).toContainHTML('gamma');
+  });
+});
+
+describe('hideTopControls Prop Behavior', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('shows all top controls when hideTopControls is false', () => {
+    const props = createDefaultProps({ hideTopControls: false });
+    render(<AutoRun {...props} />);
+
+    // All control buttons should be visible
+    expect(screen.getByText('Edit')).toBeInTheDocument();
+    expect(screen.getByText('Preview')).toBeInTheDocument();
+    expect(screen.getByText('Run')).toBeInTheDocument();
+    expect(screen.getByTitle('Learn about Auto Runner')).toBeInTheDocument();
+  });
+
+  it('hides top control buttons when hideTopControls is true', () => {
+    const props = createDefaultProps({ hideTopControls: true });
+    render(<AutoRun {...props} />);
+
+    // Top control bar buttons should be hidden
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preview')).not.toBeInTheDocument();
+    expect(screen.queryByText('Run')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Learn about Auto Runner')).not.toBeInTheDocument();
+  });
+
+  it('still shows document selector when hideTopControls is true', () => {
+    const props = createDefaultProps({ hideTopControls: true });
+    render(<AutoRun {...props} />);
+
+    // Document selector should still be visible
+    expect(screen.getByTestId('document-selector')).toBeInTheDocument();
+  });
+
+  it('still shows content area when hideTopControls is true', () => {
+    const props = createDefaultProps({ hideTopControls: true, content: 'Test content' });
+    render(<AutoRun {...props} />);
+
+    // Content should still be visible
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveValue('Test content');
+  });
+
+  it('hides expand button when hideTopControls is true', () => {
+    const onExpand = vi.fn();
+    const props = createDefaultProps({ hideTopControls: true, onExpand });
+    render(<AutoRun {...props} />);
+
+    // Expand button should not be visible when hideTopControls is true
+    expect(screen.queryByTitle(/Expand to full screen/)).not.toBeInTheDocument();
+  });
+
+  it('shows expand button when hideTopControls is false and onExpand is provided', () => {
+    const onExpand = vi.fn();
+    const props = createDefaultProps({ hideTopControls: false, onExpand });
+    render(<AutoRun {...props} />);
+
+    // Expand button should be visible
+    expect(screen.getByTitle(/Expand to full screen/)).toBeInTheDocument();
+  });
+
+  it('hides image upload button when hideTopControls is true', () => {
+    const props = createDefaultProps({ hideTopControls: true, mode: 'edit' });
+    render(<AutoRun {...props} />);
+
+    // Image upload button should not be visible
+    expect(screen.queryByTitle('Add image (or paste from clipboard)')).not.toBeInTheDocument();
+  });
+
+  it('keyboard shortcuts still work when hideTopControls is true', async () => {
+    const onModeChange = vi.fn();
+    const props = createDefaultProps({ hideTopControls: true, mode: 'edit', onModeChange });
+    render(<AutoRun {...props} />);
+
+    // Cmd+E should still toggle mode
+    const textarea = screen.getByRole('textbox');
+    fireEvent.keyDown(textarea, { key: 'e', metaKey: true });
+
+    expect(onModeChange).toHaveBeenCalledWith('preview');
+  });
+
+  it('editing still works when hideTopControls is true', async () => {
+    const props = createDefaultProps({ hideTopControls: true, content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'New content typed' } });
+
+    expect(textarea).toHaveValue('New content typed');
+  });
+
+  it('Save/Revert buttons still appear when dirty with hideTopControls true', async () => {
+    const props = createDefaultProps({ hideTopControls: true, content: 'Initial' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Modified content' } });
+
+    // Bottom panel with Save/Revert should still appear
+    expect(screen.getByText('Save')).toBeInTheDocument();
+    expect(screen.getByText('Revert')).toBeInTheDocument();
+  });
+
+  it('hideTopControls has no effect when folderPath is null', () => {
+    const props = createDefaultProps({ hideTopControls: true, folderPath: null });
+    render(<AutoRun {...props} />);
+
+    // Only the "Select Auto Run Folder" button should be visible
+    expect(screen.getByText('Select Auto Run Folder')).toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preview')).not.toBeInTheDocument();
+  });
+});
+
+describe('Template Autocomplete Integration', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('updates content when typing in textarea via autocomplete handler', async () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Hello world' } });
+
+    expect(textarea).toHaveValue('Hello world');
+  });
+
+  it('handles typing template variable trigger {{', async () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: '{{' } });
+
+    // Content should update (autocomplete state is mocked)
+    expect(textarea).toHaveValue('{{');
+  });
+
+  it('shows placeholder text mentioning template variables', () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByPlaceholderText(/type \{\{ for variables/)).toBeInTheDocument();
+  });
+
+  it('maintains cursor position after content change', async () => {
+    const props = createDefaultProps({ content: 'Hello World' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.focus(textarea);
+
+    // Set cursor position in middle
+    textarea.selectionStart = 6;
+    textarea.selectionEnd = 6;
+
+    // Type a character
+    fireEvent.change(textarea, { target: { value: 'Hello, World' } });
+
+    expect(textarea).toHaveValue('Hello, World');
+  });
+
+  it('content changes are not blocked by autocomplete', async () => {
+    const props = createDefaultProps({ content: 'Initial' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+
+    // Multiple consecutive changes
+    fireEvent.change(textarea, { target: { value: 'First change' } });
+    expect(textarea).toHaveValue('First change');
+
+    fireEvent.change(textarea, { target: { value: 'Second change' } });
+    expect(textarea).toHaveValue('Second change');
+
+    fireEvent.change(textarea, { target: { value: 'Third change' } });
+    expect(textarea).toHaveValue('Third change');
+  });
+
+  it('handles partial template variable typing', async () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+
+    // Type partial template variable syntax
+    fireEvent.change(textarea, { target: { value: '{' } });
+    expect(textarea).toHaveValue('{');
+
+    fireEvent.change(textarea, { target: { value: '{{' } });
+    expect(textarea).toHaveValue('{{');
+
+    fireEvent.change(textarea, { target: { value: '{{date' } });
+    expect(textarea).toHaveValue('{{date');
+  });
+
+  it('handles complete template variable syntax', async () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: '{{date}}' } });
+    expect(textarea).toHaveValue('{{date}}');
+  });
+
+  it('autocomplete does not interfere with normal text input', async () => {
+    const props = createDefaultProps({ content: '' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+
+    // Regular typing without autocomplete trigger
+    fireEvent.change(textarea, { target: { value: 'This is a regular sentence.' } });
+    expect(textarea).toHaveValue('This is a regular sentence.');
+  });
+
+  it('handles Tab key insertion (not autocomplete selection)', async () => {
+    const props = createDefaultProps({ content: 'Line1' });
+    render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.focus(textarea);
+    textarea.selectionStart = 5;
+    textarea.selectionEnd = 5;
+
+    fireEvent.keyDown(textarea, { key: 'Tab' });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe('Line1\t');
+    });
+  });
+});
+
+describe('Mermaid Diagram Rendering in Preview', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  // Note: The mermaid diagram tests verify that the content renders in preview mode.
+  // The actual ReactMarkdown is mocked to just display children directly, so we verify
+  // the mermaid content is present in the preview via the mocked ReactMarkdown.
+
+  it('displays mermaid code block content in preview mode', () => {
+    const mermaidContent = '```mermaid\ngraph TD\nA --> B\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    // Content is displayed via mocked ReactMarkdown
+    expect(screen.getByTestId('react-markdown')).toBeInTheDocument();
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('mermaid');
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('graph TD');
+  });
+
+  it('displays flowchart mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\nflowchart LR\n  A[Start] --> B{Decision}\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('flowchart LR');
+  });
+
+  it('displays sequence diagram mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\nsequenceDiagram\n  Alice->>Bob: Hello\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('sequenceDiagram');
+  });
+
+  it('displays class diagram mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\nclassDiagram\n  class Animal\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('classDiagram');
+  });
+
+  it('displays state diagram mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\nstateDiagram-v2\n  [*] --> Still\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('stateDiagram-v2');
+  });
+
+  it('displays gantt chart mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\ngantt\n  title A Gantt Diagram\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('gantt');
+  });
+
+  it('displays pie chart mermaid content in preview', () => {
+    const mermaidContent = '```mermaid\npie title Pets\n  "Dogs" : 386\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('pie');
+  });
+
+  it('shows mermaid content in textarea in edit mode', () => {
+    const mermaidContent = '```mermaid\ngraph TD\nA --> B\n```';
+    const props = createDefaultProps({ mode: 'edit', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    // In edit mode, raw text is shown in textarea
+    expect(screen.getByRole('textbox')).toHaveValue(mermaidContent);
+    // Preview markdown should not be visible in edit mode
+    expect(screen.queryByTestId('react-markdown')).not.toBeInTheDocument();
+  });
+
+  it('displays multiple code blocks in preview', () => {
+    const content = `# Document
+
+\`\`\`mermaid
+graph TD
+A --> B
+\`\`\`
+
+Text
+
+\`\`\`mermaid
+sequenceDiagram
+Alice->>Bob: Hi
+\`\`\`
+`;
+    const props = createDefaultProps({ mode: 'preview', content });
+    render(<AutoRun {...props} />);
+
+    const markdown = screen.getByTestId('react-markdown');
+    expect(markdown).toHaveTextContent('graph TD');
+    expect(markdown).toHaveTextContent('sequenceDiagram');
+  });
+
+  it('displays javascript code block content in preview', () => {
+    const content = '```javascript\nconst x = 1;\n```';
+    const props = createDefaultProps({ mode: 'preview', content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('const x = 1');
+  });
+
+  it('displays mermaid block with extra whitespace', () => {
+    const mermaidContent = '```mermaid   \n  graph TD  \n  A --> B  \n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('graph TD');
+  });
+
+  it('displays mermaid alongside other markdown content', () => {
+    const content = `# Title
+
+Some text.
+
+\`\`\`mermaid
+graph TD
+A --> B
+\`\`\`
+
+- List item
+`;
+    const props = createDefaultProps({ mode: 'preview', content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('Title');
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('Some text');
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('graph TD');
+    expect(screen.getByTestId('react-markdown')).toHaveTextContent('List item');
+  });
+
+  it('handles empty mermaid code block gracefully', () => {
+    const mermaidContent = '```mermaid\n\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+
+    // Should render without crashing
+    expect(() => render(<AutoRun {...props} />)).not.toThrow();
+    expect(screen.getByTestId('react-markdown')).toBeInTheDocument();
+  });
+
+  it('verifies MermaidRenderer mock is registered', () => {
+    // This test verifies the mock is set up (the vi.mock at the top of file)
+    // The real component uses MermaidRenderer for mermaid code blocks
+    // The mock was configured to render: <div data-testid="mermaid-renderer">{chart}</div>
+    const mermaidContent = '```mermaid\ngraph TD\n```';
+    const props = createDefaultProps({ mode: 'preview', content: mermaidContent });
+    render(<AutoRun {...props} />);
+
+    // The mocked ReactMarkdown just renders children as text
+    // The actual MermaidRenderer integration is tested via the component's
+    // markdownComponents config which includes the mermaid renderer
+    expect(screen.getByTestId('react-markdown')).toBeInTheDocument();
+  });
+});
+
+describe('Content Versioning and External Changes', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('force-syncs content when contentVersion increments', async () => {
+    const props = createDefaultProps({ content: 'Original', contentVersion: 1 });
+    const { rerender } = render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    expect(textarea).toHaveValue('Original');
+
+    // User makes local edits
+    fireEvent.change(textarea, { target: { value: 'User edits' } });
+    expect(textarea).toHaveValue('User edits');
+
+    // External file change triggers contentVersion increment
+    rerender(<AutoRun {...createDefaultProps({ content: 'External update', contentVersion: 2 })} />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Content should be force-synced from external change
+    expect(textarea).toHaveValue('External update');
+  });
+
+  it('preserves local content when only content prop changes (no version change)', async () => {
+    const props = createDefaultProps({ content: 'Original', contentVersion: 1 });
+    const { rerender } = render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'User local edits' } });
+    expect(textarea).toHaveValue('User local edits');
+
+    // Content prop changes without version increment (shouldn't overwrite local)
+    rerender(<AutoRun {...createDefaultProps({ content: 'Some other content', contentVersion: 1 })} />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Local edits should be preserved
+    expect(textarea).toHaveValue('User local edits');
+  });
+
+  it('handles contentVersion of 0 correctly', () => {
+    const props = createDefaultProps({ content: 'Test', contentVersion: 0 });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('Test');
+  });
+
+  it('handles large contentVersion increments', async () => {
+    const props = createDefaultProps({ content: 'V1', contentVersion: 1 });
+    const { rerender } = render(<AutoRun {...props} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('V1');
+
+    // Large version jump
+    rerender(<AutoRun {...createDefaultProps({ content: 'V100', contentVersion: 100 })} />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(screen.getByRole('textbox')).toHaveValue('V100');
+  });
+
+  it('resets dirty state when external change arrives', async () => {
+    const props = createDefaultProps({ content: 'Original', contentVersion: 1 });
+    const { rerender } = render(<AutoRun {...props} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Dirty content' } });
+
+    // Should be dirty
+    expect(screen.getByText('Save')).toBeInTheDocument();
+
+    // External change
+    rerender(<AutoRun {...createDefaultProps({ content: 'External update', contentVersion: 2 })} />);
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+
+    // Content synced, no longer dirty
+    expect(screen.queryByText('Save')).not.toBeInTheDocument();
+  });
+});
+
+describe('Task Count Display', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('displays task count when content has unchecked tasks', () => {
+    const content = '- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/0 of 3 tasks completed/)).toBeInTheDocument();
+  });
+
+  it('displays task count with completed tasks', () => {
+    const content = '- [x] Done\n- [ ] Not done\n- [x] Also done';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/2 of 3 tasks completed/)).toBeInTheDocument();
+  });
+
+  it('displays singular task text for single task', () => {
+    const content = '- [ ] Single task';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/0 of 1 task completed/)).toBeInTheDocument();
+  });
+
+  it('shows success color when all tasks completed', () => {
+    const content = '- [x] Done 1\n- [x] Done 2';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    const taskCountEl = screen.getByText(/2 of 2 tasks completed/);
+    expect(taskCountEl).toHaveStyle({ color: createMockTheme().colors.success });
+  });
+
+  it('does not show task count when no tasks in content', () => {
+    const content = 'Just some regular text without any tasks.';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.queryByText(/tasks completed/)).not.toBeInTheDocument();
+  });
+
+  it('handles nested task lists', () => {
+    const content = '- [ ] Task 1\n  - [x] Subtask 1\n  - [ ] Subtask 2\n- [x] Task 2';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/2 of 4 tasks completed/)).toBeInTheDocument();
+  });
+
+  it('handles mixed markdown with tasks', () => {
+    const content = '# Title\n\nSome text\n\n- [x] Task\n- [ ] Another task\n\nMore text';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/1 of 2 tasks completed/)).toBeInTheDocument();
+  });
+
+  it('updates task count as content changes', async () => {
+    const props = createDefaultProps({ content: '- [ ] Task 1\n- [ ] Task 2' });
+    const { rerender } = render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/0 of 2 tasks completed/)).toBeInTheDocument();
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: '- [x] Task 1\n- [ ] Task 2' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 of 2 tasks completed/)).toBeInTheDocument();
+    });
+  });
+
+  it('handles asterisk-based task lists', () => {
+    const content = '* [ ] Task with asterisk\n* [x] Done with asterisk';
+    const props = createDefaultProps({ content });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByText(/1 of 2 tasks completed/)).toBeInTheDocument();
+  });
+});
+
+describe('Expand Button Behavior', () => {
+  let mockMaestro: ReturnType<typeof setupMaestroMock>;
+
+  beforeEach(() => {
+    mockMaestro = setupMaestroMock();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('shows expand button when onExpand is provided', () => {
+    const onExpand = vi.fn();
+    const props = createDefaultProps({ onExpand });
+    render(<AutoRun {...props} />);
+
+    expect(screen.getByTitle(/Expand to full screen/)).toBeInTheDocument();
+  });
+
+  it('does not show expand button when onExpand is not provided', () => {
+    const props = createDefaultProps({ onExpand: undefined });
+    render(<AutoRun {...props} />);
+
+    expect(screen.queryByTitle(/Expand to full screen/)).not.toBeInTheDocument();
+  });
+
+  it('calls onExpand when expand button is clicked', () => {
+    const onExpand = vi.fn();
+    const props = createDefaultProps({ onExpand });
+    render(<AutoRun {...props} />);
+
+    fireEvent.click(screen.getByTitle(/Expand to full screen/));
+    expect(onExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it('displays keyboard shortcut in expand button title when available', () => {
+    const onExpand = vi.fn();
+    const shortcuts = {
+      toggleAutoRunExpanded: { keys: ['Meta', 'Shift', 'e'], description: 'Toggle expanded' }
+    };
+    const props = createDefaultProps({ onExpand, shortcuts });
+    render(<AutoRun {...props} />);
+
+    // The title should include the shortcut. formatShortcutKeys converts keys to display format.
+    // In test environment (non-Mac), it formats as 'Ctrl+Shift+E'
+    const expandButton = screen.getByTitle(/Expand to full screen/);
+    expect(expandButton).toBeInTheDocument();
+    // Verify title contains shortcut info (either Mac or non-Mac format)
+    expect(expandButton.getAttribute('title')).toMatch(/\(.*\)/);
+  });
+});

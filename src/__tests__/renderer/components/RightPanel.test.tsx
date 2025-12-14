@@ -1052,6 +1052,9 @@ describe('RightPanel', () => {
         loopEnabled: false,
         loopIteration: 0,
         startTime,
+        // Time tracking fields for visibility-aware elapsed time
+        accumulatedElapsedMs: 0,
+        lastActiveTimestamp: startTime,
       };
       const props = createDefaultProps({ currentSessionBatchState });
       render(<RightPanel {...props} />);
@@ -1080,6 +1083,9 @@ describe('RightPanel', () => {
         loopEnabled: false,
         loopIteration: 0,
         startTime,
+        // Time tracking fields for visibility-aware elapsed time
+        accumulatedElapsedMs: 0,
+        lastActiveTimestamp: startTime,
       };
       const props = createDefaultProps({ currentSessionBatchState });
       render(<RightPanel {...props} />);

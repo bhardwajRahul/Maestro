@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download } from 'lucide-react';
-import type { AgentConfig, Theme, Shortcut, ShellInfo, CustomAICommand } from '../types';
+import type { AgentConfig, Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand } from '../types';
+import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { AICommandsPanel } from './AICommandsPanel';
@@ -23,6 +24,10 @@ interface SettingsModalProps {
   themes: Record<string, Theme>;
   activeThemeId: string;
   setActiveThemeId: (id: string) => void;
+  customThemeColors: ThemeColors;
+  setCustomThemeColors: (colors: ThemeColors) => void;
+  customThemeBaseId: ThemeId;
+  setCustomThemeBaseId: (id: ThemeId) => void;
   llmProvider: string;
   setLlmProvider: (provider: string) => void;
   modelSlug: string;
@@ -69,6 +74,8 @@ interface SettingsModalProps {
   setCustomAICommands: (commands: CustomAICommand[]) => void;
   initialTab?: 'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands';
   hasNoAgents?: boolean;
+  onThemeImportError?: (message: string) => void;
+  onThemeImportSuccess?: (message: string) => void;
 }
 
 export const SettingsModal = memo(function SettingsModal(props: SettingsModalProps) {
@@ -431,8 +438,9 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
   if (!isOpen) return null;
 
-  // Group themes by mode for the ThemePicker
+  // Group themes by mode for the ThemePicker (exclude 'custom' theme - it's handled separately)
   const groupedThemes = Object.values(themes).reduce((acc: Record<string, Theme[]>, t: Theme) => {
+    if (t.id === 'custom') return acc; // Skip custom theme in regular grouping
     if (!acc[t.mode]) acc[t.mode] = [];
     acc[t.mode].push(t);
     return acc;
@@ -442,21 +450,23 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
     if (e.key === 'Tab') {
       e.preventDefault();
       e.stopPropagation();
-      // Create ordered array: dark themes first, then light, then vibe (cycling back to dark)
+      // Create ordered array: dark themes first, then light, then vibe, then custom (cycling back to dark)
       const allThemes = [...(groupedThemes['dark'] || []), ...(groupedThemes['light'] || []), ...(groupedThemes['vibe'] || [])];
-      const currentIndex = allThemes.findIndex((t: Theme) => t.id === props.activeThemeId);
+      // Add 'custom' as the last item in the cycle
+      const allThemeIds = [...allThemes.map(t => t.id), 'custom'];
+      const currentIndex = allThemeIds.findIndex((id: string) => id === props.activeThemeId);
 
       let newThemeId: string;
       if (e.shiftKey) {
         // Shift+Tab: go backwards
-        const prevIndex = currentIndex === 0 ? allThemes.length - 1 : currentIndex - 1;
-        newThemeId = allThemes[prevIndex].id;
+        const prevIndex = currentIndex === 0 ? allThemeIds.length - 1 : currentIndex - 1;
+        newThemeId = allThemeIds[prevIndex];
       } else {
         // Tab: go forward
-        const nextIndex = (currentIndex + 1) % allThemes.length;
-        newThemeId = allThemes[nextIndex].id;
+        const nextIndex = (currentIndex + 1) % allThemeIds.length;
+        newThemeId = allThemeIds[nextIndex];
       }
-      props.setActiveThemeId(newThemeId);
+      props.setActiveThemeId(newThemeId as ThemeId);
 
       // Scroll the newly selected theme button into view
       setTimeout(() => {
@@ -508,6 +518,21 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
           </div>
         </div>
       ))}
+
+      {/* Custom Theme Builder */}
+      <div data-theme-id="custom">
+        <CustomThemeBuilder
+          theme={theme}
+          customThemeColors={props.customThemeColors}
+          setCustomThemeColors={props.setCustomThemeColors}
+          customThemeBaseId={props.customThemeBaseId}
+          setCustomThemeBaseId={props.setCustomThemeBaseId}
+          isSelected={props.activeThemeId === 'custom'}
+          onSelect={() => props.setActiveThemeId('custom')}
+          onImportError={props.onThemeImportError}
+          onImportSuccess={props.onThemeImportSuccess}
+        />
+      </div>
     </div>
   );
 
