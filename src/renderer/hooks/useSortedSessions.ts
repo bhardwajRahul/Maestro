@@ -1,25 +1,12 @@
 import { useMemo } from 'react';
 import type { Session, Group } from '../types';
+import {
+  stripLeadingEmojis,
+  compareNamesIgnoringEmojis,
+} from '../../shared/emojiUtils';
 
-/**
- * Strip leading emojis from a string for proper alphabetical sorting.
- * Handles emoji characters, variation selectors, ZWJ sequences, etc.
- */
-export const stripLeadingEmojis = (str: string): string => {
-  // Match emojis at the start: emoji characters, variation selectors, ZWJ sequences, etc.
-  const emojiRegex = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F?|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)+\s*/gu;
-  return str.replace(emojiRegex, '').trim();
-};
-
-/**
- * Compare two names alphabetically, ignoring leading emojis.
- * Used for sorting sessions and groups.
- */
-export const compareNamesIgnoringEmojis = (a: string, b: string): number => {
-  const aStripped = stripLeadingEmojis(a);
-  const bStripped = stripLeadingEmojis(b);
-  return aStripped.localeCompare(bStripped);
-};
+// Re-export for backwards compatibility with existing imports
+export { stripLeadingEmojis, compareNamesIgnoringEmojis };
 
 /**
  * Dependencies for the useSortedSessions hook.

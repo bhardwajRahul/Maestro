@@ -1,20 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Session, Group } from '../types';
 import { gitService } from '../services/git';
+import { compareNamesIgnoringEmojis } from '../../shared/emojiUtils';
 
 // Maximum number of log entries to persist per AI tab
 const MAX_PERSISTED_LOGS_PER_TAB = 100;
-
-// Strip leading emojis from a string for alphabetical sorting
-const stripLeadingEmojis = (str: string): string => {
-  const emojiRegex = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F?|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)+\s*/gu;
-  return str.replace(emojiRegex, '').trim();
-};
-
-// Compare two names, ignoring leading emojis for alphabetization
-const compareNamesIgnoringEmojis = (a: string, b: string): number => {
-  return stripLeadingEmojis(a).localeCompare(stripLeadingEmojis(b));
-};
 
 /**
  * Prepare a session for loading by resetting runtime-only fields.
