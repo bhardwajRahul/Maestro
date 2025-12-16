@@ -230,14 +230,16 @@ describe('CreateGroupModal', () => {
     it('applies theme colors to modal container', () => {
       const { container } = renderModal();
 
-      const modalContent = container.querySelector('.w-\\[400px\\]');
+      // Modal uses inline width style instead of Tailwind class
+      const modalContent = container.querySelector('[style*="width: 400px"]');
       expect(modalContent).toHaveStyle({ backgroundColor: theme.colors.bgSidebar });
     });
 
     it('applies border color to modal container', () => {
       const { container } = renderModal();
 
-      const modalContent = container.querySelector('.w-\\[400px\\]');
+      // Modal uses inline width style instead of Tailwind class
+      const modalContent = container.querySelector('[style*="width: 400px"]');
       expect(modalContent).toHaveStyle({ borderColor: theme.colors.border });
     });
 
@@ -247,7 +249,8 @@ describe('CreateGroupModal', () => {
       const dialog = screen.getByRole('dialog');
       expect(dialog).toHaveClass('fixed');
       expect(dialog).toHaveClass('inset-0');
-      expect(dialog).toHaveClass('z-[9999]');
+      // Modal uses inline z-index style instead of Tailwind class
+      expect(dialog).toHaveStyle({ zIndex: 9999 });
     });
 
     it('has blur backdrop', () => {
@@ -910,7 +913,8 @@ describe('CreateGroupModal', () => {
 
       const { container } = renderModal({ theme: lightTheme });
 
-      const modalContent = container.querySelector('.w-\\[400px\\]');
+      // Modal uses inline width style instead of Tailwind class
+      const modalContent = container.querySelector('[style*="width: 400px"]');
       expect(modalContent).toHaveStyle({ backgroundColor: lightTheme.colors.bgSidebar });
     });
 
