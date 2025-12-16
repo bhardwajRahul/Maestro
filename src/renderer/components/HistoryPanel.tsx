@@ -4,6 +4,7 @@ import type { Session, Theme, HistoryEntry, HistoryEntryType } from '../types';
 import { HistoryDetailModal } from './HistoryDetailModal';
 import { HistoryHelpModal } from './HistoryHelpModal';
 import { useThrottledCallback } from '../hooks/useThrottle';
+import { useListNavigation } from '../hooks/useListNavigation';
 
 // Double checkmark SVG component for validated entries
 const DoubleCheck = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
@@ -429,7 +430,6 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<HistoryEntryType>>(new Set(['AUTO', 'USER']));
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [detailModalEntry, setDetailModalEntry] = useState<HistoryEntry | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
   const [searchFilterOpen, setSearchFilterOpen] = useState(false);
@@ -489,22 +489,6 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     }
   // Note: displayCount intentionally NOT in deps - we don't want to reload history when it changes
   }, [session.cwd, session.id, viewMode]);
-
-  // Expose focus and refreshHistory methods to parent
-  useImperativeHandle(ref, () => ({
-    focus: () => {
-      listRef.current?.focus();
-      // Select first item if none selected
-      if (selectedIndex < 0 && historyEntries.length > 0) {
-        setSelectedIndex(0);
-      }
-    },
-    refreshHistory: () => {
-      // Pass true to indicate this is a refresh, not initial load
-      // This preserves scroll position and displayCount
-      loadHistory(true);
-    }
-  }), [selectedIndex, historyEntries.length, loadHistory]);
 
   // Load history entries on mount and when session changes
   useEffect(() => {
@@ -572,6 +556,42 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
 
   // Check if there are more entries to load
   const hasMore = allFilteredEntries.length > displayCount;
+
+  // Handle Enter key selection - opens detail modal for selected entry
+  const handleSelectByIndex = useCallback((index: number) => {
+    if (index >= 0 && index < filteredEntries.length) {
+      setDetailModalEntry(filteredEntries[index]);
+    }
+  }, [filteredEntries]);
+
+  // Use list navigation hook for ArrowUp/ArrowDown/Enter handling
+  // Note: initialIndex is -1 to support "no selection" state
+  const {
+    selectedIndex,
+    setSelectedIndex,
+    handleKeyDown: listNavHandleKeyDown,
+  } = useListNavigation({
+    listLength: filteredEntries.length,
+    onSelect: handleSelectByIndex,
+    initialIndex: -1,
+  });
+
+  // Expose focus and refreshHistory methods to parent
+  // Note: Must be after useListNavigation since it uses selectedIndex/setSelectedIndex
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      listRef.current?.focus();
+      // Select first item if none selected
+      if (selectedIndex < 0 && historyEntries.length > 0) {
+        setSelectedIndex(0);
+      }
+    },
+    refreshHistory: () => {
+      // Pass true to indicate this is a refresh, not initial load
+      // This preserves scroll position and displayCount
+      loadHistory(true);
+    }
+  }), [selectedIndex, setSelectedIndex, historyEntries.length, loadHistory]);
 
   // Handle graph bar click - scroll to first entry in that time range
   const handleGraphBarClick = useCallback((bucketStart: number, bucketEnd: number) => {
@@ -719,7 +739,7 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     }
   }, [selectedIndex]);
 
-  // Keyboard navigation handler
+  // Keyboard navigation handler - combines hook handler with custom Escape/Cmd+F logic
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Open search filter with Cmd+F
     if (e.key === 'f' && (e.metaKey || e.ctrlKey) && !searchFilterOpen) {
@@ -730,43 +750,21 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
       return;
     }
 
-    if (filteredEntries.length === 0) return;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedIndex(prev => {
-          const next = prev < filteredEntries.length - 1 ? prev + 1 : prev;
-          return next;
-        });
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedIndex(prev => {
-          const next = prev > 0 ? prev - 1 : 0;
-          return next;
-        });
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0 && selectedIndex < filteredEntries.length) {
-          setDetailModalEntry(filteredEntries[selectedIndex]);
-        }
-        break;
-      case 'Escape':
-        // Only handle if modal is not open (modal handles its own escape)
-        if (!detailModalEntry) {
-          setSelectedIndex(-1);
-        }
-        break;
+    // Handle Escape to clear selection (when modal is not open)
+    if (e.key === 'Escape' && !detailModalEntry) {
+      setSelectedIndex(-1);
+      return;
     }
-  }, [filteredEntries, selectedIndex, detailModalEntry, searchFilterOpen]);
+
+    // Delegate ArrowUp/ArrowDown/Enter to the list navigation hook
+    listNavHandleKeyDown(e);
+  }, [searchFilterOpen, detailModalEntry, setSelectedIndex, listNavHandleKeyDown]);
 
   // Open detail modal for an entry
   const openDetailModal = useCallback((entry: HistoryEntry, index: number) => {
     setSelectedIndex(index);
     setDetailModalEntry(entry);
-  }, []);
+  }, [setSelectedIndex]);
 
   // Close detail modal and restore focus
   const closeDetailModal = useCallback(() => {
@@ -789,7 +787,7 @@ export const HistoryPanel = React.memo(forwardRef<HistoryPanelHandle, HistoryPan
     } catch (error) {
       console.error('Failed to delete history entry:', error);
     }
-  }, [session.id]);
+  }, [session.id, setSelectedIndex]);
 
   // Format timestamp
   const formatTime = (timestamp: number) => {
