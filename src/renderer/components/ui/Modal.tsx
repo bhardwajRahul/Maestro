@@ -125,7 +125,7 @@ export function Modal({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200 outline-none"
+      className="fixed inset-0 modal-overlay flex items-center justify-center animate-in fade-in duration-200 outline-none"
       style={{ zIndex }}
       role="dialog"
       aria-modal="true"

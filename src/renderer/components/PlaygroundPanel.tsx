@@ -385,7 +385,7 @@ confetti({
     <>
       <div
         ref={containerRef}
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9998] animate-in fade-in duration-200"
+        className="fixed inset-0 modal-overlay flex items-center justify-center z-[9998] animate-in fade-in duration-200"
         role="dialog"
         aria-modal="true"
         aria-label="Developer Playground"

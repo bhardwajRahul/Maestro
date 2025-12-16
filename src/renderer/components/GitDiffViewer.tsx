@@ -90,8 +90,7 @@ export const GitDiffViewer = memo(function GitDiffViewer({ diffText, cwd, theme,
   if (parsedFiles.length === 0) {
     return (
       <div
-        className="fixed inset-0 z-[9999] flex items-center justify-center backdrop-blur-sm"
-        style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+        className="fixed inset-0 z-[9999] flex items-center justify-center modal-overlay"
         onClick={onClose}
       >
         <div
@@ -130,8 +129,7 @@ export const GitDiffViewer = memo(function GitDiffViewer({ diffText, cwd, theme,
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center backdrop-blur-sm"
-      style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center modal-overlay"
       onClick={onClose}
     >
       <div

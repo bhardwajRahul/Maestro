@@ -386,7 +386,7 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200"
+      className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-label="Batch Runner"

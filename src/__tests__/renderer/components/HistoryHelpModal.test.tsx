@@ -111,8 +111,8 @@ describe('HistoryHelpModal', () => {
     it('renders the backdrop with correct opacity', () => {
       const { container } = render(<HistoryHelpModal {...defaultProps} />);
 
-      // Modal component uses bg-black/70 with backdrop-blur-sm
-      const backdrop = container.querySelector('.bg-black\\/70');
+      // Modal component uses modal-overlay class for solid background
+      const backdrop = container.querySelector('.modal-overlay');
       expect(backdrop).toBeInTheDocument();
     });
 

@@ -95,6 +95,74 @@ vi.mock('../../../renderer/utils/shortcutFormatter', () => ({
   formatShortcutKeys: vi.fn((keys: string[]) => keys?.join('+') || ''),
 }));
 
+// Configurable git status data for tests - can be modified in individual tests
+let mockGitStatusData: Record<string, {
+  fileCount: number;
+  branch: string;
+  remote: string;
+  ahead: number;
+  behind: number;
+  totalAdditions: number;
+  totalDeletions: number;
+  modifiedCount: number;
+  fileChanges: unknown[];
+  lastUpdated: number;
+}> = {
+  'session-1': {
+    fileCount: 3,
+    branch: 'main',
+    remote: 'https://github.com/user/repo.git',
+    ahead: 2,
+    behind: 0,
+    totalAdditions: 50,
+    totalDeletions: 20,
+    modifiedCount: 2,
+    fileChanges: [],
+    lastUpdated: Date.now(),
+  },
+};
+
+const mockRefreshGitStatus = vi.fn().mockResolvedValue(undefined);
+
+// Helper to set mock git status for a session
+const setMockGitStatus = (sessionId: string, data: typeof mockGitStatusData[string] | undefined) => {
+  if (data === undefined) {
+    delete mockGitStatusData[sessionId];
+  } else {
+    mockGitStatusData[sessionId] = data;
+  }
+};
+
+// Helper to reset mock git status to defaults
+const resetMockGitStatus = () => {
+  mockGitStatusData = {
+    'session-1': {
+      fileCount: 3,
+      branch: 'main',
+      remote: 'https://github.com/user/repo.git',
+      ahead: 2,
+      behind: 0,
+      totalAdditions: 50,
+      totalDeletions: 20,
+      modifiedCount: 2,
+      fileChanges: [],
+      lastUpdated: Date.now(),
+    },
+  };
+  mockRefreshGitStatus.mockClear();
+};
+
+// Mock GitStatusContext to avoid Provider requirement
+vi.mock('../../../renderer/contexts/GitStatusContext', () => ({
+  useGitStatus: () => ({
+    gitStatusMap: new Map(Object.entries(mockGitStatusData)),
+    refreshGitStatus: mockRefreshGitStatus,
+    isLoading: false,
+    getFileCount: (sessionId: string) => mockGitStatusData[sessionId]?.fileCount ?? 0,
+    getStatus: (sessionId: string) => mockGitStatusData[sessionId],
+  }),
+}));
+
 // Import MainPanel after mocks
 import { MainPanel } from '../../../renderer/components/MainPanel';
 
@@ -247,7 +315,10 @@ describe('MainPanel', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
-    // Mock git.info for the component
+    // Reset mock git status data to defaults
+    resetMockGitStatus();
+
+    // Mock git.info for backward compatibility (some tests may still reference it)
     vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
       branch: 'main',
       remote: 'https://github.com/user/repo.git',
@@ -1087,48 +1158,42 @@ describe('MainPanel', () => {
   });
 
   describe('Git info refresh', () => {
-    it('should fetch git info when session is a git repo', async () => {
+    // Note: Git polling is now handled by GitStatusProvider context, not MainPanel directly.
+    // These tests verify that MainPanel correctly displays data from the context.
+
+    it('should display git info from context when session is a git repo', async () => {
       const session = createSession({ isGitRepo: true });
 
       render(<MainPanel {...defaultProps} activeSession={session} />);
 
+      // MainPanel should display the branch from context data
       await waitFor(() => {
-        expect(window.maestro.git.info).toHaveBeenCalledWith('/test/project');
+        expect(screen.getByText(/main|GIT/)).toBeInTheDocument();
       });
     });
 
-    it('should use shellCwd when in terminal mode', async () => {
-      const session = createSession({
-        isGitRepo: true,
-        inputMode: 'terminal',
-        shellCwd: '/different/path',
-      });
-
-      render(<MainPanel {...defaultProps} activeSession={session} />);
-
-      await waitFor(() => {
-        expect(window.maestro.git.info).toHaveBeenCalledWith('/different/path');
-      });
-    });
-
-    it('should set up interval to refresh git info', async () => {
+    it('should support refresh via context', async () => {
       const session = createSession({ isGitRepo: true });
 
       render(<MainPanel {...defaultProps} activeSession={session} />);
 
-      // Initial call
-      await waitFor(() => {
-        expect(window.maestro.git.info).toHaveBeenCalledTimes(1);
-      });
+      // The component should have access to refreshGitStatus from context
+      // This is now triggered through the git badge click
+      const gitBadge = await screen.findByText(/main|GIT/);
+      fireEvent.click(gitBadge);
 
-      // Advance time by 30 seconds
-      await act(async () => {
-        vi.advanceTimersByTime(30000);
-      });
+      // refreshGitStatus should have been called
+      expect(mockRefreshGitStatus).toHaveBeenCalled();
+    });
 
-      await waitFor(() => {
-        expect(window.maestro.git.info).toHaveBeenCalledTimes(2);
-      });
+    it('should not display git info when session is not a git repo', async () => {
+      const session = createSession({ isGitRepo: false });
+
+      render(<MainPanel {...defaultProps} activeSession={session} />);
+
+      // Should show LOCAL badge instead of git branch
+      expect(screen.getByText('LOCAL')).toBeInTheDocument();
+      expect(screen.queryByText('main')).not.toBeInTheDocument();
     });
   });
 
@@ -1182,12 +1247,17 @@ describe('MainPanel', () => {
 
   describe('Git ahead/behind display', () => {
     it('should display ahead count in git tooltip', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 0,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 0,
         ahead: 5,
-        uncommittedChanges: 0,
+        behind: 0,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        modifiedCount: 0,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1206,12 +1276,17 @@ describe('MainPanel', () => {
     });
 
     it('should display behind count in git tooltip', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 0,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 3,
         ahead: 0,
-        uncommittedChanges: 0,
+        behind: 3,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        modifiedCount: 0,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1230,12 +1305,17 @@ describe('MainPanel', () => {
     });
 
     it('should show uncommitted changes count in git tooltip', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 7,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 0,
         ahead: 0,
-        uncommittedChanges: 7,
+        behind: 0,
+        totalAdditions: 100,
+        totalDeletions: 50,
+        modifiedCount: 7,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1254,12 +1334,17 @@ describe('MainPanel', () => {
     });
 
     it('should show working tree clean message when no uncommitted changes', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 0,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 0,
         ahead: 0,
-        uncommittedChanges: 0,
+        behind: 0,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        modifiedCount: 0,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1280,12 +1365,17 @@ describe('MainPanel', () => {
 
   describe('Remote origin display', () => {
     it('should display remote URL in git tooltip', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 0,
         branch: 'main',
         remote: 'https://github.com/user/my-repo.git',
-        behind: 0,
         ahead: 0,
-        uncommittedChanges: 0,
+        behind: 0,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        modifiedCount: 0,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1308,12 +1398,17 @@ describe('MainPanel', () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
 
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 0,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 0,
         ahead: 0,
-        uncommittedChanges: 0,
+        behind: 0,
+        totalAdditions: 0,
+        totalDeletions: 0,
+        modifiedCount: 0,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });
@@ -1374,16 +1469,17 @@ describe('MainPanel', () => {
       expect(screen.getByText('Context Window')).toBeInTheDocument();
     });
 
-    it('should handle git info fetch failure gracefully', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockRejectedValue(new Error('Git error'));
+    it('should handle missing git status from context gracefully', async () => {
+      // Remove git status data for session (simulating context not having data yet)
+      setMockGitStatus('session-1', undefined);
 
       const session = createSession({ isGitRepo: true });
 
       render(<MainPanel {...defaultProps} activeSession={session} />);
 
-      // Should render without crashing, showing GIT badge
+      // Should render without crashing, showing GIT badge (without branch name since no data)
       await waitFor(() => {
-        expect(screen.getByText(/GIT|main/)).toBeInTheDocument();
+        expect(screen.getByText(/GIT/)).toBeInTheDocument();
       });
     });
 
@@ -1514,12 +1610,17 @@ describe('MainPanel', () => {
 
   describe('Singularization in uncommitted changes', () => {
     it('should use singular form for 1 uncommitted change', async () => {
-      vi.mocked(window.maestro.git as unknown as { info: ReturnType<typeof vi.fn> }).info = vi.fn().mockResolvedValue({
+      setMockGitStatus('session-1', {
+        fileCount: 1,
         branch: 'main',
         remote: 'https://github.com/user/repo.git',
-        behind: 0,
         ahead: 0,
-        uncommittedChanges: 1,
+        behind: 0,
+        totalAdditions: 10,
+        totalDeletions: 5,
+        modifiedCount: 1,
+        fileChanges: [],
+        lastUpdated: Date.now(),
       });
 
       const session = createSession({ isGitRepo: true });

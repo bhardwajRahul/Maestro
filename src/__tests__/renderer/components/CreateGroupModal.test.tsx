@@ -253,11 +253,11 @@ describe('CreateGroupModal', () => {
       expect(dialog).toHaveStyle({ zIndex: 9999 });
     });
 
-    it('has blur backdrop', () => {
+    it('has modal overlay backdrop', () => {
       renderModal();
 
       const dialog = screen.getByRole('dialog');
-      expect(dialog).toHaveClass('backdrop-blur-sm');
+      expect(dialog).toHaveClass('modal-overlay');
     });
 
     it('has animation classes', () => {
@@ -828,8 +828,7 @@ describe('CreateGroupModal', () => {
       fireEvent.click(screen.getByText('📂'));
 
       const overlay = screen.getByTestId('emoji-picker').closest('.fixed');
-      expect(overlay).toHaveClass('bg-black/50');
-      expect(overlay).toHaveClass('backdrop-blur-sm');
+      expect(overlay).toHaveClass('modal-overlay');
       expect(overlay).toHaveClass('z-[60]');
     });
 

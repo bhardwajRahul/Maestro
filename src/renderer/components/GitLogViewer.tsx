@@ -275,8 +275,7 @@ export const GitLogViewer = memo(function GitLogViewer({ cwd, theme, onClose }: 
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center backdrop-blur-sm"
-      style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center modal-overlay"
       onClick={onClose}
     >
       <div

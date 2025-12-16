@@ -136,3 +136,27 @@ body {
 .prose ol ol ol {
   list-style-type: lower-roman !important;
 }
+
+/* Modal overlay - solid background without GPU-intensive blur */
+/* Replaces backdrop-blur-sm for better performance */
+/* Old: bg-black/60 backdrop-blur-sm or bg-black/70 backdrop-blur-sm */
+/* New: bg-black/85 (solid, no blur) */
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+/* Reduced motion preference - accessibility best practice */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce {
+    animation: none !important;
+  }
+
+  .transition-all,
+  .transition-colors,
+  .transition-opacity,
+  .transition-transform {
+    transition: none !important;
+  }
+}

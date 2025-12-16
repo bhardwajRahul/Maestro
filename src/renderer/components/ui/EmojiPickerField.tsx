@@ -145,7 +145,7 @@ export function EmojiPickerField({
       {isOpen && (
         <div
           ref={overlayRef}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]"
+          className="fixed inset-0 modal-overlay flex items-center justify-center z-[60]"
           onClick={handleBackdropClick}
           onKeyDown={handleOverlayKeyDown}
           tabIndex={0}

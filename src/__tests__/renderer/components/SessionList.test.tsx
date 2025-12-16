@@ -62,6 +62,17 @@ vi.mock('../../../renderer/services/git', () => ({
   },
 }));
 
+// Mock GitStatusContext to avoid Provider requirement
+vi.mock('../../../renderer/contexts/GitStatusContext', () => ({
+  useGitStatus: () => ({
+    gitStatusMap: new Map(),
+    refreshGitStatus: vi.fn().mockResolvedValue(undefined),
+    isLoading: false,
+    getFileCount: () => 0,
+    getStatus: () => undefined,
+  }),
+}));
+
 // Add tunnel mock to window.maestro
 beforeEach(() => {
   (window.maestro as Record<string, unknown>).tunnel = {

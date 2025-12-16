@@ -1315,7 +1315,7 @@ describe('AutoRunSetupModal', () => {
       });
 
       const dialog = screen.getByRole('dialog');
-      expect(dialog).toHaveClass('backdrop-blur-sm');
+      expect(dialog).toHaveClass('modal-overlay');
     });
 
     it('has animation classes', async () => {

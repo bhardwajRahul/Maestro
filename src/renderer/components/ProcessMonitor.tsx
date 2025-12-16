@@ -719,7 +719,7 @@ export function ProcessMonitor(props: ProcessMonitorProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-100"
+      className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div

@@ -177,8 +177,8 @@ describe('RenameGroupModal', () => {
       const dialog = screen.getByRole('dialog');
       expect(dialog).toBeInTheDocument();
 
-      // Check that theme styling is applied (backdrop is fixed and has blur)
-      expect(dialog.className).toContain('backdrop-blur-sm');
+      // Check that theme styling is applied (backdrop is fixed and has modal overlay)
+      expect(dialog.className).toContain('modal-overlay');
     });
   });
 
