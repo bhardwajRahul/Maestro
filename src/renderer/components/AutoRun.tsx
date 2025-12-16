@@ -805,24 +805,34 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     if (matchPosition >= 0 && textareaRef.current) {
       const textarea = textareaRef.current;
 
-      // Create a temporary element to measure text height accurately
+      // Create a temporary element to measure text height up to the match
       const measureDiv = document.createElement('div');
-      measureDiv.style.cssText = window.getComputedStyle(textarea).cssText;
+      const computedStyle = window.getComputedStyle(textarea);
+      measureDiv.style.font = computedStyle.font;
+      measureDiv.style.fontSize = computedStyle.fontSize;
+      measureDiv.style.lineHeight = computedStyle.lineHeight;
+      measureDiv.style.padding = computedStyle.padding;
+      measureDiv.style.border = computedStyle.border;
+      measureDiv.style.boxSizing = computedStyle.boxSizing;
       measureDiv.style.height = 'auto';
       measureDiv.style.position = 'absolute';
       measureDiv.style.visibility = 'hidden';
       measureDiv.style.whiteSpace = 'pre-wrap';
       measureDiv.style.wordWrap = 'break-word';
       measureDiv.style.width = `${textarea.clientWidth}px`;
+      measureDiv.style.overflow = 'hidden';
 
-      // Set content up to the match position
+      // Set content up to the match position to measure vertical offset
       const textBeforeMatch = localContent.substring(0, matchPosition);
       measureDiv.textContent = textBeforeMatch;
       document.body.appendChild(measureDiv);
 
-      const scrollTarget = Math.max(0, measureDiv.scrollHeight - textarea.clientHeight / 2);
+      // The height of the measureDiv is the vertical position of the match
+      const matchVerticalPos = measureDiv.scrollHeight;
       document.body.removeChild(measureDiv);
 
+      // Scroll to center the match in the viewport
+      const scrollTarget = Math.max(0, matchVerticalPos - textarea.clientHeight / 2);
       textarea.scrollTop = scrollTarget;
 
       // Select the match text to highlight it
