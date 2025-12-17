@@ -227,13 +227,45 @@ describe('InputArea', () => {
       expect(screen.getByPlaceholderText('Talking to MySession powered by Claude')).toBeInTheDocument();
     });
 
-    it('shows attach image button in AI mode', () => {
+    it('shows attach image button in AI mode when agent supports image input', () => {
       const props = createDefaultProps({
         session: createMockSession({ inputMode: 'ai' }),
       });
       render(<InputArea {...props} />);
 
       expect(screen.getByTitle('Attach Image')).toBeInTheDocument();
+    });
+
+    it('hides attach image button when agent does not support image input', async () => {
+      // Mock capabilities to return false for supportsImageInput
+      const useAgentCapabilitiesMock = await import('../../../renderer/hooks/useAgentCapabilities');
+      vi.mocked(useAgentCapabilitiesMock.useAgentCapabilities).mockReturnValueOnce({
+        capabilities: {
+          supportsResume: true,
+          supportsReadOnlyMode: true,
+          supportsJsonOutput: true,
+          supportsSessionId: true,
+          supportsImageInput: false, // Not supported
+          supportsSlashCommands: true,
+          supportsSessionStorage: false,
+          supportsCostTracking: false,
+          supportsUsageStats: false,
+          supportsBatchMode: false,
+          supportsStreaming: true,
+          supportsResultMessages: true,
+        },
+        loading: false,
+        error: null,
+        refresh: vi.fn(),
+        hasCapability: vi.fn((cap: string) => cap !== 'supportsImageInput'),
+      });
+
+      const props = createDefaultProps({
+        session: createMockSession({ inputMode: 'ai', toolType: 'opencode' }),
+      });
+      render(<InputArea {...props} />);
+
+      expect(screen.queryByTitle('Attach Image')).not.toBeInTheDocument();
     });
 
     it('shows prompt composer button when onOpenPromptComposer is provided', () => {

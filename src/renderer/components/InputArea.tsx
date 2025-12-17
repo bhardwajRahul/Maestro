@@ -630,7 +630,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
                   <PenLine className="w-4 h-4"/>
                 </button>
               )}
-              {session.inputMode === 'ai' && (
+              {session.inputMode === 'ai' && hasCapability('supportsImageInput') && (
                 <button
                   onClick={() => document.getElementById('image-file-input')?.click()}
                   className="p-1 hover:bg-white/10 rounded opacity-50 hover:opacity-100"
