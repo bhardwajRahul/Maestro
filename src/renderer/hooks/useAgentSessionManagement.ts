@@ -193,7 +193,8 @@ export function useAgentSessionManagement(
     sessionName?: string,
     starred?: boolean
   ) => {
-    if (!activeSession?.cwd) return;
+    // Use projectRoot (not cwd) for consistent session storage access
+    if (!activeSession?.projectRoot) return;
 
     // Check if a tab with this agentSessionId already exists
     const existingTab = activeSession.aiTabs?.find(tab => tab.agentSessionId === agentSessionId);
@@ -215,10 +216,11 @@ export function useAgentSessionManagement(
         messages = providedMessages;
       } else {
         // Load the session messages using the generic agentSessions API
+        // Use projectRoot (not cwd) for consistent session storage access
         const agentId = activeSession.toolType || 'claude-code';
         const result = await window.maestro.agentSessions.read(
           agentId,
-          activeSession.cwd,
+          activeSession.projectRoot,
           agentSessionId,
           { offset: 0, limit: 100 }
         );
@@ -277,7 +279,7 @@ export function useAgentSessionManagement(
     } catch (error) {
       console.error('Failed to resume session:', error);
     }
-  }, [activeSession?.cwd, activeSession?.id, activeSession?.aiTabs, activeSession?.toolType, setSessions, setActiveAgentSessionId, defaultSaveToHistory]);
+  }, [activeSession?.projectRoot, activeSession?.id, activeSession?.aiTabs, activeSession?.toolType, setSessions, setActiveAgentSessionId, defaultSaveToHistory]);
 
   // Update refs for slash command functions (so other handlers can access latest versions)
   addHistoryEntryRef.current = addHistoryEntry;

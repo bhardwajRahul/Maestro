@@ -17,7 +17,7 @@ import { groupChatEmitters } from './ipc/handlers/groupChat';
 import { routeModeratorResponse, routeAgentResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback, markParticipantResponded, spawnModeratorSynthesis } from './group-chat/group-chat-router';
 import { updateParticipant, loadGroupChat } from './group-chat/group-chat-storage';
 import { initializeSessionStorages } from './storage';
-import { initializeOutputParsers } from './parsers';
+import { initializeOutputParsers, getOutputParser } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import { initAutoUpdater } from './auto-updater';
 
@@ -1735,11 +1735,65 @@ function setupIpcHandlers() {
 const groupChatOutputBuffers = new Map<string, string>();
 
 /**
- * Extract text content from Claude's stream-json output format.
- * The output is JSONL (JSON Lines) with different message types.
- * We extract text from 'assistant' and 'result' messages.
+ * Extract text content from agent JSON output format.
+ * Uses the registered output parser for the given agent type.
+ * Different agents have different output formats:
+ * - Claude: { type: 'result', result: '...' } and { type: 'assistant', message: { content: ... } }
+ * - OpenCode: { type: 'text', part: { text: '...' } } and { type: 'step_finish', part: { reason: 'stop' } }
+ *
+ * @param rawOutput - The raw JSONL output from the agent
+ * @param agentType - The agent type (e.g., 'claude-code', 'opencode')
+ * @returns Extracted text content
  */
-function extractTextFromStreamJson(rawOutput: string): string {
+function extractTextFromAgentOutput(rawOutput: string, agentType: string): string {
+  const parser = getOutputParser(agentType);
+
+  // If no parser found, try a generic extraction
+  if (!parser) {
+    logger.warn(`No parser found for agent type '${agentType}', using generic extraction`, '[GroupChat]');
+    return extractTextGeneric(rawOutput);
+  }
+
+  const textParts: string[] = [];
+  const lines = rawOutput.split('\n');
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const event = parser.parseJsonLine(line);
+    if (!event) continue;
+
+    // Extract text based on event type
+    if (event.type === 'result' && event.text) {
+      // Result message is the authoritative final response
+      return event.text;
+    }
+
+    if (event.type === 'text' && event.text) {
+      textParts.push(event.text);
+    }
+  }
+
+  return textParts.join('');
+}
+
+/**
+ * Extract text content from stream-json output (JSONL).
+ * Uses the agent-specific parser when the agent type is known.
+ */
+function extractTextFromStreamJson(rawOutput: string, agentType?: string): string {
+  if (agentType) {
+    return extractTextFromAgentOutput(rawOutput, agentType);
+  }
+
+  return extractTextGeneric(rawOutput);
+}
+
+/**
+ * Generic text extraction fallback for unknown agent types.
+ * Tries common patterns for JSON output.
+ */
+function extractTextGeneric(rawOutput: string): string {
   const textParts: string[] = [];
   const lines = rawOutput.split('\n');
 
@@ -1749,31 +1803,19 @@ function extractTextFromStreamJson(rawOutput: string): string {
     try {
       const msg = JSON.parse(line);
 
-      // Handle result messages (final complete response)
-      if (msg.type === 'result' && msg.result) {
-        // Result message contains the complete final response
-        // Return just this as it's the authoritative answer
-        return msg.result;
-      }
-
-      // Handle assistant messages (streaming partial responses)
-      if (msg.type === 'assistant' && msg.message?.content) {
+      // Try common patterns
+      if (msg.result) return msg.result;
+      if (msg.text) textParts.push(msg.text);
+      if (msg.part?.text) textParts.push(msg.part.text);
+      if (msg.message?.content) {
         const content = msg.message.content;
         if (typeof content === 'string') {
           textParts.push(content);
-        } else if (Array.isArray(content)) {
-          // Array of content blocks - extract text from text blocks
-          for (const block of content) {
-            if (block.type === 'text' && block.text) {
-              textParts.push(block.text);
-            }
-          }
         }
       }
     } catch {
-      // Not valid JSON - include raw text (might be stderr or other output)
-      // But skip common non-content lines
-      if (!line.startsWith('{') && !line.includes('session_id')) {
+      // Not valid JSON - include raw text if it looks like content
+      if (!line.startsWith('{') && !line.includes('session_id') && !line.includes('sessionID')) {
         textParts.push(line);
       }
     }
@@ -1849,14 +1891,28 @@ function setupProcessListeners() {
         // Route the buffered output now that process is complete
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         if (bufferedOutput) {
-          // Parse the stream-json output to extract actual text content
-          const parsedText = extractTextFromStreamJson(bufferedOutput);
-          if (parsedText.trim()) {
-            routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
-              logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
-            });
-          }
-          groupChatOutputBuffers.delete(sessionId);
+          void (async () => {
+            try {
+              const chat = await loadGroupChat(groupChatId);
+              const agentType = chat?.moderatorAgentId;
+              const parsedText = extractTextFromStreamJson(bufferedOutput, agentType);
+              if (parsedText.trim()) {
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
+                  logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
+                });
+              }
+            } catch (err) {
+              logger.error('[GroupChat] Failed to load chat for moderator output parsing', 'ProcessListener', { error: String(err) });
+              const parsedText = extractTextFromStreamJson(bufferedOutput);
+              if (parsedText.trim()) {
+                routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(routeErr => {
+                  logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(routeErr) });
+                });
+              }
+            }
+          })().finally(() => {
+            groupChatOutputBuffers.delete(sessionId);
+          });
         }
         groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
         // Don't send to regular exit handler
@@ -1872,14 +1928,28 @@ function setupProcessListeners() {
         // Route the buffered output now that process is complete
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         if (bufferedOutput) {
-          // Parse the stream-json output to extract actual text content
-          const parsedText = extractTextFromStreamJson(bufferedOutput);
-          if (parsedText.trim()) {
-            routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(err => {
-              logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
-            });
-          }
-          groupChatOutputBuffers.delete(sessionId);
+          void (async () => {
+            try {
+              const chat = await loadGroupChat(groupChatId);
+              const agentType = chat?.participants.find(p => p.name === participantName)?.agentId;
+              const parsedText = extractTextFromStreamJson(bufferedOutput, agentType);
+              if (parsedText.trim()) {
+                routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(err => {
+                  logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
+                });
+              }
+            } catch (err) {
+              logger.error('[GroupChat] Failed to load chat for participant output parsing', 'ProcessListener', { error: String(err), participant: participantName });
+              const parsedText = extractTextFromStreamJson(bufferedOutput);
+              if (parsedText.trim()) {
+                routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(routeErr => {
+                  logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(routeErr), participant: participantName });
+                });
+              }
+            }
+          })().finally(() => {
+            groupChatOutputBuffers.delete(sessionId);
+          });
         }
 
         // Mark participant as responded and check if we should spawn synthesis
