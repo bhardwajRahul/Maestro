@@ -3139,7 +3139,7 @@ export default function MaestroConsole() {
     if (!chat) return;
 
     showConfirmation(
-      `Are you sure you want to delete "${chat.name}"? This action cannot be undone.`,
+      `Are you sure you want to delete the group chat "${chat.name}"? This action cannot be undone.`,
       async () => {
         await window.maestro.groupChat.delete(id);
         setGroupChats(prev => prev.filter(c => c.id !== id));
@@ -3155,7 +3155,7 @@ export default function MaestroConsole() {
     if (!session) return;
 
     showConfirmation(
-      `Are you sure you want to delete "${session.name}"? This action cannot be undone.`,
+      `Are you sure you want to delete the agent "${session.name}"? This action cannot be undone.`,
       async () => {
         // Kill both processes for this session
         try {

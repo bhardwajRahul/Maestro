@@ -1734,6 +1734,54 @@ function setupIpcHandlers() {
 // We buffer output and only route it on process exit to avoid duplicate messages from streaming chunks
 const groupChatOutputBuffers = new Map<string, string>();
 
+/**
+ * Extract text content from Claude's stream-json output format.
+ * The output is JSONL (JSON Lines) with different message types.
+ * We extract text from 'assistant' and 'result' messages.
+ */
+function extractTextFromStreamJson(rawOutput: string): string {
+  const textParts: string[] = [];
+  const lines = rawOutput.split('\n');
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    try {
+      const msg = JSON.parse(line);
+
+      // Handle result messages (final complete response)
+      if (msg.type === 'result' && msg.result) {
+        // Result message contains the complete final response
+        // Return just this as it's the authoritative answer
+        return msg.result;
+      }
+
+      // Handle assistant messages (streaming partial responses)
+      if (msg.type === 'assistant' && msg.message?.content) {
+        const content = msg.message.content;
+        if (typeof content === 'string') {
+          textParts.push(content);
+        } else if (Array.isArray(content)) {
+          // Array of content blocks - extract text from text blocks
+          for (const block of content) {
+            if (block.type === 'text' && block.text) {
+              textParts.push(block.text);
+            }
+          }
+        }
+      }
+    } catch {
+      // Not valid JSON - include raw text (might be stderr or other output)
+      // But skip common non-content lines
+      if (!line.startsWith('{') && !line.includes('session_id')) {
+        textParts.push(line);
+      }
+    }
+  }
+
+  return textParts.join('');
+}
+
 // Handle process output streaming (set up after initialization)
 function setupProcessListeners() {
   if (processManager) {
@@ -1801,9 +1849,13 @@ function setupProcessListeners() {
         // Route the buffered output now that process is complete
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         if (bufferedOutput) {
-          routeModeratorResponse(groupChatId, bufferedOutput, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
-            logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
-          });
+          // Parse the stream-json output to extract actual text content
+          const parsedText = extractTextFromStreamJson(bufferedOutput);
+          if (parsedText.trim()) {
+            routeModeratorResponse(groupChatId, parsedText, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
+              logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
+            });
+          }
           groupChatOutputBuffers.delete(sessionId);
         }
         groupChatEmitters.emitStateChange?.(groupChatId, 'idle');
@@ -1820,9 +1872,13 @@ function setupProcessListeners() {
         // Route the buffered output now that process is complete
         const bufferedOutput = groupChatOutputBuffers.get(sessionId);
         if (bufferedOutput) {
-          routeAgentResponse(groupChatId, participantName, bufferedOutput, processManager ?? undefined).catch(err => {
-            logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
-          });
+          // Parse the stream-json output to extract actual text content
+          const parsedText = extractTextFromStreamJson(bufferedOutput);
+          if (parsedText.trim()) {
+            routeAgentResponse(groupChatId, participantName, parsedText, processManager ?? undefined).catch(err => {
+              logger.error('[GroupChat] Failed to route agent response', 'ProcessListener', { error: String(err), participant: participantName });
+            });
+          }
           groupChatOutputBuffers.delete(sessionId);
         }
 

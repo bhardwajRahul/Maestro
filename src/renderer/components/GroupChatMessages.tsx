@@ -93,9 +93,10 @@ export function GroupChatMessages({
     }
   }, [messages]);
 
-  // Memoize participant colors to ensure consistency
+  // Memoize participant colors to ensure consistency with GroupChatParticipants
+  // Include 'Moderator' at index 0 to match the participant panel's color assignment
   const participantColors = useMemo(() => {
-    return buildParticipantColorMap(participants.map(p => p.name), theme);
+    return buildParticipantColorMap(['Moderator', ...participants.map(p => p.name)], theme);
   }, [participants, theme]);
 
   const getParticipantColor = (name: string): string => {
@@ -168,8 +169,9 @@ export function GroupChatMessages({
             : msg.content;
 
           // Get sender color for non-user messages
+          // Use 'Moderator' (capitalized) to match the color map key
           const senderColor = msg.from === 'moderator'
-            ? theme.colors.warning
+            ? getParticipantColor('Moderator')
             : getParticipantColor(msg.from);
 
           return (

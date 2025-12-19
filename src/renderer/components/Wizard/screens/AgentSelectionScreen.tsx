@@ -952,20 +952,28 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                 )}
 
                 {/* Customize button for supported agents (shown even if not detected, so user can set custom path) */}
+                {/* Note: Using div with role="button" to avoid nested button warning */}
                 {isSupported && (
-                  <button
+                  <div
+                    role="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenConfig(tile.id);
                     }}
-                    className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 mt-2 rounded text-[10px] hover:bg-white/10 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.stopPropagation();
+                        handleOpenConfig(tile.id);
+                      }
+                    }}
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 mt-2 rounded text-[10px] hover:bg-white/10 transition-colors cursor-pointer"
                     style={{ color: theme.colors.textDim }}
                     title="Customize agent settings"
                     tabIndex={-1}
                   >
                     <Settings className="w-3 h-3" />
                     Customize
-                  </button>
+                  </div>
                 )}
               </button>
             );
