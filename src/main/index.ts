@@ -14,7 +14,7 @@ import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
 import { registerGitHandlers, registerAutorunHandlers, registerPlaybooksHandlers, registerHistoryHandlers, registerAgentsHandlers, registerProcessHandlers, registerPersistenceHandlers, registerSystemHandlers, registerClaudeHandlers, registerAgentSessionsHandlers, registerGroupChatHandlers, setupLoggerEventForwarding } from './ipc/handlers';
 import { groupChatEmitters } from './ipc/handlers/groupChat';
-import { routeModeratorResponse, setGetSessionsCallback } from './group-chat/group-chat-router';
+import { routeModeratorResponse, setGetSessionsCallback, setGetCustomEnvVarsCallback } from './group-chat/group-chat-router';
 import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
@@ -896,11 +896,18 @@ function setupIpcHandlers() {
   initializeSessionStorages();
   registerAgentSessionsHandlers({ getMainWindow: () => mainWindow });
 
+  // Helper to get custom env vars for an agent
+  const getCustomEnvVarsForAgent = (agentId: string): Record<string, string> | undefined => {
+    const allConfigs = agentConfigsStore.get('configs', {});
+    return allConfigs[agentId]?.customEnvVars as Record<string, string> | undefined;
+  };
+
   // Register Group Chat handlers
   registerGroupChatHandlers({
     getMainWindow: () => mainWindow,
     getProcessManager: () => processManager,
     getAgentDetector: () => agentDetector,
+    getCustomEnvVars: getCustomEnvVarsForAgent,
   });
 
   // Set up callback for group chat router to lookup sessions for auto-add @mentions
@@ -913,6 +920,9 @@ function setupIpcHandlers() {
       cwd: s.cwd || s.fullPath || process.env.HOME || '/tmp',
     }));
   });
+
+  // Set up callback for group chat router to lookup custom env vars for agents
+  setGetCustomEnvVarsCallback(getCustomEnvVarsForAgent);
 
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(() => mainWindow);
@@ -1735,7 +1745,7 @@ function setupProcessListeners() {
         };
         groupChatEmitters.emitMessage?.(groupChatId, moderatorMessage);
         // Route the response (handles @mentions and logging)
-        routeModeratorResponse(groupChatId, data, processManager ?? undefined).catch(err => {
+        routeModeratorResponse(groupChatId, data, processManager ?? undefined, agentDetector ?? undefined).catch(err => {
           logger.error('[GroupChat] Failed to route moderator response', 'ProcessListener', { error: String(err) });
         });
         return; // Don't send to regular process:data handler

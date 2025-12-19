@@ -106,6 +106,7 @@ export interface GroupChatHandlerDependencies {
   getMainWindow: () => BrowserWindow | null;
   getProcessManager: () => GenericProcessManager | null;
   getAgentDetector: () => AgentDetector | null;
+  getCustomEnvVars?: (agentId: string) => Record<string, string> | undefined;
 }
 
 /**
@@ -118,7 +119,7 @@ export interface GroupChatHandlerDependencies {
  * - Participants: addParticipant, sendToParticipant, removeParticipant
  */
 export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): void {
-  const { getMainWindow, getProcessManager, getAgentDetector } = deps;
+  const { getMainWindow, getProcessManager, getAgentDetector, getCustomEnvVars } = deps;
 
   // ========== Storage Handlers ==========
 
@@ -291,14 +292,25 @@ export function registerGroupChatHandlers(deps: GroupChatHandlerDependencies): v
     'groupChat:addParticipant',
     withIpcErrorLogging(
       handlerOpts('addParticipant'),
-      async (id: string, name: string, agentId: string): Promise<GroupChatParticipant> => {
+      async (id: string, name: string, agentId: string, cwd?: string): Promise<GroupChatParticipant> => {
         const processManager = getProcessManager();
         if (!processManager) {
           throw new Error('Process manager not initialized');
         }
 
+        const agentDetector = getAgentDetector();
+        const customEnvVars = getCustomEnvVars?.(agentId);
+
         logger.info(`Adding participant ${name} (${agentId}) to ${id}`, LOG_CONTEXT);
-        const participant = await addParticipant(id, name, agentId, processManager);
+        const participant = await addParticipant(
+          id,
+          name,
+          agentId,
+          processManager,
+          cwd || process.env.HOME || '/tmp',
+          agentDetector ?? undefined,
+          customEnvVars
+        );
         logger.info(`Added participant: ${name}`, LOG_CONTEXT);
         return participant;
       }

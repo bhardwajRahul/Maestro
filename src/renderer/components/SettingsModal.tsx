@@ -868,9 +868,16 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
               {/* Settings Storage Location */}
               <div
-                className="flex items-start gap-3 p-4 rounded-xl border"
+                className="flex items-start gap-3 p-4 rounded-xl border relative"
                 style={{ backgroundColor: theme.colors.bgMain, borderColor: theme.colors.border }}
               >
+                {/* BETA Badge */}
+                <div
+                  className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+                  style={{ backgroundColor: theme.colors.warning + '30', color: theme.colors.warning }}
+                >
+                  Beta
+                </div>
                 <div
                   className="p-2 rounded-lg flex-shrink-0"
                   style={{ backgroundColor: theme.colors.accent + '20' }}
@@ -880,8 +887,11 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase font-bold opacity-50 mb-1">Storage Location</p>
                   <p className="font-semibold mb-1">Settings folder</p>
-                  <p className="text-xs opacity-60 mb-4">
+                  <p className="text-xs opacity-60 mb-2">
                     Choose where Maestro stores settings, sessions, and groups. Use a synced folder (iCloud Drive, Dropbox, OneDrive) to share across devices.
+                  </p>
+                  <p className="text-xs opacity-50 mb-4 italic">
+                    Note: Only run Maestro on one device at a time to avoid sync conflicts.
                   </p>
 
                   {/* Default Location */}

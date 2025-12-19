@@ -18,6 +18,7 @@ import {
 } from './group-chat-storage';
 import { appendToLog } from './group-chat-log';
 import { IProcessManager, isModeratorActive } from './group-chat-moderator';
+import type { AgentDetector } from '../agent-detector';
 
 /**
  * In-memory store for active participant sessions.
@@ -60,6 +61,8 @@ Be collaborative and professional. Your responses will be shared with the modera
  * @param agentId - The agent type to use (e.g., 'claude-code')
  * @param processManager - The process manager to use for spawning
  * @param cwd - Working directory for the agent (defaults to home directory)
+ * @param agentDetector - Optional agent detector for resolving agent paths
+ * @param customEnvVars - Optional custom environment variables for the agent
  * @returns The created participant
  */
 export async function addParticipant(
@@ -67,7 +70,9 @@ export async function addParticipant(
   name: string,
   agentId: string,
   processManager: IProcessManager,
-  cwd: string = process.env.HOME || '/tmp'
+  cwd: string = process.env.HOME || '/tmp',
+  agentDetector?: AgentDetector,
+  customEnvVars?: Record<string, string>
 ): Promise<GroupChatParticipant> {
   const chat = await loadGroupChat(groupChatId);
   if (!chat) {
@@ -84,6 +89,19 @@ export async function addParticipant(
     throw new Error(`Participant with name '${name}' already exists in group chat`);
   }
 
+  // Resolve the agent configuration to get the executable command
+  let command = agentId;
+  let args: string[] = [];
+
+  if (agentDetector) {
+    const agent = await agentDetector.getAgent(agentId);
+    if (!agent || !agent.available) {
+      throw new Error(`Agent '${agentId}' is not available`);
+    }
+    command = agent.path || agent.command;
+    args = [...agent.args];
+  }
+
   // Generate session ID for this participant
   const sessionId = `group-chat-${groupChatId}-participant-${name}-${uuidv4()}`;
 
@@ -95,10 +113,11 @@ export async function addParticipant(
     sessionId,
     toolType: agentId,
     cwd,
-    command: agentId,
-    args: [],
+    command,
+    args,
     readOnlyMode: false, // Participants can make changes
     prompt,
+    customEnvVars,
   });
 
   if (!result.success) {

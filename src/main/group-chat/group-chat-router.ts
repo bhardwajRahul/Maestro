@@ -41,8 +41,16 @@ export interface SessionInfo {
  */
 export type GetSessionsCallback = () => SessionInfo[];
 
+/**
+ * Callback type for getting custom environment variables for an agent.
+ */
+export type GetCustomEnvVarsCallback = (agentId: string) => Record<string, string> | undefined;
+
 // Module-level callback for session lookup
 let getSessionsCallback: GetSessionsCallback | null = null;
+
+// Module-level callback for custom env vars lookup
+let getCustomEnvVarsCallback: GetCustomEnvVarsCallback | null = null;
 
 /**
  * Sets the callback for getting available sessions.
@@ -50,6 +58,14 @@ let getSessionsCallback: GetSessionsCallback | null = null;
  */
 export function setGetSessionsCallback(callback: GetSessionsCallback): void {
   getSessionsCallback = callback;
+}
+
+/**
+ * Sets the callback for getting custom environment variables.
+ * Called from index.ts during initialization.
+ */
+export function setGetCustomEnvVarsCallback(callback: GetCustomEnvVarsCallback): void {
+  getCustomEnvVarsCallback = callback;
 }
 
 /**
@@ -66,8 +82,9 @@ export function extractMentions(
   const participantNames = new Set(participants.map((p) => p.name));
   const mentions: string[] = [];
 
-  // Match @Name patterns (alphanumeric and underscores)
-  const mentionPattern = /@(\w+)/g;
+  // Match @Name patterns (alphanumeric, underscores, dots, and hyphens)
+  // Supports names like @RunMaestro.ai, @my-agent, etc.
+  const mentionPattern = /@([\w.-]+)/g;
   let match;
 
   while ((match = mentionPattern.exec(text)) !== null) {
@@ -89,8 +106,9 @@ export function extractMentions(
 export function extractAllMentions(text: string): string[] {
   const mentions: string[] = [];
 
-  // Match @Name patterns (alphanumeric and underscores)
-  const mentionPattern = /@(\w+)/g;
+  // Match @Name patterns (alphanumeric, underscores, dots, and hyphens)
+  // Supports names like @RunMaestro.ai, @my-agent, etc.
+  const mentionPattern = /@([\w.-]+)/g;
   let match;
 
   while ((match = mentionPattern.exec(text)) !== null) {
@@ -122,13 +140,65 @@ export async function routeUserMessage(
   agentDetector?: AgentDetector,
   readOnly?: boolean
 ): Promise<void> {
-  const chat = await loadGroupChat(groupChatId);
+  let chat = await loadGroupChat(groupChatId);
   if (!chat) {
     throw new Error(`Group chat not found: ${groupChatId}`);
   }
 
   if (!isModeratorActive(groupChatId)) {
     throw new Error(`Moderator is not active for group chat: ${groupChatId}`);
+  }
+
+  // Auto-add participants mentioned by the user if they match available sessions
+  if (processManager && agentDetector && getSessionsCallback) {
+    const userMentions = extractAllMentions(message);
+    const sessions = getSessionsCallback();
+    const existingParticipantNames = new Set(chat.participants.map(p => p.name));
+
+    for (const mentionedName of userMentions) {
+      // Skip if already a participant
+      if (existingParticipantNames.has(mentionedName)) {
+        continue;
+      }
+
+      // Find matching session by name
+      const matchingSession = sessions.find(s =>
+        s.name === mentionedName && s.toolType !== 'terminal'
+      );
+
+      if (matchingSession) {
+        try {
+          console.log(`[GroupChatRouter] Auto-adding participant @${mentionedName} from user mention (session ${matchingSession.id})`);
+          // Get custom env vars for this agent type
+          const customEnvVars = getCustomEnvVarsCallback?.(matchingSession.toolType);
+          await addParticipant(
+            groupChatId,
+            mentionedName,
+            matchingSession.toolType,
+            processManager,
+            matchingSession.cwd,
+            agentDetector,
+            customEnvVars
+          );
+          existingParticipantNames.add(mentionedName);
+
+          // Emit participant changed event so UI updates
+          const updatedChatForEmit = await loadGroupChat(groupChatId);
+          if (updatedChatForEmit) {
+            groupChatEmitters.emitParticipantsChanged?.(groupChatId, updatedChatForEmit.participants);
+          }
+        } catch (error) {
+          console.error(`[GroupChatRouter] Failed to auto-add participant ${mentionedName} from user mention:`, error);
+          // Continue with other participants even if one fails
+        }
+      }
+    }
+
+    // Reload chat to get updated participants list
+    chat = await loadGroupChat(groupChatId);
+    if (!chat) {
+      throw new Error(`Group chat not found after participant update: ${groupChatId}`);
+    }
   }
 
   // Log the message as coming from user
@@ -229,11 +299,13 @@ ${message}`;
  * @param groupChatId - The ID of the group chat
  * @param message - The message from the moderator
  * @param processManager - The process manager (optional)
+ * @param agentDetector - The agent detector for resolving agent commands (optional)
  */
 export async function routeModeratorResponse(
   groupChatId: string,
   message: string,
-  processManager?: IProcessManager
+  processManager?: IProcessManager,
+  agentDetector?: AgentDetector
 ): Promise<void> {
   const chat = await loadGroupChat(groupChatId);
   if (!chat) {
@@ -265,12 +337,16 @@ export async function routeModeratorResponse(
       if (matchingSession) {
         try {
           console.log(`[GroupChatRouter] Auto-adding participant @${mentionedName} from session ${matchingSession.id}`);
+          // Get custom env vars for this agent type
+          const customEnvVars = getCustomEnvVarsCallback?.(matchingSession.toolType);
           await addParticipant(
             groupChatId,
             mentionedName,
             matchingSession.toolType,
             processManager,
-            matchingSession.cwd
+            matchingSession.cwd,
+            agentDetector,
+            customEnvVars
           );
           existingParticipantNames.add(mentionedName);
 

@@ -857,7 +857,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                 }}
                 disabled={!canSelect}
                 className={`
-                  relative flex flex-col items-center justify-center p-6 rounded-xl
+                  relative flex flex-col items-center justify-center pt-6 px-6 pb-10 rounded-xl
                   border-2 transition-all duration-200 outline-none min-w-[160px]
                   ${canSelect ? 'cursor-pointer' : 'cursor-not-allowed'}
                 `}
@@ -962,14 +962,14 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
                   </span>
                 )}
 
-                {/* Customize button for supported agents */}
+                {/* Customize button for supported agents (shown even if not detected, so user can set custom path) */}
                 {isSupported && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenConfig(tile.id);
                     }}
-                    className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded text-[10px] hover:bg-white/10 transition-colors"
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 mt-2 rounded text-[10px] hover:bg-white/10 transition-colors"
                     style={{ color: theme.colors.textDim }}
                     title="Customize agent settings"
                     tabIndex={-1}

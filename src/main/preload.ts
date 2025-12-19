@@ -923,8 +923,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('groupChat:getModeratorSessionId', id),
 
     // Participants
-    addParticipant: (id: string, name: string, agentId: string) =>
-      ipcRenderer.invoke('groupChat:addParticipant', id, name, agentId),
+    addParticipant: (id: string, name: string, agentId: string, cwd?: string) =>
+      ipcRenderer.invoke('groupChat:addParticipant', id, name, agentId, cwd),
     sendToParticipant: (id: string, name: string, message: string, images?: string[]) =>
       ipcRenderer.invoke('groupChat:sendToParticipant', id, name, message, images),
     removeParticipant: (id: string, name: string) =>
@@ -1730,7 +1730,7 @@ export interface MaestroAPI {
     getModeratorSessionId: (id: string) => Promise<string | null>;
 
     // Participants
-    addParticipant: (id: string, name: string, agentId: string) => Promise<{
+    addParticipant: (id: string, name: string, agentId: string, cwd?: string) => Promise<{
       name: string;
       agentId: string;
       sessionId: string;
