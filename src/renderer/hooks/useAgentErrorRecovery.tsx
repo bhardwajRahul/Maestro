@@ -72,12 +72,17 @@ function getRecoveryActionsForError(
     case 'auth_expired':
       // Authentication error - offer to re-authenticate or start new session
       if (options.onAuthenticate) {
+        const isClaude = agentId === 'claude-code';
         actions.push({
           id: 'authenticate',
-          label: 'Re-authenticate',
-          description: 'Log in again to restore access',
+          label: isClaude ? 'Use Terminal' : 'Re-authenticate',
+          description: isClaude
+            ? 'Run "claude login" in terminal'
+            : 'Log in again to restore access',
           primary: true,
-          icon: <KeyRound className="w-4 h-4" />,
+          icon: isClaude
+            ? <Terminal className="w-4 h-4" />
+            : <KeyRound className="w-4 h-4" />,
           onClick: options.onAuthenticate,
         });
       }
@@ -135,8 +140,26 @@ function getRecoveryActionsForError(
       break;
 
     case 'agent_crashed':
-      // Agent crashed - no action buttons needed
-      // User can simply send another message to continue or start fresh
+      // Agent crashed - offer restart or fresh session
+      if (options.onRestartAgent) {
+        actions.push({
+          id: 'restart-agent',
+          label: 'Restart Agent',
+          description: 'Respawn the agent process',
+          primary: true,
+          icon: <RotateCcw className="w-4 h-4" />,
+          onClick: options.onRestartAgent,
+        });
+      }
+      if (options.onNewSession) {
+        actions.push({
+          id: 'new-session',
+          label: 'Start New Session',
+          description: 'Begin a fresh conversation',
+          icon: <MessageSquarePlus className="w-4 h-4" />,
+          onClick: options.onNewSession,
+        });
+      }
       break;
 
     case 'permission_denied':
@@ -167,23 +190,6 @@ function getRecoveryActionsForError(
       }
   }
 
-  // Add agent-specific actions
-  if (agentId === 'claude-code') {
-    // Claude Code specific: offer terminal fallback
-    if (error.type === 'auth_expired') {
-      actions.push({
-        id: 'use-terminal',
-        label: 'Use Terminal',
-        description: 'Run "claude login" in terminal',
-        icon: <Terminal className="w-4 h-4" />,
-        onClick: () => {
-          // This would switch to terminal mode
-          // The actual implementation is handled by the consumer
-        },
-      });
-    }
-  }
-
   return actions;
 }
 
@@ -199,7 +205,14 @@ export function useAgentErrorRecovery(
   const recoveryActions = useMemo(() => {
     if (!error) return [];
     return getRecoveryActionsForError(error, agentId, options);
-  }, [error, agentId, options]);
+  }, [
+    error,
+    agentId,
+    options.onAuthenticate,
+    options.onNewSession,
+    options.onRestartAgent,
+    options.onRetry,
+  ]);
 
   // Handler to execute a recovery action by its ID
   const handleRecovery = useCallback(

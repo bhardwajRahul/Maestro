@@ -1964,6 +1964,19 @@ export default function MaestroConsole() {
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [sessions, handleClearAgentError]);
 
+  const handleAuthenticateAfterError = useCallback((sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+
+    handleClearAgentError(sessionId);
+    setActiveSessionId(sessionId);
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, inputMode: 'terminal' } : s
+    ));
+
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [sessions, handleClearAgentError, setActiveSessionId, setSessions]);
+
   // Use the agent error recovery hook to get recovery actions
   const { recoveryActions } = useAgentErrorRecovery({
     error: errorSession?.agentError,
@@ -1973,8 +1986,7 @@ export default function MaestroConsole() {
     onRetry: errorSession ? () => handleRetryAfterError(errorSession.id) : undefined,
     onClearError: errorSession ? () => handleClearAgentError(errorSession.id) : undefined,
     onRestartAgent: errorSession ? () => handleRestartAgentAfterError(errorSession.id) : undefined,
-    // Note: onAuthenticate is handled by the default action in useAgentErrorRecovery which
-    // adds a "Use Terminal" option that guides users to run "claude login"
+    onAuthenticate: errorSession ? () => handleAuthenticateAfterError(errorSession.id) : undefined,
   });
 
   // Handler to clear group chat error and resume operations
