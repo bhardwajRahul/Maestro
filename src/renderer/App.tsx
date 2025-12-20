@@ -7044,10 +7044,10 @@ export default function MaestroConsole() {
           setEditAgentModalOpen(false);
           setEditAgentSession(null);
         }}
-        onSave={(sessionId, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel) => {
+        onSave={(sessionId, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow) => {
           setSessions(prev => prev.map(s => {
             if (s.id !== sessionId) return s;
-            return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel };
+            return { ...s, name, nudgeMessage, customPath, customArgs, customEnvVars, customModel, customContextWindow };
           }));
         }}
         theme={theme}

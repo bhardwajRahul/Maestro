@@ -154,8 +154,14 @@ export function applyAgentConfigOverrides(
 
 export function getContextWindowValue(
   agent: AgentConfig | null | undefined,
-  agentConfigValues: Record<string, any>
+  agentConfigValues: Record<string, any>,
+  sessionCustomContextWindow?: number
 ): number {
+  // Session-level override takes priority
+  if (typeof sessionCustomContextWindow === 'number' && sessionCustomContextWindow > 0) {
+    return sessionCustomContextWindow;
+  }
+  // Fall back to agent-level config
   const contextWindowOption = agent?.configOptions?.find(option => option.key === 'contextWindow');
   const contextWindowDefault = contextWindowOption?.default ?? 0;
   return typeof agentConfigValues.contextWindow === 'number'

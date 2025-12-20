@@ -444,6 +444,7 @@ export interface Session {
   customEnvVars?: Record<string, string>; // Custom environment variables (overrides agent-level)
   customModel?: string;          // Custom model ID (overrides agent-level)
   customProviderPath?: string;   // Custom provider path (overrides agent-level)
+  customContextWindow?: number;  // Custom context window size (overrides agent-level)
 }
 
 export interface Group {
@@ -497,6 +498,7 @@ export interface ProcessConfig {
   sessionCustomArgs?: string;
   sessionCustomEnvVars?: Record<string, string>;
   sessionCustomModel?: string;
+  sessionCustomContextWindow?: number;
 }
 
 // Directory entry from fs:readDir

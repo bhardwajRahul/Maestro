@@ -49,7 +49,8 @@ interface EditAgentModalProps {
     customPath?: string,
     customArgs?: string,
     customEnvVars?: Record<string, string>,
-    customModel?: string
+    customModel?: string,
+    customContextWindow?: number
   ) => void;
   theme: any;
   session: Session | null;
@@ -664,12 +665,13 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
             .finally(() => setLoadingModels(false));
         }
       });
-      // Load agent config for non-per-session options (like contextWindow)
-      // Model is now per-session, so we only use global config for defaults
+      // Load agent config for defaults, but use session-level overrides when available
+      // Both model and contextWindow are now per-session
       window.maestro.agents.getConfig(session.toolType).then((globalConfig) => {
-        // Use session-level model if set, otherwise use global default
+        // Use session-level values if set, otherwise use global defaults
         const modelValue = session.customModel ?? globalConfig.model ?? '';
-        setAgentConfig({ ...globalConfig, model: modelValue });
+        const contextWindowValue = session.customContextWindow ?? globalConfig.contextWindow;
+        setAgentConfig({ ...globalConfig, model: modelValue, contextWindow: contextWindowValue });
       });
 
       // Load per-session config (stored on the session/agent instance)
@@ -707,10 +709,13 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
     const result = validateEditSession(name, session.id, existingSessions);
     if (!result.valid) return;
 
-    // Get model from agentConfig (which is updated via onConfigChange)
+    // Get model and contextWindow from agentConfig (which is updated via onConfigChange)
     const modelValue = agentConfig.model?.trim() || undefined;
+    const contextWindowValue = typeof agentConfig.contextWindow === 'number' && agentConfig.contextWindow > 0
+      ? agentConfig.contextWindow
+      : undefined;
 
-    // Save with per-session config fields including model
+    // Save with per-session config fields including model and contextWindow
     onSave(
       session.id,
       name,
@@ -718,7 +723,8 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
       customPath.trim() || undefined,
       customArgs.trim() || undefined,
       Object.keys(customEnvVars).length > 0 ? customEnvVars : undefined,
-      modelValue
+      modelValue,
+      contextWindowValue
     );
     onClose();
   }, [session, instanceName, nudgeMessage, customPath, customArgs, customEnvVars, agentConfig, onSave, onClose, existingSessions]);
@@ -925,10 +931,12 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
                   setAgentConfig(prev => ({ ...prev, [key]: value }));
                 }}
                 onConfigBlur={() => {
-                  // Save non-model config options at agent level (e.g., contextWindow as default)
-                  // Model is saved per-session on modal save, not globally
-                  const { model: _model, ...nonModelConfig } = agentConfig;
-                  window.maestro.agents.setConfig(session.toolType, nonModelConfig);
+                  // Both model and contextWindow are now saved per-session on modal save
+                  // Other config options (if any) can still be saved at agent level
+                  const { model: _model, contextWindow: _contextWindow, ...otherConfig } = agentConfig;
+                  if (Object.keys(otherConfig).length > 0) {
+                    window.maestro.agents.setConfig(session.toolType, otherConfig);
+                  }
                 }}
                 availableModels={availableModels}
                 loadingModels={loadingModels}
