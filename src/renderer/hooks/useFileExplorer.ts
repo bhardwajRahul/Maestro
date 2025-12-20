@@ -1,6 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Session } from '../types';
 import { fuzzyMatch } from '../utils/search';
+import {
+  shouldOpenExternally,
+  flattenTree as flattenTreeUtil,
+  getAllFolderPaths as getAllFolderPathsUtil,
+  type FileTreeNode,
+} from '../utils/fileExplorer';
 
 export interface FileNode {
   name: string;
@@ -45,38 +51,6 @@ export function useFileExplorer(
   const [fileTreeFilter, setFileTreeFilter] = useState('');
   const [fileTreeFilterOpen, setFileTreeFilterOpen] = useState(false);
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
-
-  // Helper function to check if file should be opened externally
-  const shouldOpenExternally = (filename: string): boolean => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const externalExtensions = [
-      // Documents
-      'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-      // Images (handled separately for preview, but open externally if double-clicked from file tree)
-      'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp', 'tiff', 'tif', 'heic', 'heif',
-      // macOS/iOS specific
-      'icns', 'car', 'actool',
-      // Design files
-      'psd', 'ai', 'sketch', 'fig', 'xd',
-      // Video
-      'mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'flv', 'm4v',
-      // Audio
-      'mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma',
-      // Archives
-      'zip', 'tar', 'gz', '7z', 'rar', 'bz2', 'xz', 'tgz',
-      // Executables/binaries
-      'exe', 'dmg', 'app', 'deb', 'rpm', 'msi', 'pkg', 'bin',
-      // Compiled/object files
-      'o', 'a', 'so', 'dylib', 'dll', 'class', 'pyc', 'pyo',
-      // Database files
-      'db', 'sqlite', 'sqlite3',
-      // Fonts
-      'ttf', 'otf', 'woff', 'woff2', 'eot',
-      // Other binary formats
-      'iso', 'img', 'vmdk', 'vdi'
-    ];
-    return externalExtensions.includes(ext || '');
-  };
 
   const handleFileClick = async (node: any, path: string, activeSession: Session) => {
     if (node.type === 'file') {
@@ -181,21 +155,6 @@ export function useFileExplorer(
     }));
   };
 
-  // Helper function to get all folder paths recursively
-  const getAllFolderPaths = (nodes: any[], currentPath = ''): string[] => {
-    let paths: string[] = [];
-    nodes.forEach((node) => {
-      if (node.type === 'folder') {
-        const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
-        paths.push(fullPath);
-        if (node.children) {
-          paths = paths.concat(getAllFolderPaths(node.children, fullPath));
-        }
-      }
-    });
-    return paths;
-  };
-
   const expandAllFolders = (
     activeSessionId: string,
     activeSession: Session,
@@ -204,7 +163,7 @@ export function useFileExplorer(
     setSessions(prev => prev.map(s => {
       if (s.id !== activeSessionId) return s;
       if (!s.fileTree) return s;
-      const allFolderPaths = getAllFolderPaths(s.fileTree);
+      const allFolderPaths = getAllFolderPathsUtil(s.fileTree as FileTreeNode[]);
       return { ...s, fileExplorerExpanded: allFolderPaths };
     }));
   };
@@ -219,21 +178,6 @@ export function useFileExplorer(
     }));
   };
 
-  // Flatten file tree for keyboard navigation
-  const flattenTree = (nodes: any[], expandedSet: Set<string>, currentPath = ''): any[] => {
-    let result: any[] = [];
-    nodes.forEach((node) => {
-      const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
-      const isFolder = node.type === 'folder';
-      result.push({ ...node, fullPath, isFolder });
-
-      if (isFolder && expandedSet.has(fullPath) && node.children) {
-        result = result.concat(flattenTree(node.children, expandedSet, fullPath));
-      }
-    });
-    return result;
-  };
-
   // Update flat file list when active session's tree or expanded folders change
   useEffect(() => {
     if (!activeSession || !activeSession.fileTree || !activeSession.fileExplorerExpanded) {
@@ -241,7 +185,7 @@ export function useFileExplorer(
       return;
     }
     const expandedSet = new Set(activeSession.fileExplorerExpanded);
-    setFlatFileList(flattenTree(activeSession.fileTree, expandedSet));
+    setFlatFileList(flattenTreeUtil(activeSession.fileTree as FileTreeNode[], expandedSet));
   }, [activeSession?.fileTree, activeSession?.fileExplorerExpanded]);
 
   // Filter file tree based on search query
@@ -292,7 +236,7 @@ export function useFileExplorer(
     toggleFolder,
     expandAllFolders,
     collapseAllFolders,
-    flattenTree,
+    flattenTree: flattenTreeUtil,
     filteredFileTree,
     shouldOpenExternally,
   };
