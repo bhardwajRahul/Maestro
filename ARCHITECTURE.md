@@ -511,7 +511,7 @@ const numstat = await gitService.getNumstat(cwd);
 ```typescript
 import { processService } from '../services/process';
 
-await processService.spawn(sessionId, config);
+await processService.spawn(config);
 await processService.write(sessionId, 'input\n');
 await processService.interrupt(sessionId);  // SIGINT/Ctrl+C
 await processService.kill(sessionId);

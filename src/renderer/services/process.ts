@@ -4,13 +4,9 @@
  */
 
 import { createIpcMethod } from './ipcWrapper';
+import type { ProcessConfig } from '../types';
 
-export interface ProcessConfig {
-  cwd: string;
-  command: string;
-  args: string[];
-  isTerminal: boolean;
-}
+export type { ProcessConfig } from '../types';
 
 export interface ProcessDataHandler {
   (sessionId: string, data: string): void;
@@ -28,9 +24,9 @@ export const processService = {
   /**
    * Spawn a new process
    */
-  spawn: (sessionId: string, config: ProcessConfig): Promise<void> =>
+  spawn: (config: ProcessConfig): Promise<{ pid: number; success: boolean }> =>
     createIpcMethod({
-      call: () => window.maestro.process.spawn(sessionId, config),
+      call: () => window.maestro.process.spawn(config),
       errorContext: 'Process spawn',
       rethrow: true,
     }),

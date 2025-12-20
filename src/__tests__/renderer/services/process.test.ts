@@ -34,52 +34,70 @@ beforeEach(() => {
 
 describe('processService', () => {
   describe('spawn', () => {
-    const testConfig: ProcessConfig = {
+    const baseConfig = {
+      toolType: 'claude-code',
       cwd: '/path/to/project',
       command: 'claude-code',
       args: ['--print'],
-      isTerminal: false,
     };
 
     test('spawns a process with correct session ID and config', async () => {
-      mockProcess.spawn.mockResolvedValue(undefined);
-
-      await processService.spawn('session-1', testConfig);
-
-      expect(mockProcess.spawn).toHaveBeenCalledWith('session-1', testConfig);
-      expect(mockProcess.spawn).toHaveBeenCalledTimes(1);
-    });
-
-    test('spawns terminal process with isTerminal flag', async () => {
-      const terminalConfig: ProcessConfig = {
-        cwd: '/home/user',
-        command: '/bin/bash',
-        args: [],
-        isTerminal: true,
+      const testConfig: ProcessConfig = {
+        ...baseConfig,
+        sessionId: 'session-1',
       };
       mockProcess.spawn.mockResolvedValue(undefined);
 
-      await processService.spawn('session-terminal', terminalConfig);
+      await processService.spawn(testConfig);
 
-      expect(mockProcess.spawn).toHaveBeenCalledWith('session-terminal', terminalConfig);
+      expect(mockProcess.spawn).toHaveBeenCalledWith(testConfig);
+      expect(mockProcess.spawn).toHaveBeenCalledTimes(1);
+    });
+
+    test('spawns terminal process with terminal tool type', async () => {
+      const terminalConfig: ProcessConfig = {
+        ...baseConfig,
+        sessionId: 'session-terminal',
+        toolType: 'terminal',
+        cwd: '/home/user',
+        command: '/bin/bash',
+        args: [],
+      };
+      mockProcess.spawn.mockResolvedValue(undefined);
+
+      await processService.spawn(terminalConfig);
+
+      expect(mockProcess.spawn).toHaveBeenCalledWith(terminalConfig);
     });
 
     test('throws error and logs when spawn fails', async () => {
       const error = new Error('Failed to spawn process');
+      const testConfig: ProcessConfig = {
+        ...baseConfig,
+        sessionId: 'session-1',
+      };
       mockProcess.spawn.mockRejectedValue(error);
 
-      await expect(processService.spawn('session-1', testConfig)).rejects.toThrow('Failed to spawn process');
+      await expect(processService.spawn(testConfig)).rejects.toThrow('Failed to spawn process');
       expect(console.error).toHaveBeenCalledWith('Process spawn error:', error);
     });
 
     test('handles different session IDs', async () => {
+      const sessionConfigOne: ProcessConfig = {
+        ...baseConfig,
+        sessionId: 'ai-session-123',
+      };
+      const sessionConfigTwo: ProcessConfig = {
+        ...baseConfig,
+        sessionId: 'terminal-session-456',
+      };
       mockProcess.spawn.mockResolvedValue(undefined);
 
-      await processService.spawn('ai-session-123', testConfig);
-      await processService.spawn('terminal-session-456', testConfig);
+      await processService.spawn(sessionConfigOne);
+      await processService.spawn(sessionConfigTwo);
 
-      expect(mockProcess.spawn).toHaveBeenNthCalledWith(1, 'ai-session-123', testConfig);
-      expect(mockProcess.spawn).toHaveBeenNthCalledWith(2, 'terminal-session-456', testConfig);
+      expect(mockProcess.spawn).toHaveBeenNthCalledWith(1, sessionConfigOne);
+      expect(mockProcess.spawn).toHaveBeenNthCalledWith(2, sessionConfigTwo);
     });
   });
 
@@ -445,16 +463,18 @@ describe('processService', () => {
   describe('type exports', () => {
     test('ProcessConfig interface has required properties', () => {
       const config: ProcessConfig = {
+        sessionId: 'session-1',
+        toolType: 'claude-code',
         cwd: '/path',
         command: 'cmd',
         args: ['arg1'],
-        isTerminal: false,
       };
 
+      expect(config.sessionId).toBe('session-1');
+      expect(config.toolType).toBe('claude-code');
       expect(config.cwd).toBe('/path');
       expect(config.command).toBe('cmd');
       expect(config.args).toEqual(['arg1']);
-      expect(config.isTerminal).toBe(false);
     });
 
     test('ProcessDataHandler type signature', () => {

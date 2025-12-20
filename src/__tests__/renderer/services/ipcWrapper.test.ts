@@ -300,7 +300,7 @@ describe('ipcWrapper', () => {
         const createProcessMethod = createIpcMethodFactory('Process', 'rethrow');
 
         // Simulating processService.spawn
-        const spawn = (sessionId: string, config: { cwd: string }) =>
+        const spawn = (config: { cwd: string }) =>
           createProcessMethod(
             async () => {
               // Simulate IPC call that returns void
@@ -309,7 +309,7 @@ describe('ipcWrapper', () => {
             'spawn'
           );
 
-        await expect(spawn('session-1', { cwd: '/path' })).resolves.toBeUndefined();
+        await expect(spawn({ cwd: '/path' })).resolves.toBeUndefined();
       });
     });
   });

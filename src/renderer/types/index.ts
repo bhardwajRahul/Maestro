@@ -486,6 +486,17 @@ export interface ProcessConfig {
   args: string[];
   prompt?: string; // For batch mode agents like Claude (passed as CLI argument)
   shell?: string; // Shell to use for terminal sessions (e.g., 'zsh', 'bash', 'fish')
+  images?: string[]; // Base64 data URLs for images
+  // Agent-specific spawn options (used to build args via agent config)
+  agentSessionId?: string; // For session resume (uses agent's resumeArgs builder)
+  readOnlyMode?: boolean; // For read-only/plan mode (uses agent's readOnlyArgs)
+  modelId?: string; // For model selection (uses agent's modelArgs builder)
+  yoloMode?: boolean; // For YOLO/full-access mode (uses agent's yoloModeArgs)
+  // Per-session overrides (take precedence over agent-level config)
+  sessionCustomPath?: string;
+  sessionCustomArgs?: string;
+  sessionCustomEnvVars?: Record<string, string>;
+  sessionCustomModel?: string;
 }
 
 // Directory entry from fs:readDir
@@ -550,4 +561,3 @@ export interface LeaderboardSubmitResponse {
     longestRun: LeaderboardRankingInfo | null;  // null if no longestRunMs submitted
   };
 }
-
