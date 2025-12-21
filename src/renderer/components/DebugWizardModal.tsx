@@ -11,7 +11,7 @@ import { FolderOpen } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter } from './ui/Modal';
-import { useWizard, type WizardStep } from './Wizard/WizardContext';
+import { useWizard } from './Wizard/WizardContext';
 import { AUTO_RUN_FOLDER_NAME } from './Wizard/services/phaseGenerator';
 
 interface DebugWizardModalProps {

@@ -11,7 +11,7 @@ import { X, Trophy, Mail, User, Loader2, Check, AlertCircle, ExternalLink, UserX
 import type { Theme, AutoRunStats, LeaderboardRegistration } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
-import { getBadgeForTime, CONDUCTOR_BADGES } from '../constants/conductorBadges';
+import { getBadgeForTime } from '../constants/conductorBadges';
 import { generateId } from '../utils/ids';
 
 // Social media icons as SVG components

@@ -199,7 +199,6 @@ function ColorInput({
 
   // Handle rgba/hsla by showing the color picker for the base color
   const isComplexColor = value.includes('rgba') || value.includes('hsla');
-  const displayValue = isComplexColor ? value : value;
 
   return (
     <div className="flex items-center gap-2 py-1">
@@ -255,7 +254,7 @@ function ColorInput({
               color: theme.colors.textDim
             }}
           >
-            {displayValue.length > 12 ? displayValue.slice(0, 12) + '...' : displayValue}
+            {value.length > 12 ? value.slice(0, 12) + '...' : value}
           </button>
         )}
       </div>
