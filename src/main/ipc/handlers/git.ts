@@ -489,8 +489,25 @@ export function registerGitHandlers(): void {
   ipcMain.handle('git:createPR', withIpcErrorLogging(
     handlerOpts('createPR'),
     async (worktreePath: string, baseBranch: string, title: string, body: string, ghPath?: string) => {
-      // Use custom path if provided, otherwise fall back to 'gh' (expects it in PATH)
-      const ghCommand = ghPath || 'gh';
+      // Use custom path if provided
+      let ghCommand = ghPath || 'gh';
+
+      // Auto-detect gh location if no custom path provided
+      if (!ghPath) {
+        // Use platform-appropriate command: 'where' on Windows, 'which' on Unix
+        const command = process.platform === 'win32' ? 'where' : 'which';
+        const env = getExpandedEnv(); // Expanded PATH for finding binaries
+        const whichResult = await execFileNoThrow(command, ['gh'], undefined, env);
+
+        if (whichResult.exitCode === 0 && whichResult.stdout.trim()) {
+          // On Windows, 'where' can return multiple paths - take the first one
+          ghCommand = whichResult.stdout.trim().split('\n')[0];
+          logger.debug(`Auto-detected gh CLI at: ${ghCommand}`, LOG_CONTEXT);
+        } else {
+          // If detection fails, fall back to 'gh' and let execFileNoThrow handle the error
+          logger.debug('Auto-detection failed, using default "gh" command', LOG_CONTEXT);
+        }
+      }
 
       // First, push the current branch to origin
       const pushResult = await execFileNoThrow('git', ['push', '-u', 'origin', 'HEAD'], worktreePath);
