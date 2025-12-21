@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, RotateCcw, Play, Variable, ChevronDown, ChevronRight, Save, FolderOpen, Bookmark, Maximize2, Download, Upload } from 'lucide-react';
 import type { Theme, BatchDocumentEntry, BatchRunConfig } from '../types';
 import { useLayerStack } from '../contexts/LayerStackContext';

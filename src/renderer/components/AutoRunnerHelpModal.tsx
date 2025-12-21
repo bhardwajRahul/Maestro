@@ -1,4 +1,3 @@
-import React from 'react';
 import { FolderOpen, FileText, CheckSquare, Play, Settings, History, Eye, Square, Keyboard, Repeat, RotateCcw, BookMarked, GitBranch, Image, Variable } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
