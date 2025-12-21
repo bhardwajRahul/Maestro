@@ -9,7 +9,7 @@
  * Uses CSS clip-path to create the spotlight cutout effect.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import type { Theme, Shortcut } from '../../../types';
 import { useLayerStack } from '../../../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../../../constants/modalPriorities';
@@ -95,7 +95,6 @@ export function TourOverlay({
   onTourComplete,
   onTourSkip,
 }: TourOverlayProps): JSX.Element | null {
-  const containerRef = useRef<HTMLDivElement>(null);
   const { registerLayer, unregisterLayer } = useLayerStack();
 
   // Track if tour start has been recorded for this open session
@@ -226,7 +225,6 @@ export function TourOverlay({
 
   return (
     <div
-      ref={containerRef}
       className="fixed inset-0 z-[9999] tour-overlay"
       role="dialog"
       aria-modal="true"

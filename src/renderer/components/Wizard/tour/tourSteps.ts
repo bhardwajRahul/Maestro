@@ -163,27 +163,6 @@ export const tourSteps: TourStepConfig[] = [
 ];
 
 /**
- * Get a tour step by its ID
- */
-export function getTourStepById(id: string): TourStepConfig | undefined {
-  return tourSteps.find((step) => step.id === id);
-}
-
-/**
- * Get the index of a tour step by its ID
- */
-export function getTourStepIndex(id: string): number {
-  return tourSteps.findIndex((step) => step.id === id);
-}
-
-/**
- * Get the total number of tour steps
- */
-export function getTotalTourSteps(): number {
-  return tourSteps.length;
-}
-
-/**
  * Replace shortcut placeholders in a description string with formatted shortcuts.
  *
  * Placeholders are in the format {{shortcutId}} where shortcutId matches

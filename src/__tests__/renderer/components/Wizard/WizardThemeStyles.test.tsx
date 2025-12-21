@@ -482,9 +482,11 @@ describe('Wizard Theme Styles', () => {
           totalSteps={5}
           spotlight={null}
           onNext={vi.fn()}
+          onGoToStep={vi.fn()}
           onSkip={vi.fn()}
           isLastStep={false}
           isTransitioning={false}
+          isPositionReady={true}
         />
       );
 
@@ -504,9 +506,11 @@ describe('Wizard Theme Styles', () => {
           totalSteps={5}
           spotlight={null}
           onNext={vi.fn()}
+          onGoToStep={vi.fn()}
           onSkip={vi.fn()}
           isLastStep={false}
           isTransitioning={false}
+          isPositionReady={true}
         />
       );
 
@@ -529,9 +533,11 @@ describe('Wizard Theme Styles', () => {
           totalSteps={5}
           spotlight={null}
           onNext={vi.fn()}
+          onGoToStep={vi.fn()}
           onSkip={vi.fn()}
           isLastStep={true}
           isTransitioning={false}
+          isPositionReady={true}
         />
       );
 
