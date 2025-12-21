@@ -104,9 +104,6 @@ interface AutoRunProps {
 
   // Hide top controls (when rendered in expanded modal with controls in header)
   hideTopControls?: boolean;
-
-  // Legacy prop for backwards compatibility
-  onChange?: (content: string) => void;
 }
 
 export interface AutoRunHandle {
@@ -370,7 +367,6 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
   onExpand,
   shortcuts,
   hideTopControls = false,
-  onChange,  // Legacy prop for backwards compatibility
 }, ref) {
   // Only lock the editor when Auto Run is running WITHOUT a worktree (directly on main repo)
   // AND only for documents that are part of the current Auto Run
@@ -401,8 +397,8 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     }
   }, [onModeChange]);
 
-  // Use onContentChange if provided, otherwise fall back to legacy onChange
-  const handleContentChange = onContentChange || onChange || (() => {});
+  // Use onContentChange if provided, otherwise no-op
+  const handleContentChange = onContentChange || (() => {});
 
   // Local content state for responsive typing
   // Always use internal state for immediate feedback, but sync with external state when provided
