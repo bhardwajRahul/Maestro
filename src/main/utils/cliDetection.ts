@@ -9,7 +9,7 @@ let cloudflaredPathCache: string | null = null;
  * Build an expanded PATH that includes common binary installation locations.
  * This is necessary because packaged Electron apps don't inherit shell environment.
  */
-function getExpandedEnv(): NodeJS.ProcessEnv {
+export function getExpandedEnv(): NodeJS.ProcessEnv {
   const home = os.homedir();
   const env = { ...process.env };
   const isWindows = process.platform === 'win32';
