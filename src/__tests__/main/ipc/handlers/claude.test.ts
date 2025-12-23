@@ -827,4 +827,253 @@ describe('Claude IPC handlers', () => {
       expect(result.sessions[0].durationSeconds).toBe(300);
     });
   });
+
+  describe('claude:readSessionMessages', () => {
+    it('should return full session content with messages array', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Hello, how are you?"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"I'm doing well, thank you!"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}
+{"type":"user","message":{"role":"user","content":"Can you help me with code?"},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":"Of course! What do you need?"},"timestamp":"2024-01-15T09:03:00Z","uuid":"uuid-4"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-123', {});
+
+      expect(result.total).toBe(4);
+      expect(result.messages).toHaveLength(4);
+      expect(result.messages[0]).toMatchObject({
+        type: 'user',
+        content: 'Hello, how are you?',
+        uuid: 'uuid-1',
+      });
+      expect(result.messages[3]).toMatchObject({
+        type: 'assistant',
+        content: 'Of course! What do you need?',
+        uuid: 'uuid-4',
+      });
+    });
+
+    it('should handle missing session file gracefully by throwing error', async () => {
+      const fs = await import('fs/promises');
+
+      vi.mocked(fs.default.readFile).mockRejectedValue(new Error('ENOENT: no such file or directory'));
+
+      const handler = handlers.get('claude:readSessionMessages');
+
+      await expect(handler!({} as any, '/test/project', 'nonexistent-session', {})).rejects.toThrow();
+    });
+
+    it('should handle corrupted JSON lines gracefully', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Valid message 1"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+not valid json at all
+{"type":"assistant","message":{"role":"assistant","content":"Valid response"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}
+{broken: json here
+{"type":"user","message":{"role":"user","content":"Valid message 2"},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-3"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-corrupt', {});
+
+      // Should skip malformed lines and return only valid messages
+      expect(result.total).toBe(3);
+      expect(result.messages).toHaveLength(3);
+      expect(result.messages[0].content).toBe('Valid message 1');
+      expect(result.messages[1].content).toBe('Valid response');
+      expect(result.messages[2].content).toBe('Valid message 2');
+    });
+
+    it('should return messages array with correct structure', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Test question"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-test-1"}
+{"type":"assistant","message":{"role":"assistant","content":"Test answer"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-test-2"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-abc', {});
+
+      expect(result.messages).toHaveLength(2);
+
+      // Verify message structure
+      expect(result.messages[0]).toHaveProperty('type', 'user');
+      expect(result.messages[0]).toHaveProperty('role', 'user');
+      expect(result.messages[0]).toHaveProperty('content', 'Test question');
+      expect(result.messages[0]).toHaveProperty('timestamp', '2024-01-15T09:00:00Z');
+      expect(result.messages[0]).toHaveProperty('uuid', 'uuid-test-1');
+
+      expect(result.messages[1]).toHaveProperty('type', 'assistant');
+      expect(result.messages[1]).toHaveProperty('role', 'assistant');
+      expect(result.messages[1]).toHaveProperty('content', 'Test answer');
+    });
+
+    it('should support pagination with offset and limit', async () => {
+      const fs = await import('fs/promises');
+
+      // Create 10 messages
+      const messages = [];
+      for (let i = 1; i <= 10; i++) {
+        const type = i % 2 === 1 ? 'user' : 'assistant';
+        messages.push(`{"type":"${type}","message":{"role":"${type}","content":"Message ${i}"},"timestamp":"2024-01-15T09:${String(i).padStart(2, '0')}:00Z","uuid":"uuid-${i}"}`);
+      }
+      const sessionContent = messages.join('\n');
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+
+      // Get last 5 messages (offset 0, limit 5 returns messages 6-10)
+      const result1 = await handler!({} as any, '/test/project', 'session-paginate', { offset: 0, limit: 5 });
+      expect(result1.total).toBe(10);
+      expect(result1.messages).toHaveLength(5);
+      expect(result1.messages[0].content).toBe('Message 6');
+      expect(result1.messages[4].content).toBe('Message 10');
+      expect(result1.hasMore).toBe(true);
+
+      // Get next 5 messages (offset 5, limit 5 returns messages 1-5)
+      const result2 = await handler!({} as any, '/test/project', 'session-paginate', { offset: 5, limit: 5 });
+      expect(result2.total).toBe(10);
+      expect(result2.messages).toHaveLength(5);
+      expect(result2.messages[0].content).toBe('Message 1');
+      expect(result2.messages[4].content).toBe('Message 5');
+      expect(result2.hasMore).toBe(false);
+    });
+
+    it('should use default offset 0 and limit 20 when not specified', async () => {
+      const fs = await import('fs/promises');
+
+      // Create 25 messages
+      const messages = [];
+      for (let i = 1; i <= 25; i++) {
+        const type = i % 2 === 1 ? 'user' : 'assistant';
+        messages.push(`{"type":"${type}","message":{"role":"${type}","content":"Msg ${i}"},"timestamp":"2024-01-15T09:${String(i).padStart(2, '0')}:00Z","uuid":"uuid-${i}"}`);
+      }
+      const sessionContent = messages.join('\n');
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-defaults', {});
+
+      expect(result.total).toBe(25);
+      // Default limit is 20, so should get last 20 messages (6-25)
+      expect(result.messages).toHaveLength(20);
+      expect(result.messages[0].content).toBe('Msg 6');
+      expect(result.messages[19].content).toBe('Msg 25');
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should handle array content with text blocks', async () => {
+      const fs = await import('fs/promises');
+
+      // Message with array content containing text blocks
+      const sessionContent = `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"First paragraph"},{"type":"text","text":"Second paragraph"}]},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-array-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Response paragraph 1"},{"type":"text","text":"Response paragraph 2"}]},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-array-2"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-array', {});
+
+      expect(result.total).toBe(2);
+      // Text blocks should be joined with newline
+      expect(result.messages[0].content).toBe('First paragraph\nSecond paragraph');
+      expect(result.messages[1].content).toBe('Response paragraph 1\nResponse paragraph 2');
+    });
+
+    it('should extract tool_use blocks from assistant messages', async () => {
+      const fs = await import('fs/promises');
+
+      // Message with tool_use blocks
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Read this file for me"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-tool-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I'll read that file for you."},{"type":"tool_use","id":"tool-123","name":"read_file","input":{"path":"/test.txt"}}]},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-tool-2"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-tools', {});
+
+      expect(result.total).toBe(2);
+      expect(result.messages[1]).toMatchObject({
+        type: 'assistant',
+        content: "I'll read that file for you.",
+      });
+      // Should include tool_use blocks in the toolUse property
+      expect(result.messages[1].toolUse).toBeDefined();
+      expect(result.messages[1].toolUse).toHaveLength(1);
+      expect(result.messages[1].toolUse[0]).toMatchObject({
+        type: 'tool_use',
+        id: 'tool-123',
+        name: 'read_file',
+      });
+    });
+
+    it('should skip messages with only whitespace content', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Valid message"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-valid"}
+{"type":"assistant","message":{"role":"assistant","content":"   "},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-whitespace"}
+{"type":"user","message":{"role":"user","content":""},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-empty"}
+{"type":"assistant","message":{"role":"assistant","content":"Another valid message"},"timestamp":"2024-01-15T09:03:00Z","uuid":"uuid-valid-2"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-whitespace', {});
+
+      // Should only include messages with actual content
+      expect(result.total).toBe(2);
+      expect(result.messages[0].content).toBe('Valid message');
+      expect(result.messages[1].content).toBe('Another valid message');
+    });
+
+    it('should skip non-user and non-assistant message types', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"User message"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-user"}
+{"type":"system","message":{"role":"system","content":"System prompt"},"timestamp":"2024-01-15T09:00:01Z","uuid":"uuid-system"}
+{"type":"result","content":"Some result data","timestamp":"2024-01-15T09:00:02Z","uuid":"uuid-result"}
+{"type":"assistant","message":{"role":"assistant","content":"Assistant response"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-assistant"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+      const result = await handler!({} as any, '/test/project', 'session-types', {});
+
+      // Should only include user and assistant messages
+      expect(result.total).toBe(2);
+      expect(result.messages[0].type).toBe('user');
+      expect(result.messages[1].type).toBe('assistant');
+    });
+
+    it('should return hasMore correctly based on remaining messages', async () => {
+      const fs = await import('fs/promises');
+
+      const sessionContent = `{"type":"user","message":{"role":"user","content":"Msg 1"},"timestamp":"2024-01-15T09:00:00Z","uuid":"uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":"Msg 2"},"timestamp":"2024-01-15T09:01:00Z","uuid":"uuid-2"}
+{"type":"user","message":{"role":"user","content":"Msg 3"},"timestamp":"2024-01-15T09:02:00Z","uuid":"uuid-3"}`;
+
+      vi.mocked(fs.default.readFile).mockResolvedValue(sessionContent);
+
+      const handler = handlers.get('claude:readSessionMessages');
+
+      // Get last 2 messages - there should be 1 more
+      const result1 = await handler!({} as any, '/test/project', 'session-has-more', { offset: 0, limit: 2 });
+      expect(result1.total).toBe(3);
+      expect(result1.messages).toHaveLength(2);
+      expect(result1.hasMore).toBe(true);
+
+      // Get all remaining - no more left
+      const result2 = await handler!({} as any, '/test/project', 'session-has-more', { offset: 0, limit: 10 });
+      expect(result2.total).toBe(3);
+      expect(result2.messages).toHaveLength(3);
+      expect(result2.hasMore).toBe(false);
+    });
+  });
 });
