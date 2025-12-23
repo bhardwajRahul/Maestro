@@ -116,6 +116,9 @@ export const MODAL_PRIORITIES = {
   /** Merge session contexts modal (Cmd+Shift+M) */
   MERGE_SESSION: 685,
 
+  /** Merge progress modal (appears during merge operation) */
+  MERGE_PROGRESS: 684,
+
   /** Agent sessions browser (Cmd+Shift+L) */
   AGENT_SESSIONS: 680,
 
