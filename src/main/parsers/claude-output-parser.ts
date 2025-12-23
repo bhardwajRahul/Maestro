@@ -128,11 +128,14 @@ export class ClaudeOutputParser implements AgentOutputParser {
     // Handle assistant messages (streaming partial responses)
     if (msg.type === 'assistant') {
       const text = this.extractTextFromMessage(msg);
+      const toolUseBlocks = this.extractToolUseBlocks(msg);
+
       return {
         type: 'text',
         text,
         sessionId: msg.session_id,
         isPartial: true,
+        toolUseBlocks: toolUseBlocks.length > 0 ? toolUseBlocks : undefined,
         raw: msg,
       };
     }
@@ -163,6 +166,26 @@ export class ClaudeOutputParser implements AgentOutputParser {
       sessionId: msg.session_id,
       raw: msg,
     };
+  }
+
+  /**
+   * Extract tool_use blocks from a Claude assistant message
+   * These blocks contain tool invocation requests from the AI
+   */
+  private extractToolUseBlocks(
+    msg: ClaudeRawMessage
+  ): Array<{ name: string; id?: string; input?: unknown }> {
+    if (!msg.message?.content || typeof msg.message.content === 'string') {
+      return [];
+    }
+
+    return msg.message.content
+      .filter((block) => block.type === 'tool_use' && block.name)
+      .map((block) => ({
+        name: block.name!,
+        id: block.id,
+        input: block.input,
+      }));
   }
 
   /**
