@@ -17,7 +17,7 @@ import { useThemeColors } from '../components/ThemeProvider';
 import { Badge } from '../components/Badge';
 import type { QueuedCommand, QueueStatus } from '../hooks/useOfflineQueue';
 import { triggerHaptic, HAPTIC_PATTERNS } from './constants';
-import { formatRelativeTime } from '../../shared/formatters';
+import { formatRelativeTime, truncateCommand } from '../../shared/formatters';
 
 export interface OfflineQueueBannerProps {
   /** Queued commands */
@@ -35,16 +35,6 @@ export interface OfflineQueueBannerProps {
   /** Whether connected to server */
   isConnected: boolean;
 }
-
-/**
- * Truncate command text for display
- */
-function truncateCommand(command: string, maxLength: number = 40): string {
-  if (command.length <= maxLength) return command;
-  return command.substring(0, maxLength - 3) + '...';
-}
-
-// formatRelativeTime imported from ../../shared/formatters
 
 export function OfflineQueueBanner({
   queue,

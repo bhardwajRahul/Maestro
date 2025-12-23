@@ -15,6 +15,7 @@ import {
   formatCost,
   estimateTokenCount,
   truncatePath,
+  truncateCommand,
 } from '../../shared/formatters';
 
 describe('shared/formatters', () => {
@@ -361,6 +362,61 @@ describe('shared/formatters', () => {
 
     it('should handle paths with two parts', () => {
       expect(truncatePath('/parent/child', 50)).toBe('/parent/child');
+    });
+  });
+
+  // ==========================================================================
+  // truncateCommand tests
+  // ==========================================================================
+  describe('truncateCommand', () => {
+    it('should return command unchanged if within maxLength', () => {
+      expect(truncateCommand('npm run build')).toBe('npm run build');
+      expect(truncateCommand('git status', 20)).toBe('git status');
+    });
+
+    it('should truncate long commands with ellipsis', () => {
+      const longCommand = 'npm run build --watch --verbose --output=/path/to/output';
+      const result = truncateCommand(longCommand, 30);
+      expect(result.length).toBe(30);
+      expect(result.endsWith('…')).toBe(true);
+    });
+
+    it('should replace newlines with spaces', () => {
+      const multilineCommand = 'echo "hello\nworld"';
+      const result = truncateCommand(multilineCommand, 50);
+      expect(result).toBe('echo "hello world"');
+      expect(result.includes('\n')).toBe(false);
+    });
+
+    it('should trim whitespace', () => {
+      expect(truncateCommand('  git status  ')).toBe('git status');
+      expect(truncateCommand('\n\ngit status\n\n')).toBe('git status');
+    });
+
+    it('should use default maxLength of 40', () => {
+      const longCommand = 'a'.repeat(50);
+      const result = truncateCommand(longCommand);
+      expect(result.length).toBe(40);
+      expect(result.endsWith('…')).toBe(true);
+    });
+
+    it('should respect custom maxLength parameter', () => {
+      const command = 'a'.repeat(100);
+      expect(truncateCommand(command, 20).length).toBe(20);
+      expect(truncateCommand(command, 50).length).toBe(50);
+      expect(truncateCommand(command, 60).length).toBe(60);
+    });
+
+    it('should handle multiple newlines as spaces', () => {
+      const command = 'echo "one\ntwo\nthree"';
+      const result = truncateCommand(command, 50);
+      expect(result).toBe('echo "one two three"');
+    });
+
+    it('should handle empty command', () => {
+      expect(truncateCommand('')).toBe('');
+      expect(truncateCommand('   ')).toBe('');
+      expect(truncateCommand('\n\n')).toBe('');
     });
   });
 });

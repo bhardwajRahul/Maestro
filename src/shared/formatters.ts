@@ -14,6 +14,7 @@
  * - formatCost: USD currency display ($1.23, <$0.01)
  * - estimateTokenCount: Estimate token count from text (~4 chars/token)
  * - truncatePath: Truncate file paths for display (.../<parent>/<current>)
+ * - truncateCommand: Truncate command text for display with ellipsis
  */
 
 /**
@@ -223,4 +224,19 @@ export function truncatePath(path: string, maxLength: number = 35): string {
   }
 
   return `...${separator}${lastTwo}`;
+}
+
+/**
+ * Truncate command text for display.
+ * Replaces newlines with spaces, trims whitespace, and adds ellipsis if truncated.
+ *
+ * @param command - The command text to truncate
+ * @param maxLength - Maximum length of the returned string (default: 40)
+ * @returns Truncated command string (e.g., "npm run build --...")
+ */
+export function truncateCommand(command: string, maxLength: number = 40): string {
+  // Replace newlines with spaces for single-line display
+  const singleLine = command.replace(/\n/g, ' ').trim();
+  if (singleLine.length <= maxLength) return singleLine;
+  return singleLine.slice(0, maxLength - 1) + '…';
 }
