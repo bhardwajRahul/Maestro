@@ -1116,6 +1116,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('groupChat:sendToParticipant', id, name, message, images),
     removeParticipant: (id: string, name: string) =>
       ipcRenderer.invoke('groupChat:removeParticipant', id, name),
+    resetParticipantContext: (id: string, name: string, cwd?: string) =>
+      ipcRenderer.invoke('groupChat:resetParticipantContext', id, name, cwd) as Promise<{ newAgentSessionId: string }>,
 
     // History
     getHistory: (id: string) =>
@@ -2077,6 +2079,7 @@ export interface MaestroAPI {
     }>;
     sendToParticipant: (id: string, name: string, message: string, images?: string[]) => Promise<void>;
     removeParticipant: (id: string, name: string) => Promise<void>;
+    resetParticipantContext: (id: string, name: string, cwd?: string) => Promise<{ newAgentSessionId: string }>;
 
     // History
     getHistory: (id: string) => Promise<Array<{
