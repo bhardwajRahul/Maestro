@@ -41,17 +41,17 @@ function stripAgentFunctions(agent: any) {
 
   // Destructure to remove function properties from agent config
   const {
-    resumeArgs,
-    modelArgs,
-    workingDirArgs,
-    imageArgs,
+    resumeArgs: _resumeArgs,
+    modelArgs: _modelArgs,
+    workingDirArgs: _workingDirArgs,
+    imageArgs: _imageArgs,
     ...serializableAgent
   } = agent;
 
   return {
     ...serializableAgent,
     configOptions: agent.configOptions?.map((opt: any) => {
-      const { argBuilder, ...serializableOpt } = opt;
+      const { argBuilder: _argBuilder, ...serializableOpt } = opt;
       return serializableOpt;
     })
   };

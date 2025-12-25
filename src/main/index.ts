@@ -1887,8 +1887,8 @@ function extractTextFromAgentOutput(rawOutput: string, agentType: string): strin
 
   const textParts: string[] = [];
   let resultText: string | null = null;
-  let resultMessageCount = 0;
-  let textMessageCount = 0;
+  let _resultMessageCount = 0;
+  let _textMessageCount = 0;
 
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -1900,12 +1900,12 @@ function extractTextFromAgentOutput(rawOutput: string, agentType: string): strin
     if (event.type === 'result' && event.text) {
       // Result message is the authoritative final response - save it
       resultText = event.text;
-      resultMessageCount++;
+      _resultMessageCount++;
     }
 
     if (event.type === 'text' && event.text) {
       textParts.push(event.text);
-      textMessageCount++;
+      _textMessageCount++;
     }
   }
 

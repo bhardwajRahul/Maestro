@@ -1340,8 +1340,8 @@ export class ProcessManager extends EventEmitter {
         shell: shellPath, // Use resolved full path to shell
       });
 
-      let stdoutBuffer = '';
-      let stderrBuffer = '';
+      let _stdoutBuffer = '';
+      let _stderrBuffer = '';
 
       // Handle stdout - emit data events for real-time streaming
       childProcess.stdout?.on('data', (data: Buffer) => {
@@ -1361,7 +1361,7 @@ export class ProcessManager extends EventEmitter {
 
         // Only emit if there's actual content after filtering
         if (output.trim()) {
-          stdoutBuffer += output;
+          _stdoutBuffer += output;
           logger.debug('[ProcessManager] runCommand EMITTING data event', 'ProcessManager', { sessionId, outputLength: output.length });
           this.emit('data', sessionId, output);
         } else {
@@ -1372,7 +1372,7 @@ export class ProcessManager extends EventEmitter {
       // Handle stderr - emit with [stderr] prefix for differentiation
       childProcess.stderr?.on('data', (data: Buffer) => {
         const output = data.toString();
-        stderrBuffer += output;
+        _stderrBuffer += output;
         // Emit stderr with prefix so renderer can style it differently
         this.emit('stderr', sessionId, output);
       });
