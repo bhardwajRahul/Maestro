@@ -862,7 +862,10 @@ export default function MaestroConsole() {
         }
       }
     }
-  }, [settingsLoaded, sessionsLoaded]); // Only run once on startup
+  // autoRunStats.longestRunMs and getUnacknowledgedBadgeLevel intentionally omitted -
+  // this effect runs once on startup to check for missed badges, not on every stats update
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoaded, sessionsLoaded]);
 
   // Check for unacknowledged badges when user returns to the app
   // Uses multiple triggers: visibility change, window focus, and mouse activity
@@ -943,7 +946,10 @@ export default function MaestroConsole() {
         }, 1200); // Slightly longer delay than badge to avoid overlap
       }
     }
-  }, [settingsLoaded, sessionsLoaded]); // Only run once on startup
+  // getUnacknowledgedKeyboardMasteryLevel intentionally omitted -
+  // this effect runs once on startup to check for unacknowledged levels, not on function changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoaded, sessionsLoaded]);
 
   // Scan worktree directories on startup for sessions with worktreeConfig
   // This restores worktree sub-agents after app restart
@@ -3674,6 +3680,12 @@ export default function MaestroConsole() {
     };
   }, [activeBatchSessionIds.length, updateAutoRunProgress, autoRunStats.longestRunMs]);
 
+  // Memoize worktree config key to avoid complex expression in dependency array
+  const worktreeConfigKey = useMemo(() =>
+    sessions.map(s => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`).join(','),
+    [sessions]
+  );
+
   // File watcher for worktree directories - provides immediate detection
   // This is more efficient than polling and gives real-time results
   useEffect(() => {
@@ -3815,7 +3827,7 @@ export default function MaestroConsole() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     // Re-run when worktreeConfig changes on any session
-    sessions.map(s => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`).join(','),
+    worktreeConfigKey,
     defaultSaveToHistory
   ]);
 
@@ -4193,7 +4205,7 @@ export default function MaestroConsole() {
         ));
       }
     }
-  }, [sessions]);
+  }, [sessions, setActiveSessionId]);
 
   const handleCreateGroupChat = useCallback(async (
     name: string,
@@ -5083,6 +5095,8 @@ export default function MaestroConsole() {
     setTourOpen,
     setActiveFocus,
     startBatchRun,
+    sessions,
+    addToast,
   ]);
 
   /**
