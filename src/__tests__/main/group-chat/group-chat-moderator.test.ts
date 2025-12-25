@@ -46,7 +46,7 @@ import {
   killModerator,
   getModeratorSessionId,
   clearAllModeratorSessions,
-  MODERATOR_SYSTEM_PROMPT,
+  getModeratorSystemPrompt,
   type IProcessManager,
 } from '../../../main/group-chat/group-chat-moderator';
 import {
@@ -176,9 +176,10 @@ describe('group-chat-moderator', () => {
     });
 
     it('system prompt contains moderator instructions', () => {
-      expect(MODERATOR_SYSTEM_PROMPT).toContain('Coordinate');
-      expect(MODERATOR_SYSTEM_PROMPT).toContain('@');
-      expect(MODERATOR_SYSTEM_PROMPT).toContain('agents');
+      const systemPrompt = getModeratorSystemPrompt();
+      expect(systemPrompt).toContain('Coordinate');
+      expect(systemPrompt).toContain('@');
+      expect(systemPrompt).toContain('agents');
     });
   });
 

@@ -169,6 +169,7 @@ describe('groupChat IPC handlers', () => {
         'groupChat:addParticipant',
         'groupChat:sendToParticipant',
         'groupChat:removeParticipant',
+        'groupChat:resetParticipantContext',
         // History handlers
         'groupChat:getHistory',
         'groupChat:addHistoryEntry',
