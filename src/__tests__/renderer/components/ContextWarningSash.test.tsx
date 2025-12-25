@@ -160,7 +160,7 @@ describe('ContextWarningSash', () => {
       );
       expect(screen.getByText(/Context window at/)).toBeInTheDocument();
       expect(screen.getByText('85%')).toBeInTheDocument();
-      expect(screen.getByText(/consider summarizing to continue/)).toBeInTheDocument();
+      expect(screen.getByText(/consider compacting to continue/)).toBeInTheDocument();
     });
 
     it('should display correct percentage value', () => {
@@ -310,7 +310,7 @@ describe('ContextWarningSash', () => {
         />
       );
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText(/consider summarizing to continue/)).toBeInTheDocument();
+      expect(screen.getByText(/consider compacting to continue/)).toBeInTheDocument();
     });
   });
 
@@ -468,7 +468,7 @@ describe('ContextWarningSash', () => {
           onSummarizeClick={mockOnSummarizeClick}
         />
       );
-      expect(screen.getByText(/consider summarizing to continue/)).toBeInTheDocument();
+      expect(screen.getByText(/consider compacting to continue/)).toBeInTheDocument();
     });
 
     it('should handle threshold edge cases correctly', () => {
@@ -496,7 +496,7 @@ describe('ContextWarningSash', () => {
           onSummarizeClick={mockOnSummarizeClick}
         />
       );
-      expect(screen.getByText(/consider summarizing to continue/)).toBeInTheDocument();
+      expect(screen.getByText(/consider compacting to continue/)).toBeInTheDocument();
     });
   });
 
@@ -527,7 +527,7 @@ describe('ContextWarningSash', () => {
         />
       );
       expect(screen.getByText('100%')).toBeInTheDocument();
-      expect(screen.getByText(/consider summarizing to continue/)).toBeInTheDocument();
+      expect(screen.getByText(/consider compacting to continue/)).toBeInTheDocument();
     });
 
     it('should handle usage at 1% below threshold', () => {
