@@ -140,6 +140,10 @@ export interface StartBatchPayload {
   worktreeBranch?: string;
   customPrompt?: string;
   startTime: number;
+  // Time tracking
+  cumulativeTaskTimeMs: number;
+  accumulatedElapsedMs: number;
+  lastActiveTimestamp: number;
 }
 
 /**
@@ -255,8 +259,9 @@ export function batchReducer(state: BatchState, action: BatchAction): BatchState
           sessionIds: [],
           startTime: payload.startTime,
           // Time tracking
-          accumulatedElapsedMs: 0,
-          lastActiveTimestamp: payload.startTime,
+          cumulativeTaskTimeMs: payload.cumulativeTaskTimeMs,
+          accumulatedElapsedMs: payload.accumulatedElapsedMs,
+          lastActiveTimestamp: payload.lastActiveTimestamp,
           // Error handling - cleared on start
           error: undefined,
           errorPaused: false,
