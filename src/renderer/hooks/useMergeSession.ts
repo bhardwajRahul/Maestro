@@ -510,6 +510,9 @@ export function useMergeSession(activeTabId?: string): UseMergeSessionResult {
 
       let result: MergeResult;
 
+      // Get estimated tokens for notification (display names already set above)
+      const estimatedTokens = estimateTokensFromLogs(mergedLogs);
+
       if (options.createNewSession) {
         // Create a new session with merged context
         const { session: mergedSession, tabId: newTabId } = createMergedSession({
@@ -526,6 +529,9 @@ export function useMergeSession(activeTabId?: string): UseMergeSessionResult {
           newSessionId: mergedSession.id,
           newTabId,
           tokensSaved,
+          sourceSessionName: sourceDisplayName,
+          targetSessionName: targetDisplayName,
+          estimatedTokens,
         };
       } else {
         // Merge into existing target tab - return merged logs for caller to apply
@@ -535,6 +541,9 @@ export function useMergeSession(activeTabId?: string): UseMergeSessionResult {
           mergedLogs,
           targetSessionId: targetSession.id,
           targetTabId: targetTab.id,
+          sourceSessionName: sourceDisplayName,
+          targetSessionName: targetDisplayName,
+          estimatedTokens,
         };
       }
 
@@ -599,6 +608,18 @@ export function useMergeSession(activeTabId?: string): UseMergeSessionResult {
 }
 
 /**
+ * Information passed to onSessionCreated callback
+ */
+export interface MergeSessionCreatedInfo {
+  sessionId: string;
+  sessionName: string;
+  sourceSessionName?: string;
+  targetSessionName?: string;
+  estimatedTokens?: number;
+  tokensSaved?: number;
+}
+
+/**
  * Dependencies for the useMergeSessionWithSessions hook variant
  */
 export interface UseMergeSessionWithSessionsDeps {
@@ -608,10 +629,10 @@ export interface UseMergeSessionWithSessionsDeps {
   setSessions: React.Dispatch<React.SetStateAction<Session[]>>;
   /** Active tab ID for per-tab state tracking */
   activeTabId?: string;
-  /** Callback after merge creates a new session. Receives session ID and name for notification purposes. */
-  onSessionCreated?: (sessionId: string, sessionName: string) => void;
+  /** Callback after merge creates a new session. Receives session info for notification purposes. */
+  onSessionCreated?: (info: MergeSessionCreatedInfo) => void;
   /** Callback after merge completes successfully (for any merge type). Receives source tab ID and target info for state cleanup and toast display. */
-  onMergeComplete?: (sourceTabId: string, targetInfo?: { sessionId: string; sessionName: string; tabId: string }) => void;
+  onMergeComplete?: (sourceTabId: string, result: MergeResult) => void;
 }
 
 /**
@@ -753,9 +774,16 @@ export function useMergeSessionWithSessions(
             console.warn('Failed to log merge operation to history:', historyError);
           }
 
-          // Notify caller with session ID and name for notification purposes
+          // Notify caller with session info for notification purposes
           if (onSessionCreated) {
-            onSessionCreated(newSession.id, mergedName);
+            onSessionCreated({
+              sessionId: newSession.id,
+              sessionName: mergedName,
+              sourceSessionName: result.sourceSessionName,
+              targetSessionName: result.targetSessionName,
+              estimatedTokens: result.estimatedTokens,
+              tokensSaved: result.tokensSaved,
+            });
           }
 
           // Return result with the actual new session ID
@@ -843,11 +871,7 @@ export function useMergeSessionWithSessions(
 
         // Notify caller that merge completed (for state cleanup and toast)
         if (onMergeComplete) {
-          onMergeComplete(sourceTabId, {
-            sessionId: result.targetSessionId,
-            sessionName: getSessionDisplayName(targetSession),
-            tabId: result.targetTabId,
-          });
+          onMergeComplete(sourceTabId, result);
         }
       }
     }

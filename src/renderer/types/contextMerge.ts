@@ -68,6 +68,12 @@ export interface MergeResult {
   targetSessionId?: string;
   /** Target tab ID when merging into existing tab */
   targetTabId?: string;
+  /** Source session name for display in notifications */
+  sourceSessionName?: string;
+  /** Target session name for display in notifications */
+  targetSessionName?: string;
+  /** Estimated token count of the transferred context */
+  estimatedTokens?: number;
 }
 
 /**

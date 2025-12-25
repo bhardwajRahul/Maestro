@@ -2655,19 +2655,35 @@ export default function MaestroConsole() {
     sessions,
     setSessions,
     activeTabId: activeSession?.activeTabId,
-    onSessionCreated: (sessionId, sessionName) => {
+    onSessionCreated: (info) => {
       // Navigate to the newly created merged session
-      setActiveSessionId(sessionId);
+      setActiveSessionId(info.sessionId);
       setMergeSessionModalOpen(false);
 
-      // Show toast notification with click-to-navigate
+      // Build informative message with token info
+      const tokenInfo = info.estimatedTokens
+        ? ` (~${info.estimatedTokens.toLocaleString()} tokens)`
+        : '';
+      const savedInfo = info.tokensSaved && info.tokensSaved > 0
+        ? ` Saved ~${info.tokensSaved.toLocaleString()} tokens.`
+        : '';
+      const sourceInfo = info.sourceSessionName && info.targetSessionName
+        ? `"${info.sourceSessionName}" + "${info.targetSessionName}"`
+        : info.sessionName;
+
+      // Show toast notification in the UI
       addToast({
         type: 'success',
         title: 'Session Merged',
-        message: `Created "${sessionName}" with merged context. Click to view.`,
-        sessionId,
-        project: sessionName,
+        message: `Created "${info.sessionName}" from ${sourceInfo}${tokenInfo}.${savedInfo}`,
+        sessionId: info.sessionId,
       });
+
+      // Show desktop notification for visibility when app is not focused
+      window.maestro.notification.show(
+        'Session Merged',
+        `Created "${info.sessionName}" with merged context`
+      );
 
       // Clear the merge state for the source tab after a short delay
       if (activeSession?.activeTabId) {
@@ -2676,16 +2692,22 @@ export default function MaestroConsole() {
         }, 1000);
       }
     },
-    onMergeComplete: (sourceTabId, targetInfo) => {
+    onMergeComplete: (sourceTabId, result) => {
       // For merge into existing tab, show toast and clear state
-      if (activeSession && targetInfo) {
+      if (activeSession && result.success && result.targetSessionId) {
+        const tokenInfo = result.estimatedTokens
+          ? ` (~${result.estimatedTokens.toLocaleString()} tokens)`
+          : '';
+        const savedInfo = result.tokensSaved && result.tokensSaved > 0
+          ? ` Saved ~${result.tokensSaved.toLocaleString()} tokens.`
+          : '';
+
         addToast({
           type: 'success',
           title: 'Context Merged',
-          message: `Context transferred to "${targetInfo.sessionName}". It will be included with your next message.`,
-          sessionId: targetInfo.sessionId,
-          tabId: targetInfo.tabId,
-          project: targetInfo.sessionName,
+          message: `"${result.sourceSessionName || 'Current Session'}" → "${result.targetSessionName || 'Selected Session'}"${tokenInfo}.${savedInfo} Context will be included with your next message.`,
+          sessionId: result.targetSessionId,
+          tabId: result.targetTabId,
         });
 
         // Clear the merge state for the source tab
@@ -7645,7 +7667,7 @@ export default function MaestroConsole() {
             // Close the modal - merge will show in the input area overlay
             setMergeSessionModalOpen(false);
 
-            // Execute merge using the hook (names are tracked in the hook now)
+            // Execute merge using the hook (callbacks handle toasts and navigation)
             const result = await executeMerge(
               activeSession,
               activeSession.activeTabId,
@@ -7661,6 +7683,8 @@ export default function MaestroConsole() {
                 message: result.error || 'Failed to merge contexts',
               });
             }
+            // Note: Success toasts are handled by onSessionCreated (for new sessions)
+            // and onMergeComplete (for merging into existing sessions) callbacks
 
             return result;
           }}
@@ -7757,11 +7781,21 @@ export default function MaestroConsole() {
             // Navigate to the target session
             setActiveSessionId(targetSessionId);
 
-            // Show success toast
+            // Calculate estimated tokens for the message
+            const estimatedTokens = sourceTab.logs
+              .filter(log => log.text && log.source !== 'system')
+              .reduce((sum, log) => sum + Math.round((log.text?.length || 0) / 4), 0);
+            const tokenInfo = estimatedTokens > 0
+              ? ` (~${estimatedTokens.toLocaleString()} tokens)`
+              : '';
+
+            // Show success toast with detailed info
             addToast({
               type: 'success',
               title: 'Context Transferred',
-              message: `Context sent to "${targetSession.name}"`,
+              message: `"${activeSession.name}" → "${targetSession.name}"${tokenInfo}. Ready in new tab.`,
+              sessionId: targetSessionId,
+              tabId: newTabId,
             });
 
             // Reset transfer state
