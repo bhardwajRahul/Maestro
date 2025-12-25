@@ -86,6 +86,7 @@ import { useSummarizeAndContinue } from './hooks/useSummarizeAndContinue';
 import { useLayerStack } from './contexts/LayerStackContext';
 import { useToast } from './contexts/ToastContext';
 import { GitStatusProvider } from './contexts/GitStatusContext';
+import { InputProvider, useInputContext } from './contexts/InputContext';
 import { ToastContainer } from './components/Toast';
 
 // Import services
@@ -203,7 +204,7 @@ const getSlashCommandDescription = (cmd: string): string => {
 
 // Note: DEFAULT_IMAGE_ONLY_PROMPT is now imported from useInputProcessing hook
 
-export default function MaestroConsole() {
+function MaestroConsoleInner() {
   // --- LAYER STACK (for blocking shortcuts when modals are open) ---
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
@@ -344,12 +345,24 @@ export default function MaestroConsole() {
     setActiveSessionIdInternal(id);
   }, [batchedUpdater]);
 
-  // Input State - both modes use local state for responsive typing
-  // AI mode syncs to tab state on blur/submit for persistence
-  const [terminalInputValue, setTerminalInputValue] = useState('');
-  const [aiInputValueLocal, setAiInputValueLocal] = useState('');
-  const [slashCommandOpen, setSlashCommandOpen] = useState(false);
-  const [selectedSlashCommandIndex, setSelectedSlashCommandIndex] = useState(0);
+  // Input State - extracted to InputContext for centralized management
+  // Use InputContext for all input and completion states
+  const {
+    terminalInputValue, setTerminalInputValue,
+    aiInputValue: aiInputValueLocal, setAiInputValue: setAiInputValueLocal,
+    slashCommandOpen, setSlashCommandOpen,
+    selectedSlashCommandIndex, setSelectedSlashCommandIndex,
+    tabCompletionOpen, setTabCompletionOpen,
+    selectedTabCompletionIndex, setSelectedTabCompletionIndex,
+    tabCompletionFilter, setTabCompletionFilter,
+    atMentionOpen, setAtMentionOpen,
+    atMentionFilter, setAtMentionFilter,
+    atMentionStartIndex, setAtMentionStartIndex,
+    selectedAtMentionIndex, setSelectedAtMentionIndex,
+    commandHistoryOpen, setCommandHistoryOpen,
+    commandHistoryFilter, setCommandHistoryFilter,
+    commandHistorySelectedIndex, setCommandHistorySelectedIndex,
+  } = useInputContext();
 
   // UI State
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
@@ -525,26 +538,13 @@ export default function MaestroConsole() {
   const [outputSearchOpen, setOutputSearchOpen] = useState(false);
   const [outputSearchQuery, setOutputSearchQuery] = useState('');
 
-  // Command History Modal State
-  const [commandHistoryOpen, setCommandHistoryOpen] = useState(false);
-  const [commandHistoryFilter, setCommandHistoryFilter] = useState('');
-  const [commandHistorySelectedIndex, setCommandHistorySelectedIndex] = useState(0);
-
-  // Tab Completion State (terminal mode only)
-  const [tabCompletionOpen, setTabCompletionOpen] = useState(false);
-  const [selectedTabCompletionIndex, setSelectedTabCompletionIndex] = useState(0);
-  const [tabCompletionFilter, setTabCompletionFilter] = useState<TabCompletionFilter>('all');
+  // Note: Command History, Tab Completion, and @ Mention states are now in InputContext
+  // See useInputContext() destructuring above for these states
 
   // Flash notification state (for inline notifications like "Commands disabled while agent is working")
   const [flashNotification, setFlashNotification] = useState<string | null>(null);
   // Success flash notification state (for success messages like "Refresh complete")
   const [successFlashNotification, setSuccessFlashNotification] = useState<string | null>(null);
-
-  // @ mention file completion state (AI mode only, desktop only)
-  const [atMentionOpen, setAtMentionOpen] = useState(false);
-  const [atMentionFilter, setAtMentionFilter] = useState('');
-  const [atMentionStartIndex, setAtMentionStartIndex] = useState(-1);  // Position of @ in input
-  const [selectedAtMentionIndex, setSelectedAtMentionIndex] = useState(0);
 
   // Note: Images are now stored per-tab in AITab.stagedImages
   // See stagedImages/setStagedImages computed from active tab below
@@ -9624,5 +9624,19 @@ export default function MaestroConsole() {
       <ToastContainer theme={theme} onSessionClick={handleToastSessionClick} />
       </div>
     </GitStatusProvider>
+  );
+}
+
+/**
+ * MaestroConsole - Main application component with context providers
+ *
+ * Wraps MaestroConsoleInner with InputProvider for centralized input state management.
+ * Phase 3 of App.tsx decomposition - see refactor-details-2.md for full plan.
+ */
+export default function MaestroConsole() {
+  return (
+    <InputProvider>
+      <MaestroConsoleInner />
+    </InputProvider>
   );
 }
