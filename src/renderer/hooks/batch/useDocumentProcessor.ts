@@ -364,9 +364,6 @@ export function useDocumentProcessor(): UseDocumentProcessorReturn {
         // Request a synopsis from the agent by resuming the session
         // Use effectiveCwd (worktree path when active) to find the session
         try {
-          console.log(
-            `[DocumentProcessor] Synopsis request: sessionId=${session.id}, agentSessionId=${result.agentSessionId}, toolType=${session.toolType}`
-          );
           const synopsisResult = await callbacks.onSpawnSynopsis(
             session.id,
             effectiveCwd,

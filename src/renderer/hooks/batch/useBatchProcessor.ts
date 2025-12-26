@@ -206,9 +206,8 @@ export function useBatchProcessor({
 
       // Reject all pending error resolution promises with 'abort' to unblock any waiting async code
       // This prevents memory leaks from promises that would never resolve
-      Object.entries(errorResolutionRefs.current).forEach(([sessionId, entry]) => {
+      Object.entries(errorResolutionRefs.current).forEach(([, entry]) => {
         entry.resolve('abort');
-        console.log(`[BatchProcessor] Rejected error resolution promise for session ${sessionId} on unmount`);
       });
       // Clear the refs to allow garbage collection
       errorResolutionRefs.current = {};
@@ -257,25 +256,6 @@ export function useBatchProcessor({
       // For complex state changes, we extract the session's new state and dispatch appropriately
       if (newStateForSession) {
         const prevSessionState = currentState[sessionId] || DEFAULT_BATCH_STATE;
-
-        // DEBUG: Log state update details
-        console.log('[BatchProcessor:onUpdate] State update:', {
-          sessionId,
-          prev: {
-            loopIteration: prevSessionState.loopIteration,
-            completedTasksAcrossAllDocs: prevSessionState.completedTasksAcrossAllDocs,
-            totalTasksAcrossAllDocs: prevSessionState.totalTasksAcrossAllDocs,
-          },
-          new: {
-            loopIteration: newStateForSession.loopIteration,
-            completedTasksAcrossAllDocs: newStateForSession.completedTasksAcrossAllDocs,
-            totalTasksAcrossAllDocs: newStateForSession.totalTasksAcrossAllDocs,
-          },
-          willDispatch: {
-            loopIteration: newStateForSession.loopIteration !== prevSessionState.loopIteration ? newStateForSession.loopIteration : 'SKIPPED',
-            completedTasksAcrossAllDocs: newStateForSession.completedTasksAcrossAllDocs !== prevSessionState.completedTasksAcrossAllDocs ? newStateForSession.completedTasksAcrossAllDocs : 'SKIPPED',
-          }
-        });
 
         // Dispatch UPDATE_PROGRESS with any changed fields
         dispatch({
@@ -330,17 +310,7 @@ export function useBatchProcessor({
 
   // Helper to get batch state for a session
   const getBatchState = useCallback((sessionId: string): BatchRunState => {
-    const state = batchRunStates[sessionId] || DEFAULT_BATCH_STATE;
-    // DEBUG: Log getBatchState calls
-    console.log('[BatchProcessor:getBatchState] Called:', {
-      sessionId,
-      state: {
-        loopIteration: state.loopIteration,
-        completedTasksAcrossAllDocs: state.completedTasksAcrossAllDocs,
-        totalTasksAcrossAllDocs: state.totalTasksAcrossAllDocs,
-      }
-    });
-    return state;
+    return batchRunStates[sessionId] || DEFAULT_BATCH_STATE;
   }, [batchRunStates]);
 
   // Check if any session has an active batch
@@ -380,31 +350,21 @@ export function useBatchProcessor({
    * Start a batch processing run for a specific session with multi-document support
    */
   const startBatchRun = useCallback(async (sessionId: string, config: BatchRunConfig, folderPath: string) => {
-    console.log('[BatchProcessor] startBatchRun called:', { sessionId, folderPath, config });
     window.maestro.logger.log('info', 'startBatchRun called', 'BatchProcessor', { sessionId, folderPath, documentsCount: config.documents.length, worktreeEnabled: config.worktree?.enabled });
 
     // Use sessionsRef to get latest sessions (handles case where session was just created)
     const session = sessionsRef.current.find(s => s.id === sessionId);
     if (!session) {
-      console.error('[BatchProcessor] Session not found for batch processing:', sessionId);
       window.maestro.logger.log('error', 'Session not found for batch processing', 'BatchProcessor', { sessionId });
       return;
     }
 
     const { documents, prompt, loopEnabled, maxLoops, worktree } = config;
-    console.log('[BatchProcessor] Config parsed - documents:', documents.length, 'loopEnabled:', loopEnabled, 'maxLoops:', maxLoops);
 
     if (documents.length === 0) {
-      console.warn('[BatchProcessor] No documents provided for batch processing:', sessionId);
       window.maestro.logger.log('warn', 'No documents provided for batch processing', 'BatchProcessor', { sessionId });
       return;
     }
-
-    // Debug log: show document configuration
-    console.log('[BatchProcessor] Starting batch with documents:', documents.map(d => ({
-      filename: d.filename,
-      resetOnCompletion: d.resetOnCompletion
-    })));
 
     // Track batch start time for completion notification
     const batchStartTime = Date.now();
@@ -419,7 +379,7 @@ export function useBatchProcessor({
     // Set up worktree if enabled using extracted hook
     const worktreeResult = await worktreeManager.setupWorktree(session.cwd, worktree);
     if (!worktreeResult.success) {
-      console.error('[BatchProcessor] Worktree setup failed:', worktreeResult.error);
+      window.maestro.logger.log('error', 'Worktree setup failed', 'BatchProcessor', { sessionId, error: worktreeResult.error });
       return;
     }
 
@@ -444,13 +404,11 @@ export function useBatchProcessor({
     let initialTotalTasks = 0;
     for (const doc of documents) {
       const { taskCount } = await readDocAndCountTasks(folderPath, doc.filename);
-      console.log(`[BatchProcessor] Document ${doc.filename}: ${taskCount} tasks`);
       initialTotalTasks += taskCount;
     }
-    console.log(`[BatchProcessor] Initial total tasks: ${initialTotalTasks}`);
 
     if (initialTotalTasks === 0) {
-      console.warn('No unchecked tasks found across all documents for session:', sessionId);
+      window.maestro.logger.log('warn', 'No unchecked tasks found across all documents', 'BatchProcessor', { sessionId });
       return;
     }
 
@@ -508,22 +466,16 @@ export function useBatchProcessor({
     });
 
     // AUTORUN LOG: Start
-    try {
-      console.log('[AUTORUN] Logging start event - calling window.maestro.logger.autorun');
-      window.maestro.logger.autorun(
-        `Auto Run started`,
-        session.name,
-        {
-          documents: documents.map(d => d.filename),
-          totalTasks: initialTotalTasks,
-          loopEnabled,
-          maxLoops: maxLoops ?? 'unlimited'
-        }
-      );
-      console.log('[AUTORUN] Start event logged successfully');
-    } catch (err) {
-      console.error('[AUTORUN] Error logging start event:', err);
-    }
+    window.maestro.logger.autorun(
+      `Auto Run started`,
+      session.name,
+      {
+        documents: documents.map(d => d.filename),
+        totalTasks: initialTotalTasks,
+        loopEnabled,
+        maxLoops: maxLoops ?? 'unlimited'
+      }
+    );
 
     // Add initial history entry when using worktree
     if (worktreeActive && worktreePath && worktreeBranch) {
@@ -591,12 +543,11 @@ export function useBatchProcessor({
     // Helper to clean up all backups
     const cleanupBackups = async () => {
       if (activeBackups.size > 0) {
-        console.log(`[BatchProcessor] Cleaning up ${activeBackups.size} backup(s)`);
         try {
           await window.maestro.autorun.deleteBackups(folderPath);
           activeBackups.clear();
-        } catch (err) {
-          console.error('[BatchProcessor] Failed to clean up backups:', err);
+        } catch {
+          // Ignore backup cleanup errors
         }
       }
     };
@@ -605,8 +556,6 @@ export function useBatchProcessor({
     const handleInterruptionCleanup = async () => {
       // If we were mid-processing a reset doc, restore it to original state
       if (currentResetDocFilename) {
-        console.log(`[BatchProcessor] Restoring interrupted reset document: ${currentResetDocFilename}`);
-
         // Find the document entry to check if it's reset-on-completion
         const docEntry = documents.find(d => d.filename === currentResetDocFilename);
         const isResetOnCompletion = docEntry?.resetOnCompletion ?? false;
@@ -617,33 +566,28 @@ export function useBatchProcessor({
             try {
               await window.maestro.autorun.restoreBackup(folderPath, currentResetDocFilename);
               activeBackups.delete(currentResetDocFilename);
-              console.log(`[BatchProcessor] Restored ${currentResetDocFilename} from backup`);
-            } catch (err) {
-              console.error(`[BatchProcessor] Failed to restore backup for ${currentResetDocFilename}, falling back to uncheckAllTasks:`, err);
+            } catch {
               // Fallback: uncheck all tasks in the document
               try {
                 const { content } = await readDocAndCountTasks(folderPath, currentResetDocFilename);
                 if (content) {
                   const resetContent = uncheckAllTasks(content);
                   await window.maestro.autorun.writeDoc(folderPath, currentResetDocFilename + '.md', resetContent);
-                  console.log(`[BatchProcessor] Reset ${currentResetDocFilename} by unchecking all tasks`);
                 }
-              } catch (resetErr) {
-                console.error(`[BatchProcessor] Failed to reset ${currentResetDocFilename}:`, resetErr);
+              } catch {
+                // Ignore reset errors
               }
             }
           } else {
             // No backup available - use uncheckAllTasks to reset
-            console.log(`[BatchProcessor] No backup for ${currentResetDocFilename}, using uncheckAllTasks`);
             try {
               const { content } = await readDocAndCountTasks(folderPath, currentResetDocFilename);
               if (content) {
                 const resetContent = uncheckAllTasks(content);
                 await window.maestro.autorun.writeDoc(folderPath, currentResetDocFilename + '.md', resetContent);
-                console.log(`[BatchProcessor] Reset ${currentResetDocFilename} by unchecking all tasks`);
               }
-            } catch (err) {
-              console.error(`[BatchProcessor] Failed to reset ${currentResetDocFilename}:`, err);
+            } catch {
+              // Ignore reset errors
             }
           }
         }
@@ -685,7 +629,6 @@ export function useBatchProcessor({
     while (true) {
       // Check for stop request
       if (stopRequestedRefs.current[sessionId]) {
-        console.log('[BatchProcessor] Batch run stopped by user for session:', sessionId);
         addFinalLoopSummary('Stopped by user');
         break;
       }
@@ -697,7 +640,6 @@ export function useBatchProcessor({
       for (let docIndex = 0; docIndex < documents.length; docIndex++) {
         // Check for stop request before each document
         if (stopRequestedRefs.current[sessionId]) {
-          console.log('[BatchProcessor] Batch run stopped by user at document', docIndex, 'for session:', sessionId);
           break;
         }
 
@@ -713,7 +655,6 @@ export function useBatchProcessor({
           if (docEntry.resetOnCompletion && loopEnabled) {
             // Use docCheckedCount from readDocAndCountTasks instead of calling countCheckedTasks again
             if (docCheckedCount > 0) {
-              console.log(`[BatchProcessor] Document ${docEntry.filename} has ${docCheckedCount} checked tasks - resetting for next iteration`);
               const resetContent = uncheckAllTasks(docContent);
               await window.maestro.autorun.writeDoc(folderPath, docEntry.filename + '.md', resetContent);
               // Update task count in state
@@ -728,7 +669,6 @@ export function useBatchProcessor({
               }));
             }
           }
-          console.log(`[BatchProcessor] Skipping document ${docEntry.filename} - no unchecked tasks`);
           continue;
         }
 
@@ -737,18 +677,14 @@ export function useBatchProcessor({
 
         // Create backup for reset-on-completion documents before processing
         if (docEntry.resetOnCompletion) {
-          console.log(`[BatchProcessor] Creating backup for reset document: ${docEntry.filename}`);
           try {
             await window.maestro.autorun.createBackup(folderPath, docEntry.filename);
             activeBackups.add(docEntry.filename);
             currentResetDocFilename = docEntry.filename;
-          } catch (err) {
-            console.error(`[BatchProcessor] Failed to create backup for ${docEntry.filename}:`, err);
+          } catch {
             // Continue without backup - will fall back to uncheckAllTasks behavior
           }
         }
-
-        console.log(`[BatchProcessor] Processing document ${docEntry.filename} with ${remainingTasks} tasks`);
 
         // AUTORUN LOG: Document processing
         window.maestro.logger.autorun(
@@ -779,7 +715,6 @@ export function useBatchProcessor({
         while (remainingTasks > 0) {
           // Check for stop request before each task
           if (stopRequestedRefs.current[sessionId]) {
-            console.log('[BatchProcessor] Batch run stopped by user during document', docEntry.filename);
             break;
           }
 
@@ -849,7 +784,6 @@ export function useBatchProcessor({
             // Detect stalling: if document content is unchanged and no tasks were checked off
             if (!documentChanged && tasksCompletedThisRun === 0) {
               consecutiveNoChangeCount++;
-              console.log(`[BatchProcessor] Document unchanged, no tasks completed (${consecutiveNoChangeCount}/${MAX_CONSECUTIVE_NO_CHANGES} consecutive)`);
             } else {
               // Reset counter on any document change or task completion
               consecutiveNoChangeCount = 0;
@@ -928,7 +862,6 @@ export function useBatchProcessor({
             // Check if we've hit the stalling threshold for this document
             if (consecutiveNoChangeCount >= MAX_CONSECUTIVE_NO_CHANGES) {
               const stallReason = `${consecutiveNoChangeCount} consecutive runs with no progress`;
-              console.warn(`[BatchProcessor] Document "${docEntry.filename}" stalled: ${stallReason}`);
 
               // Track this document as stalled
               stalledDocuments.set(docEntry.filename, stallReason);
@@ -984,7 +917,6 @@ export function useBatchProcessor({
             docCheckedCount = newCheckedCount;
             remainingTasks = newRemainingTasks;
             docContent = taskResult.contentAfterTask;
-            console.log(`[BatchProcessor] Document ${docEntry.filename}: ${remainingTasks} tasks remaining`);
 
           } catch (error) {
             console.error(`[BatchProcessor] Error running task in ${docEntry.filename} for session ${sessionId}:`, error);
@@ -1002,12 +934,11 @@ export function useBatchProcessor({
         if (stalledDocuments.has(docEntry.filename)) {
           // If this was a reset doc that stalled, restore from backup
           if (docEntry.resetOnCompletion && activeBackups.has(docEntry.filename)) {
-            console.log(`[BatchProcessor] Restoring stalled reset document: ${docEntry.filename}`);
             try {
               await window.maestro.autorun.restoreBackup(folderPath, docEntry.filename);
               activeBackups.delete(docEntry.filename);
-            } catch (err) {
-              console.error(`[BatchProcessor] Failed to restore backup for stalled doc ${docEntry.filename}:`, err);
+            } catch {
+              // Ignore restore errors
             }
           }
           currentResetDocFilename = null;
@@ -1019,12 +950,11 @@ export function useBatchProcessor({
         if (skipCurrentDocumentAfterError) {
           // If this was a reset doc that errored, restore from backup
           if (docEntry.resetOnCompletion && activeBackups.has(docEntry.filename)) {
-            console.log(`[BatchProcessor] Restoring error-skipped reset document: ${docEntry.filename}`);
             try {
               await window.maestro.autorun.restoreBackup(folderPath, docEntry.filename);
               activeBackups.delete(docEntry.filename);
-            } catch (err) {
-              console.error(`[BatchProcessor] Failed to restore backup for errored doc ${docEntry.filename}:`, err);
+            } catch {
+              // Ignore restore errors
             }
           }
           currentResetDocFilename = null;
@@ -1032,9 +962,7 @@ export function useBatchProcessor({
         }
 
         // Document complete - handle reset-on-completion if enabled
-        console.log(`[BatchProcessor] Document ${docEntry.filename} complete. resetOnCompletion=${docEntry.resetOnCompletion}, docTasksCompleted=${docTasksCompleted}`);
         if (docEntry.resetOnCompletion && docTasksCompleted > 0) {
-          console.log(`[BatchProcessor] Resetting document ${docEntry.filename} (reset-on-completion enabled)`);
 
           // AUTORUN LOG: Document reset
           window.maestro.logger.autorun(
@@ -1049,7 +977,6 @@ export function useBatchProcessor({
 
           // Restore from backup if available, otherwise fall back to uncheckAllTasks
           if (activeBackups.has(docEntry.filename)) {
-            console.log(`[BatchProcessor] Restoring document ${docEntry.filename} from backup`);
             try {
               await window.maestro.autorun.restoreBackup(folderPath, docEntry.filename);
               activeBackups.delete(docEntry.filename);
@@ -1058,7 +985,6 @@ export function useBatchProcessor({
               // Count tasks in restored content for loop mode
               if (loopEnabled) {
                 const { taskCount: resetTaskCount } = await readDocAndCountTasks(folderPath, docEntry.filename);
-                console.log(`[BatchProcessor] Restored document has ${resetTaskCount} tasks`);
                 updateBatchStateAndBroadcast(sessionId, prev => ({
                   ...prev,
                   [sessionId]: {
@@ -1091,7 +1017,6 @@ export function useBatchProcessor({
             }
           } else {
             // No backup available - use legacy uncheckAllTasks behavior
-            console.log(`[BatchProcessor] No backup found for ${docEntry.filename}, using uncheckAllTasks`);
             const { content: currentContent } = await readDocAndCountTasks(folderPath, docEntry.filename);
             const resetContent = uncheckAllTasks(currentContent);
             await window.maestro.autorun.writeDoc(folderPath, docEntry.filename + '.md', resetContent);
@@ -1111,7 +1036,6 @@ export function useBatchProcessor({
         } else if (docEntry.resetOnCompletion) {
           // Document had reset enabled but no tasks were completed - clean up backup
           if (activeBackups.has(docEntry.filename)) {
-            console.log(`[BatchProcessor] Cleaning up unused backup for ${docEntry.filename}`);
             try {
               // Delete just this backup by restoring (which deletes) or we can just delete it
               // Actually, let's leave it for now and clean up at the end
@@ -1145,7 +1069,6 @@ export function useBatchProcessor({
 
       // Check if we've hit the max loop limit
       if (maxLoops !== null && maxLoops !== undefined && loopIteration + 1 >= maxLoops) {
-        console.log(`[BatchProcessor] Reached max loop limit (${maxLoops}), exiting loop`);
         addFinalLoopSummary(`Reached max loop limit (${maxLoops})`);
         break;
       }
@@ -1158,7 +1081,6 @@ export function useBatchProcessor({
 
       // Safety check: if we didn't process ANY tasks this iteration, exit to avoid infinite loop
       if (!anyTasksProcessedThisIteration) {
-        console.warn('[BatchProcessor] No tasks processed this iteration - exiting to avoid infinite loop');
         addFinalLoopSummary('No tasks processed this iteration');
         break;
       }
@@ -1181,7 +1103,6 @@ export function useBatchProcessor({
         }
 
         if (!anyNonResetDocsHaveTasks) {
-          console.log('[BatchProcessor] All non-reset documents completed, exiting loop');
           addFinalLoopSummary('All tasks completed');
           break;
         }
@@ -1251,7 +1172,6 @@ export function useBatchProcessor({
 
       // Continue looping
       loopIteration++;
-      console.log(`[BatchProcessor] Starting loop iteration ${loopIteration + 1}: ${newTotalTasks} tasks across all documents`);
 
       updateBatchStateAndBroadcast(sessionId, prev => ({
         ...prev,
@@ -1300,8 +1220,6 @@ export function useBatchProcessor({
     // (excludes time when laptop was sleeping/suspended)
     const totalElapsedMs = timeTracking.getElapsedTime(sessionId);
     const loopsCompleted = loopEnabled ? loopIteration + 1 : 1;
-
-    console.log('[BatchProcessor] Creating final Auto Run summary:', { sessionId, totalElapsedMs, totalCompletedTasks, stalledCount: stalledDocuments.size });
 
     // Determine status based on stalled documents and completion
     const stalledCount = stalledDocuments.size;
@@ -1399,9 +1317,8 @@ export function useBatchProcessor({
         } : undefined,
         achievementAction: 'openAbout'  // Enable clickable link to achievements panel
       });
-      console.log('[BatchProcessor] Final Auto Run summary added to history successfully');
-    } catch (historyError) {
-      console.error('[BatchProcessor] Failed to add final Auto Run summary to history:', historyError);
+    } catch {
+      // Ignore history errors
     }
 
     // Guard against state updates after unmount (async code may still be running)
@@ -1466,7 +1383,6 @@ export function useBatchProcessor({
   const pauseBatchOnError = useCallback((sessionId: string, error: AgentError, documentIndex: number, taskDescription?: string) => {
     if (!isMountedRef.current) return;
 
-    console.log('[BatchProcessor] Pausing batch due to error:', { sessionId, errorType: error.type, documentIndex });
     window.maestro.logger.autorun(
       `Auto Run paused due to error: ${error.type}`,
       sessionId,
@@ -1514,7 +1430,6 @@ export function useBatchProcessor({
   const skipCurrentDocument = useCallback((sessionId: string) => {
     if (!isMountedRef.current) return;
 
-    console.log('[BatchProcessor] Skipping current document after error:', sessionId);
     window.maestro.logger.autorun(
       `Skipping document after error`,
       sessionId,
@@ -1551,7 +1466,6 @@ export function useBatchProcessor({
   const resumeAfterError = useCallback((sessionId: string) => {
     if (!isMountedRef.current) return;
 
-    console.log('[BatchProcessor] Resuming batch after error resolution:', sessionId);
     window.maestro.logger.autorun(
       `Resuming Auto Run after error resolution`,
       sessionId,
@@ -1585,7 +1499,6 @@ export function useBatchProcessor({
   const abortBatchOnError = useCallback((sessionId: string) => {
     if (!isMountedRef.current) return;
 
-    console.log('[BatchProcessor] Aborting batch due to error:', sessionId);
     window.maestro.logger.autorun(
       `Auto Run aborted due to error`,
       sessionId,

@@ -15,21 +15,23 @@ import type { BatchRunState, AgentError } from '../../types';
 import { transition, canTransition, type BatchProcessingState, type BatchEvent, DEFAULT_MACHINE_CONTEXT } from './batchStateMachine';
 
 /**
- * Log state machine transitions for debugging
+ * Log state machine transitions for debugging (disabled in production for performance)
  */
 function logTransition(
-  sessionId: string,
-  fromState: BatchProcessingState | undefined,
-  event: BatchEvent['type'],
-  toState: BatchProcessingState,
-  valid: boolean
+  _sessionId: string,
+  _fromState: BatchProcessingState | undefined,
+  _event: BatchEvent['type'],
+  _toState: BatchProcessingState,
+  _valid: boolean
 ): void {
-  const stateFrom = fromState ?? 'IDLE';
-  if (valid) {
-    console.log(`[BatchStateMachine] ${sessionId}: ${stateFrom} -> ${toState} (${event})`);
-  } else {
-    console.warn(`[BatchStateMachine] ${sessionId}: INVALID transition ${stateFrom} + ${event} (staying in ${stateFrom})`);
-  }
+  // PERFORMANCE: Debug logging disabled - was causing I/O overhead during batch runs
+  // Uncomment for debugging state transitions:
+  // const stateFrom = _fromState ?? 'IDLE';
+  // if (_valid) {
+  //   console.log(`[BatchStateMachine] ${_sessionId}: ${stateFrom} -> ${_toState} (${_event})`);
+  // } else {
+  //   console.warn(`[BatchStateMachine] ${_sessionId}: INVALID transition ${stateFrom} + ${_event} (staying in ${stateFrom})`);
+  // }
 }
 
 /**
