@@ -283,7 +283,7 @@ export function AutoRunnerHelpModal({ theme, onClose }: AutoRunnerHelpModalProps
               <p>
                 Enable the reset toggle (<RotateCcw className="w-3 h-3 inline" />) on any document to
                 keep it available for repeated runs. When enabled, Auto Run creates a <strong style={{ color: theme.colors.textMain }}>working copy</strong> in
-                the <code>runs/</code> subfolder and processes that copy—<em>the original document is never modified</em>.
+                the <code>Runs/</code> subfolder and processes that copy—<em>the original document is never modified</em>.
               </p>
               <p>
                 Working copies are named with timestamps (e.g., <code>TASK-1735192800000-loop-1.md</code>) and

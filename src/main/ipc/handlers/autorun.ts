@@ -570,7 +570,7 @@ export function registerAutorunHandlers(deps: {
   );
 
   // Create a working copy of a document for reset-on-completion loops
-  // Working copies are stored in /runs/ subdirectory with format: {name}-{timestamp}-loop-{N}.md
+  // Working copies are stored in /Runs/ subdirectory with format: {name}-{timestamp}-loop-{N}.md
   ipcMain.handle(
     'autorun:createWorkingCopy',
     createIpcHandler(
@@ -604,10 +604,10 @@ export function registerAutorunHandlers(deps: {
           throw new Error('Source file not found');
         }
 
-        // Create runs directory (with subdirectory if needed)
+        // Create Runs directory (with subdirectory if needed)
         const runsDir = subDir
-          ? path.join(folderPath, 'runs', subDir)
-          : path.join(folderPath, 'runs');
+          ? path.join(folderPath, 'Runs', subDir)
+          : path.join(folderPath, 'Runs');
         await fs.mkdir(runsDir, { recursive: true });
 
         // Generate working copy filename: {name}-{timestamp}-loop-{N}.md
@@ -625,8 +625,8 @@ export function registerAutorunHandlers(deps: {
 
         // Return the relative path (without .md for consistency with other APIs)
         const relativePath = subDir
-          ? `runs/${subDir}/${workingCopyName.slice(0, -3)}`
-          : `runs/${workingCopyName.slice(0, -3)}`;
+          ? `Runs/${subDir}/${workingCopyName.slice(0, -3)}`
+          : `Runs/${workingCopyName.slice(0, -3)}`;
 
         logger.info(`Created Auto Run working copy: ${relativePath}`, LOG_CONTEXT);
         return { workingCopyPath: relativePath, originalPath: baseName };

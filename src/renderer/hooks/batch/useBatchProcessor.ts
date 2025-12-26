@@ -557,7 +557,7 @@ export function useBatchProcessor({
     const stalledDocuments: Map<string, string> = new Map();
 
     // Track working copies for reset-on-completion documents (original filename -> working copy path)
-    // Working copies are stored in /runs/ and serve as audit logs
+    // Working copies are stored in /Runs/ and serve as audit logs
     const workingCopies: Map<string, string> = new Map();
 
     // Helper to add final loop summary (defined here so it has access to tracking vars)
@@ -643,7 +643,7 @@ export function useBatchProcessor({
         let effectiveFilename = docEntry.filename;
 
         // Create working copy for reset-on-completion documents
-        // Working copies are stored in /runs/ and the original is never modified
+        // Working copies are stored in /Runs/ and the original is never modified
         if (docEntry.resetOnCompletion) {
           try {
             const { workingCopyPath } = await window.maestro.autorun.createWorkingCopy(
@@ -912,7 +912,7 @@ export function useBatchProcessor({
 
         // Skip document handling if this document stalled (it didn't complete normally)
         if (stalledDocuments.has(docEntry.filename)) {
-          // Working copy approach: stalled working copy stays in /runs/ as audit log
+          // Working copy approach: stalled working copy stays in /Runs/ as audit log
           // Original document is untouched, so nothing to restore
           workingCopies.delete(docEntry.filename);
           // Reset consecutive no-change counter for next document
@@ -921,14 +921,14 @@ export function useBatchProcessor({
         }
 
         if (skipCurrentDocumentAfterError) {
-          // Working copy approach: errored working copy stays in /runs/ as audit log
+          // Working copy approach: errored working copy stays in /Runs/ as audit log
           // Original document is untouched, so nothing to restore
           workingCopies.delete(docEntry.filename);
           continue;
         }
 
         // Document complete - for reset-on-completion docs, original is untouched
-        // Working copy in /runs/ serves as the audit log of this loop's work
+        // Working copy in /Runs/ serves as the audit log of this loop's work
         if (docEntry.resetOnCompletion && docTasksCompleted > 0) {
           // AUTORUN LOG: Document loop completed
           window.maestro.logger.autorun(
@@ -956,7 +956,7 @@ export function useBatchProcessor({
             }));
           }
 
-          // Clear tracking - working copy stays in /runs/ as audit log
+          // Clear tracking - working copy stays in /Runs/ as audit log
           workingCopies.delete(docEntry.filename);
         } else if (docEntry.resetOnCompletion) {
           // Document had reset enabled but no tasks were completed
@@ -1104,7 +1104,7 @@ export function useBatchProcessor({
 
     // Working copy approach: no cleanup needed
     // - Original documents are never modified
-    // - Working copies in /runs/ serve as audit logs and are kept
+    // - Working copies in /Runs/ serve as audit logs and are kept
     // - User can delete them manually if desired
 
     // Create PR if worktree was used, PR creation is enabled, and not stopped

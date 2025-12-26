@@ -1050,7 +1050,7 @@ contextBridge.exposeInMainWorld('maestro', {
     deleteBackups: (folderPath: string) =>
       ipcRenderer.invoke('autorun:deleteBackups', folderPath),
     // Working copy operations for reset-on-completion documents (preferred)
-    // Creates a copy in /runs/ subdirectory: {name}-{timestamp}-loop-{N}.md
+    // Creates a copy in /Runs/ subdirectory: {name}-{timestamp}-loop-{N}.md
     createWorkingCopy: (folderPath: string, filename: string, loopNumber: number): Promise<{ workingCopyPath: string; originalPath: string }> =>
       ipcRenderer.invoke('autorun:createWorkingCopy', folderPath, filename, loopNumber),
   },
