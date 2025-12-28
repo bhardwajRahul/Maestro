@@ -17,6 +17,7 @@ Settings are organized into tabs:
 | **Appearance** | Font size, UI density |
 | **Notifications** | Sound alerts, text-to-speech settings |
 | **AI Commands** | View and edit slash commands, [Spec-Kit](./speckit-commands), and [OpenSpec](./openspec-commands) prompts |
+| **SSH Remotes** | Configure remote hosts for [SSH agent execution](./ssh-remote-execution) |
 
 ## Checking for Updates
 

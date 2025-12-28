@@ -11,7 +11,7 @@
 
 import { ipcMain } from 'electron';
 import Store from 'electron-store';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { SshRemoteConfig, SshRemoteTestResult } from '../../../shared/types';
 import { sshRemoteManager } from '../../ssh-remote-manager';
 import { createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';

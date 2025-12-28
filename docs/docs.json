@@ -66,6 +66,7 @@
               "git-worktrees",
               "group-chat",
               "remote-access",
+              "ssh-remote-execution",
               "configuration"
             ]
           },
