@@ -2068,3 +2068,365 @@ describe('Auto Run sessions and tasks recorded correctly', () => {
     });
   });
 });
+
+/**
+ * Foreign key relationship verification tests
+ *
+ * These tests verify that the foreign key relationship between auto_run_tasks
+ * and auto_run_sessions is properly defined in the schema, ensuring referential
+ * integrity can be enforced when foreign key constraints are enabled.
+ */
+describe('Foreign key relationship between tasks and sessions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDb.pragma.mockReturnValue([{ user_version: 0 }]);
+    mockDb.prepare.mockReturnValue(mockStatement);
+    mockStatement.run.mockReturnValue({ changes: 1 });
+    mockStatement.get.mockReturnValue({ count: 0, total_duration: 0 });
+    mockStatement.all.mockReturnValue([]);
+    mockFsExistsSync.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  describe('schema definition', () => {
+    it('should create auto_run_tasks table with REFERENCES clause to auto_run_sessions', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Verify the CREATE TABLE statement includes the foreign key reference
+      const prepareCalls = mockDb.prepare.mock.calls.map((call) => call[0] as string);
+      const createTasksTable = prepareCalls.find((sql) =>
+        sql.includes('CREATE TABLE IF NOT EXISTS auto_run_tasks')
+      );
+
+      expect(createTasksTable).toBeDefined();
+      expect(createTasksTable).toContain('auto_run_session_id TEXT NOT NULL REFERENCES auto_run_sessions(id)');
+    });
+
+    it('should have auto_run_session_id column as NOT NULL in auto_run_tasks', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const prepareCalls = mockDb.prepare.mock.calls.map((call) => call[0] as string);
+      const createTasksTable = prepareCalls.find((sql) =>
+        sql.includes('CREATE TABLE IF NOT EXISTS auto_run_tasks')
+      );
+
+      expect(createTasksTable).toBeDefined();
+      // Verify NOT NULL constraint is present for auto_run_session_id
+      expect(createTasksTable).toContain('auto_run_session_id TEXT NOT NULL');
+    });
+
+    it('should create index on auto_run_session_id foreign key column', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const prepareCalls = mockDb.prepare.mock.calls.map((call) => call[0] as string);
+      const indexCreation = prepareCalls.find((sql) =>
+        sql.includes('idx_task_auto_session')
+      );
+
+      expect(indexCreation).toBeDefined();
+      expect(indexCreation).toContain('ON auto_run_tasks(auto_run_session_id)');
+    });
+  });
+
+  describe('referential integrity behavior', () => {
+    it('should store auto_run_session_id when inserting task', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const autoRunSessionId = 'parent-session-abc-123';
+      db.insertAutoRunTask({
+        autoRunSessionId,
+        sessionId: 'maestro-session-1',
+        agentType: 'claude-code',
+        taskIndex: 0,
+        taskContent: 'Test task',
+        startTime: Date.now(),
+        duration: 1000,
+        success: true,
+      });
+
+      // Verify the auto_run_session_id was passed to the INSERT
+      const runCalls = mockStatement.run.mock.calls;
+      const lastCall = runCalls[runCalls.length - 1];
+
+      // INSERT parameters: id, auto_run_session_id, session_id, agent_type, task_index, task_content, start_time, duration, success
+      expect(lastCall[1]).toBe(autoRunSessionId);
+    });
+
+    it('should insert task with matching auto_run_session_id from parent session', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear calls from initialization
+      mockStatement.run.mockClear();
+
+      // First insert a session
+      const autoRunId = db.insertAutoRunSession({
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        documentPath: 'PHASE-1.md',
+        startTime: Date.now(),
+        duration: 0,
+        tasksTotal: 5,
+        tasksCompleted: 0,
+        projectPath: '/project',
+      });
+
+      // Then insert a task referencing that session
+      const taskId = db.insertAutoRunTask({
+        autoRunSessionId: autoRunId,
+        sessionId: 'session-1',
+        agentType: 'claude-code',
+        taskIndex: 0,
+        taskContent: 'First task',
+        startTime: Date.now(),
+        duration: 1000,
+        success: true,
+      });
+
+      expect(autoRunId).toBeDefined();
+      expect(taskId).toBeDefined();
+
+      // Both inserts should have succeeded (session + task)
+      expect(mockStatement.run).toHaveBeenCalledTimes(2);
+
+      // Verify the task INSERT used the session ID returned from the session INSERT
+      const runCalls = mockStatement.run.mock.calls;
+      const taskInsertCall = runCalls[1];
+      expect(taskInsertCall[1]).toBe(autoRunId); // auto_run_session_id matches
+    });
+
+    it('should retrieve tasks only for the specific parent session', async () => {
+      const now = Date.now();
+
+      // Mock returns tasks for session 'auto-run-A' only
+      mockStatement.all.mockReturnValue([
+        {
+          id: 'task-1',
+          auto_run_session_id: 'auto-run-A',
+          session_id: 'session-1',
+          agent_type: 'claude-code',
+          task_index: 0,
+          task_content: 'Task for session A',
+          start_time: now,
+          duration: 1000,
+          success: 1,
+        },
+        {
+          id: 'task-2',
+          auto_run_session_id: 'auto-run-A',
+          session_id: 'session-1',
+          agent_type: 'claude-code',
+          task_index: 1,
+          task_content: 'Another task for session A',
+          start_time: now + 1000,
+          duration: 2000,
+          success: 1,
+        },
+      ]);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Query tasks for 'auto-run-A'
+      const tasksA = db.getAutoRunTasks('auto-run-A');
+
+      expect(tasksA).toHaveLength(2);
+      expect(tasksA[0].autoRunSessionId).toBe('auto-run-A');
+      expect(tasksA[1].autoRunSessionId).toBe('auto-run-A');
+
+      // Verify the WHERE clause used the correct auto_run_session_id
+      expect(mockStatement.all).toHaveBeenCalledWith('auto-run-A');
+    });
+
+    it('should return empty array when no tasks exist for a session', async () => {
+      mockStatement.all.mockReturnValue([]);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const tasks = db.getAutoRunTasks('non-existent-session');
+
+      expect(tasks).toHaveLength(0);
+      expect(tasks).toEqual([]);
+    });
+  });
+
+  describe('data consistency verification', () => {
+    it('should maintain consistent auto_run_session_id across multiple tasks', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear calls from initialization
+      mockStatement.run.mockClear();
+
+      const parentSessionId = 'consistent-parent-session';
+
+      // Insert multiple tasks for the same parent session
+      for (let i = 0; i < 5; i++) {
+        db.insertAutoRunTask({
+          autoRunSessionId: parentSessionId,
+          sessionId: 'maestro-session',
+          agentType: 'claude-code',
+          taskIndex: i,
+          taskContent: `Task ${i + 1}`,
+          startTime: Date.now() + i * 1000,
+          duration: 1000,
+          success: true,
+        });
+      }
+
+      // Verify all 5 tasks used the same parent session ID
+      const runCalls = mockStatement.run.mock.calls;
+      expect(runCalls).toHaveLength(5);
+
+      for (const call of runCalls) {
+        expect(call[1]).toBe(parentSessionId); // auto_run_session_id
+      }
+    });
+
+    it('should allow tasks from different sessions to be inserted independently', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear calls from initialization
+      mockStatement.run.mockClear();
+
+      // Insert tasks for session A
+      db.insertAutoRunTask({
+        autoRunSessionId: 'session-A',
+        sessionId: 'maestro-1',
+        agentType: 'claude-code',
+        taskIndex: 0,
+        taskContent: 'Task A1',
+        startTime: Date.now(),
+        duration: 1000,
+        success: true,
+      });
+
+      // Insert tasks for session B
+      db.insertAutoRunTask({
+        autoRunSessionId: 'session-B',
+        sessionId: 'maestro-2',
+        agentType: 'opencode',
+        taskIndex: 0,
+        taskContent: 'Task B1',
+        startTime: Date.now(),
+        duration: 2000,
+        success: true,
+      });
+
+      // Insert another task for session A
+      db.insertAutoRunTask({
+        autoRunSessionId: 'session-A',
+        sessionId: 'maestro-1',
+        agentType: 'claude-code',
+        taskIndex: 1,
+        taskContent: 'Task A2',
+        startTime: Date.now(),
+        duration: 1500,
+        success: true,
+      });
+
+      const runCalls = mockStatement.run.mock.calls;
+      expect(runCalls).toHaveLength(3);
+
+      // Verify parent session IDs are correctly assigned
+      expect(runCalls[0][1]).toBe('session-A');
+      expect(runCalls[1][1]).toBe('session-B');
+      expect(runCalls[2][1]).toBe('session-A');
+    });
+
+    it('should use generated session ID as foreign key when retrieved after insertion', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Clear calls from initialization
+      mockStatement.run.mockClear();
+
+      // Insert a session and capture the generated ID
+      const generatedSessionId = db.insertAutoRunSession({
+        sessionId: 'maestro-session',
+        agentType: 'claude-code',
+        documentPath: 'DOC.md',
+        startTime: Date.now(),
+        duration: 0,
+        tasksTotal: 3,
+        tasksCompleted: 0,
+        projectPath: '/project',
+      });
+
+      // The generated ID should be a string with timestamp-random format
+      expect(generatedSessionId).toMatch(/^\d+-[a-z0-9]+$/);
+
+      // Use this generated ID as the foreign key for tasks
+      db.insertAutoRunTask({
+        autoRunSessionId: generatedSessionId,
+        sessionId: 'maestro-session',
+        agentType: 'claude-code',
+        taskIndex: 0,
+        taskContent: 'First task',
+        startTime: Date.now(),
+        duration: 1000,
+        success: true,
+      });
+
+      const runCalls = mockStatement.run.mock.calls;
+      const taskInsert = runCalls[1]; // Second call is the task insert (first is session insert)
+
+      // Verify the task uses the exact same ID that was generated for the session
+      expect(taskInsert[1]).toBe(generatedSessionId);
+    });
+  });
+
+  describe('query filtering by foreign key', () => {
+    it('should filter tasks using WHERE auto_run_session_id clause', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunTasks('specific-session-id');
+
+      // Verify the SQL query includes proper WHERE clause for foreign key
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const selectTasksCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('SELECT * FROM auto_run_tasks') &&
+        (call[0] as string).includes('WHERE auto_run_session_id = ?')
+      );
+
+      expect(selectTasksCall).toBeDefined();
+    });
+
+    it('should order tasks by task_index within a session', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunTasks('any-session');
+
+      // Verify the query includes ORDER BY task_index
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const selectTasksCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('ORDER BY task_index ASC')
+      );
+
+      expect(selectTasksCall).toBeDefined();
+    });
+  });
+});
