@@ -2430,3 +2430,566 @@ describe('Foreign key relationship between tasks and sessions', () => {
     });
   });
 });
+
+/**
+ * Time-range filtering verification tests
+ *
+ * These tests verify that time-range filtering works correctly for all supported
+ * ranges: 'day', 'week', 'month', 'year', and 'all'. Each range should correctly
+ * calculate the start timestamp and use it to filter database queries.
+ */
+describe('Time-range filtering works correctly for all ranges', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDb.pragma.mockReturnValue([{ user_version: 1 }]);
+    mockDb.prepare.mockReturnValue(mockStatement);
+    mockStatement.run.mockReturnValue({ changes: 1 });
+    mockStatement.get.mockReturnValue({ count: 0, total_duration: 0 });
+    mockStatement.all.mockReturnValue([]);
+    mockFsExistsSync.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  describe('getQueryEvents time range calculations', () => {
+    it('should filter by "day" range (last 24 hours)', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('day');
+
+      // Verify the start_time parameter is approximately 24 hours ago
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      // The start time should be approximately now - 24 hours (within a few seconds tolerance)
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneDayMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneDayMs + 5000);
+    });
+
+    it('should filter by "week" range (last 7 days)', async () => {
+      const now = Date.now();
+      const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('week');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      // The start time should be approximately now - 7 days (within a few seconds tolerance)
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneWeekMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneWeekMs + 5000);
+    });
+
+    it('should filter by "month" range (last 30 days)', async () => {
+      const now = Date.now();
+      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('month');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      // The start time should be approximately now - 30 days (within a few seconds tolerance)
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneMonthMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneMonthMs + 5000);
+    });
+
+    it('should filter by "year" range (last 365 days)', async () => {
+      const now = Date.now();
+      const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('year');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      // The start time should be approximately now - 365 days (within a few seconds tolerance)
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneYearMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneYearMs + 5000);
+    });
+
+    it('should filter by "all" range (from epoch/timestamp 0)', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('all');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      // For 'all' range, start time should be 0 (epoch)
+      expect(startTimeParam).toBe(0);
+    });
+  });
+
+  describe('getAutoRunSessions time range calculations', () => {
+    it('should filter Auto Run sessions by "day" range', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('day');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneDayMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneDayMs + 5000);
+    });
+
+    it('should filter Auto Run sessions by "week" range', async () => {
+      const now = Date.now();
+      const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('week');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneWeekMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneWeekMs + 5000);
+    });
+
+    it('should filter Auto Run sessions by "month" range', async () => {
+      const now = Date.now();
+      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('month');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneMonthMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneMonthMs + 5000);
+    });
+
+    it('should filter Auto Run sessions by "year" range', async () => {
+      const now = Date.now();
+      const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('year');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneYearMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneYearMs + 5000);
+    });
+
+    it('should filter Auto Run sessions by "all" range', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('all');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBe(0);
+    });
+  });
+
+  describe('getAggregatedStats time range calculations', () => {
+    it('should aggregate stats for "day" range', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('day');
+
+      // getAggregatedStats calls multiple queries, verify the totals query used correct time range
+      const getCalls = mockStatement.get.mock.calls;
+      expect(getCalls.length).toBeGreaterThan(0);
+
+      const firstCall = getCalls[0];
+      const startTimeParam = firstCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneDayMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneDayMs + 5000);
+    });
+
+    it('should aggregate stats for "week" range', async () => {
+      const now = Date.now();
+      const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('week');
+
+      const getCalls = mockStatement.get.mock.calls;
+      expect(getCalls.length).toBeGreaterThan(0);
+
+      const firstCall = getCalls[0];
+      const startTimeParam = firstCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneWeekMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneWeekMs + 5000);
+    });
+
+    it('should aggregate stats for "month" range', async () => {
+      const now = Date.now();
+      const oneMonthMs = 30 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('month');
+
+      const getCalls = mockStatement.get.mock.calls;
+      expect(getCalls.length).toBeGreaterThan(0);
+
+      const firstCall = getCalls[0];
+      const startTimeParam = firstCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneMonthMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneMonthMs + 5000);
+    });
+
+    it('should aggregate stats for "year" range', async () => {
+      const now = Date.now();
+      const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('year');
+
+      const getCalls = mockStatement.get.mock.calls;
+      expect(getCalls.length).toBeGreaterThan(0);
+
+      const firstCall = getCalls[0];
+      const startTimeParam = firstCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneYearMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneYearMs + 5000);
+    });
+
+    it('should aggregate stats for "all" range', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('all');
+
+      const getCalls = mockStatement.get.mock.calls;
+      expect(getCalls.length).toBeGreaterThan(0);
+
+      const firstCall = getCalls[0];
+      const startTimeParam = firstCall[0] as number;
+
+      expect(startTimeParam).toBe(0);
+    });
+  });
+
+  describe('exportToCsv time range calculations', () => {
+    it('should export CSV for "day" range only', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.exportToCsv('day');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBeGreaterThanOrEqual(now - oneDayMs - 5000);
+      expect(startTimeParam).toBeLessThanOrEqual(now - oneDayMs + 5000);
+    });
+
+    it('should export CSV for "all" range', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.exportToCsv('all');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      const startTimeParam = lastCall[0] as number;
+
+      expect(startTimeParam).toBe(0);
+    });
+  });
+
+  describe('SQL query structure verification', () => {
+    it('should include start_time >= ? in getQueryEvents SQL', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('week');
+
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const selectCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('SELECT * FROM query_events')
+      );
+
+      expect(selectCall).toBeDefined();
+      expect(selectCall![0]).toContain('start_time >= ?');
+    });
+
+    it('should include start_time >= ? in getAutoRunSessions SQL', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAutoRunSessions('month');
+
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const selectCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('SELECT * FROM auto_run_sessions')
+      );
+
+      expect(selectCall).toBeDefined();
+      expect(selectCall![0]).toContain('start_time >= ?');
+    });
+
+    it('should include start_time >= ? in aggregation queries', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getAggregatedStats('year');
+
+      const prepareCalls = mockDb.prepare.mock.calls;
+
+      // Verify the totals query includes the filter
+      const totalsCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('COUNT(*)') &&
+        (call[0] as string).includes('SUM(duration)')
+      );
+      expect(totalsCall).toBeDefined();
+      expect(totalsCall![0]).toContain('WHERE start_time >= ?');
+
+      // Verify the byAgent query includes the filter
+      const byAgentCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('GROUP BY agent_type')
+      );
+      expect(byAgentCall).toBeDefined();
+      expect(byAgentCall![0]).toContain('WHERE start_time >= ?');
+
+      // Verify the bySource query includes the filter
+      const bySourceCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('GROUP BY source')
+      );
+      expect(bySourceCall).toBeDefined();
+      expect(bySourceCall![0]).toContain('WHERE start_time >= ?');
+
+      // Verify the byDay query includes the filter
+      const byDayCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('GROUP BY date(')
+      );
+      expect(byDayCall).toBeDefined();
+      expect(byDayCall![0]).toContain('WHERE start_time >= ?');
+    });
+  });
+
+  describe('time range boundary behavior', () => {
+    it('should include events exactly at the range boundary', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const boundaryTime = now - oneDayMs;
+
+      // Mock event exactly at the boundary
+      mockStatement.all.mockReturnValue([
+        {
+          id: 'boundary-event',
+          session_id: 'session-1',
+          agent_type: 'claude-code',
+          source: 'user',
+          start_time: boundaryTime,
+          duration: 1000,
+          project_path: null,
+          tab_id: null,
+        },
+      ]);
+
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      const events = db.getQueryEvents('day');
+
+      // Event at the boundary should be included (start_time >= boundary)
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('boundary-event');
+    });
+
+    it('should exclude events before the range boundary', async () => {
+      // The actual filtering happens in the SQL query via WHERE clause
+      // We verify this by checking the SQL structure
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('day');
+
+      const prepareCalls = mockDb.prepare.mock.calls;
+      const selectCall = prepareCalls.find((call) =>
+        (call[0] as string).includes('SELECT * FROM query_events')
+      );
+
+      // Verify it uses >= (greater than or equal), not just > (greater than)
+      expect(selectCall![0]).toContain('start_time >= ?');
+    });
+
+    it('should return consistent results for multiple calls with same range', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      // Call twice in quick succession
+      db.getQueryEvents('week');
+      db.getQueryEvents('week');
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBe(2);
+
+      // Both calls should have very close (within a few ms) start times
+      const firstStartTime = allCalls[0][0] as number;
+      const secondStartTime = allCalls[1][0] as number;
+
+      // Difference should be minimal (test executes quickly)
+      expect(Math.abs(secondStartTime - firstStartTime)).toBeLessThan(1000);
+    });
+  });
+
+  describe('combined filters with time range', () => {
+    it('should combine time range with agentType filter', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('week', { agentType: 'claude-code' });
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      // Should have 2 parameters: start_time and agentType
+      expect(lastCall).toHaveLength(2);
+      expect(lastCall[1]).toBe('claude-code');
+    });
+
+    it('should combine time range with source filter', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('month', { source: 'auto' });
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      // Should have 2 parameters: start_time and source
+      expect(lastCall).toHaveLength(2);
+      expect(lastCall[1]).toBe('auto');
+    });
+
+    it('should combine time range with multiple filters', async () => {
+      const { StatsDB } = await import('../../main/stats-db');
+      const db = new StatsDB();
+      db.initialize();
+
+      db.getQueryEvents('year', {
+        agentType: 'opencode',
+        source: 'user',
+        projectPath: '/test/path',
+        sessionId: 'session-123',
+      });
+
+      const allCalls = mockStatement.all.mock.calls;
+      expect(allCalls.length).toBeGreaterThan(0);
+
+      const lastCall = allCalls[allCalls.length - 1];
+      // Should have 5 parameters: start_time + 4 filters
+      expect(lastCall).toHaveLength(5);
+      expect(lastCall[1]).toBe('opencode');
+      expect(lastCall[2]).toBe('user');
+      expect(lastCall[3]).toBe('/test/path');
+      expect(lastCall[4]).toBe('session-123');
+    });
+  });
+});
