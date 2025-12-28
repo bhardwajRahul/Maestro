@@ -25,6 +25,7 @@ import { registerSpeckitHandlers } from './speckit';
 import { registerOpenSpecHandlers } from './openspec';
 import { registerContextHandlers, ContextHandlerDependencies, cleanupAllGroomingSessions, getActiveGroomingSessionCount } from './context';
 import { registerMarketplaceHandlers, MarketplaceHandlerDependencies } from './marketplace';
+import { registerStatsHandlers, StatsHandlerDependencies } from './stats';
 import { AgentDetector } from '../../agent-detector';
 import { ProcessManager } from '../../process-manager';
 import { WebServer } from '../../web-server';
@@ -51,6 +52,7 @@ export { registerOpenSpecHandlers };
 export { registerContextHandlers, cleanupAllGroomingSessions, getActiveGroomingSessionCount };
 export { registerMarketplaceHandlers };
 export type { MarketplaceHandlerDependencies };
+export { registerStatsHandlers };
 export type { AgentsHandlerDependencies };
 export type { ProcessHandlerDependencies };
 export type { PersistenceHandlerDependencies };
@@ -60,6 +62,7 @@ export type { AgentSessionsHandlerDependencies };
 export type { GroupChatHandlerDependencies };
 export type { DebugHandlerDependencies };
 export type { ContextHandlerDependencies };
+export type { StatsHandlerDependencies };
 export type { MaestroSettings, SessionsData, GroupsData };
 
 /**
@@ -169,6 +172,10 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
   // Register marketplace handlers
   registerMarketplaceHandlers({
     app: deps.app,
+  });
+  // Register stats handlers for usage tracking
+  registerStatsHandlers({
+    getMainWindow: deps.getMainWindow,
   });
   // Setup logger event forwarding to renderer
   setupLoggerEventForwarding(deps.getMainWindow);

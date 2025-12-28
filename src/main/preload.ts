@@ -1377,6 +1377,123 @@ contextBridge.exposeInMainWorld('maestro', {
     },
   },
 
+  // Stats API (usage tracking and analytics)
+  stats: {
+    // Record a query event (interactive conversation turn)
+    recordQuery: (event: {
+      sessionId: string;
+      agentType: string;
+      source: 'user' | 'auto';
+      startTime: number;
+      duration: number;
+      projectPath?: string;
+      tabId?: string;
+    }) => ipcRenderer.invoke('stats:record-query', event) as Promise<string>,
+
+    // Start an Auto Run session (returns session ID)
+    startAutoRun: (session: {
+      sessionId: string;
+      agentType: string;
+      documentPath?: string;
+      startTime: number;
+      tasksTotal?: number;
+      projectPath?: string;
+    }) => ipcRenderer.invoke('stats:start-autorun', session) as Promise<string>,
+
+    // End an Auto Run session (update duration and completed count)
+    endAutoRun: (id: string, duration: number, tasksCompleted: number) =>
+      ipcRenderer.invoke('stats:end-autorun', id, duration, tasksCompleted) as Promise<boolean>,
+
+    // Record an Auto Run task completion
+    recordAutoTask: (task: {
+      autoRunSessionId: string;
+      sessionId: string;
+      agentType: string;
+      taskIndex: number;
+      taskContent?: string;
+      startTime: number;
+      duration: number;
+      success: boolean;
+    }) => ipcRenderer.invoke('stats:record-task', task) as Promise<string>,
+
+    // Get query events with time range and optional filters
+    getStats: (
+      range: 'day' | 'week' | 'month' | 'year' | 'all',
+      filters?: {
+        agentType?: string;
+        source?: 'user' | 'auto';
+        projectPath?: string;
+        sessionId?: string;
+      }
+    ) =>
+      ipcRenderer.invoke('stats:get-stats', range, filters) as Promise<
+        Array<{
+          id: string;
+          sessionId: string;
+          agentType: string;
+          source: 'user' | 'auto';
+          startTime: number;
+          duration: number;
+          projectPath?: string;
+          tabId?: string;
+        }>
+      >,
+
+    // Get Auto Run sessions within a time range
+    getAutoRunSessions: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:get-autorun-sessions', range) as Promise<
+        Array<{
+          id: string;
+          sessionId: string;
+          agentType: string;
+          documentPath?: string;
+          startTime: number;
+          duration: number;
+          tasksTotal?: number;
+          tasksCompleted?: number;
+          projectPath?: string;
+        }>
+      >,
+
+    // Get tasks for a specific Auto Run session
+    getAutoRunTasks: (autoRunSessionId: string) =>
+      ipcRenderer.invoke('stats:get-autorun-tasks', autoRunSessionId) as Promise<
+        Array<{
+          id: string;
+          autoRunSessionId: string;
+          sessionId: string;
+          agentType: string;
+          taskIndex: number;
+          taskContent?: string;
+          startTime: number;
+          duration: number;
+          success: boolean;
+        }>
+      >,
+
+    // Get aggregated stats for dashboard display
+    getAggregation: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:get-aggregation', range) as Promise<{
+        totalQueries: number;
+        totalDuration: number;
+        avgDuration: number;
+        byAgent: Record<string, { count: number; duration: number }>;
+        bySource: { user: number; auto: number };
+        byDay: Array<{ date: string; count: number; duration: number }>;
+      }>,
+
+    // Export query events to CSV
+    exportCsv: (range: 'day' | 'week' | 'month' | 'year' | 'all') =>
+      ipcRenderer.invoke('stats:export-csv', range) as Promise<string>,
+
+    // Subscribe to stats updates (for real-time dashboard refresh)
+    onStatsUpdate: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('stats:updated', handler);
+      return () => ipcRenderer.removeListener('stats:updated', handler);
+    },
+  },
+
   // Leaderboard API (runmaestro.ai integration)
   leaderboard: {
     submit: (data: {
@@ -1674,6 +1791,92 @@ export interface MaestroAPI {
     onQuitConfirmationRequest: (callback: () => void) => () => void;
     confirmQuit: () => void;
     cancelQuit: () => void;
+  };
+  stats: {
+    recordQuery: (event: {
+      sessionId: string;
+      agentType: string;
+      source: 'user' | 'auto';
+      startTime: number;
+      duration: number;
+      projectPath?: string;
+      tabId?: string;
+    }) => Promise<string>;
+    startAutoRun: (session: {
+      sessionId: string;
+      agentType: string;
+      documentPath?: string;
+      startTime: number;
+      tasksTotal?: number;
+      projectPath?: string;
+    }) => Promise<string>;
+    endAutoRun: (id: string, duration: number, tasksCompleted: number) => Promise<boolean>;
+    recordAutoTask: (task: {
+      autoRunSessionId: string;
+      sessionId: string;
+      agentType: string;
+      taskIndex: number;
+      taskContent?: string;
+      startTime: number;
+      duration: number;
+      success: boolean;
+    }) => Promise<string>;
+    getStats: (
+      range: 'day' | 'week' | 'month' | 'year' | 'all',
+      filters?: {
+        agentType?: string;
+        source?: 'user' | 'auto';
+        projectPath?: string;
+        sessionId?: string;
+      }
+    ) => Promise<
+      Array<{
+        id: string;
+        sessionId: string;
+        agentType: string;
+        source: 'user' | 'auto';
+        startTime: number;
+        duration: number;
+        projectPath?: string;
+        tabId?: string;
+      }>
+    >;
+    getAutoRunSessions: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<
+      Array<{
+        id: string;
+        sessionId: string;
+        agentType: string;
+        documentPath?: string;
+        startTime: number;
+        duration: number;
+        tasksTotal?: number;
+        tasksCompleted?: number;
+        projectPath?: string;
+      }>
+    >;
+    getAutoRunTasks: (autoRunSessionId: string) => Promise<
+      Array<{
+        id: string;
+        autoRunSessionId: string;
+        sessionId: string;
+        agentType: string;
+        taskIndex: number;
+        taskContent?: string;
+        startTime: number;
+        duration: number;
+        success: boolean;
+      }>
+    >;
+    getAggregation: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<{
+      totalQueries: number;
+      totalDuration: number;
+      avgDuration: number;
+      byAgent: Record<string, { count: number; duration: number }>;
+      bySource: { user: number; auto: number };
+      byDay: Array<{ date: string; count: number; duration: number }>;
+    }>;
+    exportCsv: (range: 'day' | 'week' | 'month' | 'year' | 'all') => Promise<string>;
+    onStatsUpdate: (callback: () => void) => () => void;
   };
   updates: {
     check: () => Promise<{
