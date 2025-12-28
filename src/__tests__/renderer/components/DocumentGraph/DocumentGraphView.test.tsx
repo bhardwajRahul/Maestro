@@ -41,6 +41,8 @@ vi.mock('reactflow', () => {
     }),
     Handle: () => null,
     Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
+    // Type for selection change handler
+    OnSelectionChangeFunc: undefined,
   };
 });
 

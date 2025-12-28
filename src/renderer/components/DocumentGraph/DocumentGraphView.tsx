@@ -22,6 +22,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  OnSelectionChangeFunc,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { X, LayoutGrid, Network, ExternalLink, RefreshCw, Maximize2 } from 'lucide-react';
@@ -88,6 +89,7 @@ function DocumentGraphViewInner({
   const [error, setError] = useState<string | null>(null);
   const [layoutType, setLayoutType] = useState<LayoutType>('force');
   const [includeExternalLinks, setIncludeExternalLinks] = useState(true);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { registerLayer, unregisterLayer } = useLayerStack();
@@ -267,6 +269,17 @@ function DocumentGraphViewInner({
   }, [theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
+   * Handle selection change - track selected node for edge highlighting
+   */
+  const handleSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selectedNodes }) => {
+    if (selectedNodes.length > 0) {
+      setSelectedNodeId(selectedNodes[0].id);
+    } else {
+      setSelectedNodeId(null);
+    }
+  }, []);
+
+  /**
    * Handle node double-click for opening documents/links
    */
   const handleNodeDoubleClick = useCallback(
@@ -286,18 +299,31 @@ function DocumentGraphViewInner({
 
   /**
    * Edge styling based on type and selection
+   * Edges connected to selected node are highlighted with accent color
    */
   const styledEdges = useMemo(() => {
-    return edges.map((edge) => ({
-      ...edge,
-      style: {
-        stroke: edge.type === 'external' ? theme.colors.textDim : theme.colors.textDim,
-        strokeWidth: 1.5,
-        strokeDasharray: edge.type === 'external' ? '4 4' : undefined,
-      },
-      animated: edge.type === 'external',
-    }));
-  }, [edges, theme.colors]);
+    return edges.map((edge) => {
+      // Check if this edge is connected to the selected node
+      const isConnectedToSelected =
+        selectedNodeId !== null &&
+        (edge.source === selectedNodeId || edge.target === selectedNodeId);
+
+      return {
+        ...edge,
+        style: {
+          stroke: isConnectedToSelected
+            ? theme.colors.accent
+            : theme.colors.textDim,
+          strokeWidth: isConnectedToSelected ? 2.5 : 1.5,
+          strokeDasharray: edge.type === 'external' ? '4 4' : undefined,
+          transition: 'stroke 0.2s ease, stroke-width 0.2s ease',
+        },
+        animated: edge.type === 'external',
+        // Bring connected edges to the front
+        zIndex: isConnectedToSelected ? 1000 : 0,
+      };
+    });
+  }, [edges, theme.colors, selectedNodeId]);
 
   /**
    * Handle layout toggle with animated transition
@@ -552,6 +578,7 @@ function DocumentGraphViewInner({
               edges={styledEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
+              onSelectionChange={handleSelectionChange}
               onNodeDoubleClick={handleNodeDoubleClick}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
