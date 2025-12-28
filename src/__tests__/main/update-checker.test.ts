@@ -279,4 +279,99 @@ describe('update-checker', () => {
       expect(result.updateAvailable).toBe(true);
     });
   });
+
+  describe('checkForUpdates with includePrerelease', () => {
+    it('includes prerelease versions when includePrerelease is true', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([
+          createMockRelease({ tag_name: 'v1.3.0-beta', prerelease: true }),
+          createMockRelease({ tag_name: 'v1.2.0-rc', prerelease: true }),
+          createMockRelease({ tag_name: 'v1.1.0' }),
+          createMockRelease({ tag_name: 'v1.0.0' }),
+        ]),
+      });
+
+      const result = await checkForUpdates('1.0.0', true);
+
+      expect(result.updateAvailable).toBe(true);
+      expect(result.latestVersion).toBe('1.3.0-beta');
+      expect(result.releases.length).toBe(3);
+      expect(result.releases.some(r => r.tag_name.includes('-beta'))).toBe(true);
+      expect(result.releases.some(r => r.tag_name.includes('-rc'))).toBe(true);
+    });
+
+    it('excludes prerelease versions when includePrerelease is false', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([
+          createMockRelease({ tag_name: 'v1.3.0-beta', prerelease: true }),
+          createMockRelease({ tag_name: 'v1.2.0-rc', prerelease: true }),
+          createMockRelease({ tag_name: 'v1.1.0' }),
+          createMockRelease({ tag_name: 'v1.0.0' }),
+        ]),
+      });
+
+      const result = await checkForUpdates('1.0.0', false);
+
+      expect(result.latestVersion).toBe('1.1.0');
+      expect(result.releases.length).toBe(1);
+      expect(result.releases.some(r => r.tag_name.includes('-beta'))).toBe(false);
+      expect(result.releases.some(r => r.tag_name.includes('-rc'))).toBe(false);
+    });
+
+    it('defaults to excluding prereleases when parameter not provided', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([
+          createMockRelease({ tag_name: 'v1.2.0-alpha' }),
+          createMockRelease({ tag_name: 'v1.1.0' }),
+        ]),
+      });
+
+      const result = await checkForUpdates('1.0.0');
+
+      expect(result.latestVersion).toBe('1.1.0');
+      expect(result.releases.some(r => r.tag_name.includes('-alpha'))).toBe(false);
+    });
+
+    it('includes all prerelease suffix types when enabled', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([
+          createMockRelease({ tag_name: 'v1.6.0-canary' }),
+          createMockRelease({ tag_name: 'v1.5.0-dev' }),
+          createMockRelease({ tag_name: 'v1.4.0-alpha' }),
+          createMockRelease({ tag_name: 'v1.3.0-beta' }),
+          createMockRelease({ tag_name: 'v1.2.0-rc' }),
+          createMockRelease({ tag_name: 'v1.1.0' }),
+        ]),
+      });
+
+      const result = await checkForUpdates('1.0.0', true);
+
+      expect(result.releases.length).toBe(6);
+      expect(result.releases.some(r => r.tag_name.includes('-canary'))).toBe(true);
+      expect(result.releases.some(r => r.tag_name.includes('-dev'))).toBe(true);
+      expect(result.releases.some(r => r.tag_name.includes('-alpha'))).toBe(true);
+      expect(result.releases.some(r => r.tag_name.includes('-beta'))).toBe(true);
+      expect(result.releases.some(r => r.tag_name.includes('-rc'))).toBe(true);
+    });
+
+    it('always filters out draft releases even with includePrerelease', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([
+          createMockRelease({ tag_name: 'v1.3.0', draft: true }),
+          createMockRelease({ tag_name: 'v1.2.0-beta' }),
+          createMockRelease({ tag_name: 'v1.1.0' }),
+        ]),
+      });
+
+      const result = await checkForUpdates('1.0.0', true);
+
+      expect(result.latestVersion).toBe('1.2.0-beta');
+      expect(result.releases.every(r => !r.draft)).toBe(true);
+    });
+  });
 });
