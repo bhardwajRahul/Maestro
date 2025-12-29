@@ -48,6 +48,7 @@ import { ExternalLinkNode } from './ExternalLinkNode';
 import { buildGraphData, GraphNodeData, ProgressData, DocumentNodeData, ExternalLinkNodeData } from './graphDataBuilder';
 import { NodeContextMenu } from './NodeContextMenu';
 import { NodeBreadcrumb } from './NodeBreadcrumb';
+import { GraphLegend } from './GraphLegend';
 import {
   applyForceLayout,
   applyHierarchicalLayout,
@@ -1307,6 +1308,14 @@ function DocumentGraphViewInner({
                 }}
               />
             </ReactFlow>
+          )}
+
+          {/* Graph Legend - positioned in bottom-left corner */}
+          {!loading && !error && nodes.length > 0 && (
+            <GraphLegend
+              theme={theme}
+              showExternalLinks={includeExternalLinks}
+            />
           )}
 
           {/* Context Menu */}
