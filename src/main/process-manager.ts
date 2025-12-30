@@ -10,6 +10,7 @@ import { getOutputParser, type ParsedEvent, type AgentOutputParser } from './par
 import { aggregateModelUsage } from './parsers/usage-aggregator';
 import { matchSshErrorPattern } from './parsers/error-patterns';
 import type { AgentError } from '../shared/types';
+import { compareVersions } from '../shared/pathUtils';
 import { getAgentCapabilities } from './agent-capabilities';
 
 // Re-export parser types for consumers
@@ -224,15 +225,7 @@ function detectNodeVersionManagerPaths(): string[] {
           if (fs.existsSync(versionsDir)) {
             const versions = fs.readdirSync(versionsDir).filter(v => v.startsWith('v'));
             if (versions.length > 0) {
-              // Sort and get latest
-              versions.sort((a, b) => {
-                const aParts = a.slice(1).split('.').map(Number);
-                const bParts = b.slice(1).split('.').map(Number);
-                for (let i = 0; i < 3; i++) {
-                  if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
-                }
-                return 0;
-              });
+              versions.sort((a, b) => compareVersions(b, a));
               version = versions[0];
             }
           }
@@ -251,15 +244,7 @@ function detectNodeVersionManagerPaths(): string[] {
         try {
           const versions = fs.readdirSync(versionsDir).filter(v => v.startsWith('v'));
           if (versions.length > 0) {
-            // Sort and get latest
-            versions.sort((a, b) => {
-              const aParts = a.slice(1).split('.').map(Number);
-              const bParts = b.slice(1).split('.').map(Number);
-              for (let i = 0; i < 3; i++) {
-                if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
-              }
-              return 0;
-            });
+            versions.sort((a, b) => compareVersions(b, a));
             const versionBin = path.join(versionsDir, versions[0], 'bin');
             if (fs.existsSync(versionBin)) {
               detectedPaths.push(versionBin);
@@ -293,14 +278,7 @@ function detectNodeVersionManagerPaths(): string[] {
         try {
           const versions = fs.readdirSync(fnmNodeVersions).filter(v => v.startsWith('v'));
           if (versions.length > 0) {
-            versions.sort((a, b) => {
-              const aParts = a.slice(1).split('.').map(Number);
-              const bParts = b.slice(1).split('.').map(Number);
-              for (let i = 0; i < 3; i++) {
-                if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
-              }
-              return 0;
-            });
+            versions.sort((a, b) => compareVersions(b, a));
             const versionBin = path.join(fnmNodeVersions, versions[0], 'installation', 'bin');
             if (fs.existsSync(versionBin)) {
               detectedPaths.push(versionBin);
