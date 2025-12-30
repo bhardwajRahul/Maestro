@@ -64,6 +64,9 @@ interface ProcessConfig {
   contextWindow?: number; // Configured context window size (0 or undefined = not configured, hide UI)
   customEnvVars?: Record<string, string>; // Custom environment variables from user configuration
   noPromptSeparator?: boolean; // If true, don't add '--' before the prompt (e.g., OpenCode doesn't support it)
+  // SSH remote execution context
+  sshRemoteId?: string; // ID of SSH remote being used (for SSH-specific error messages)
+  sshRemoteHost?: string; // Hostname of SSH remote (for error messages)
   // Stats tracking options
   querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
   tabId?: string; // Tab ID for multi-tab tracking
@@ -106,6 +109,9 @@ interface ManagedProcess {
   querySource?: 'user' | 'auto'; // Whether this query is user-initiated or from Auto Run
   tabId?: string; // Tab ID for multi-tab tracking
   projectPath?: string; // Project path for stats tracking
+  // SSH remote context (for SSH-specific error messages)
+  sshRemoteId?: string; // ID of SSH remote being used
+  sshRemoteHost?: string; // Hostname of SSH remote
 }
 
 /**
@@ -732,6 +738,9 @@ export class ProcessManager extends EventEmitter {
           querySource: config.querySource,
           tabId: config.tabId,
           projectPath: config.projectPath,
+          // SSH remote context (for SSH-specific error messages)
+          sshRemoteId: config.sshRemoteId,
+          sshRemoteHost: config.sshRemoteHost,
         };
 
         this.processes.set(sessionId, managedProcess);
@@ -788,24 +797,33 @@ export class ProcessManager extends EventEmitter {
               // Accumulate stdout for error detection at exit (with size limit to prevent memory exhaustion)
               managedProcess.stdoutBuffer = appendToBuffer(managedProcess.stdoutBuffer || '', line + '\n');
 
-              // Check for errors using the parser (if available)
+              // Check for agent-specific errors using the parser (if available)
               if (outputParser && !managedProcess.errorEmitted) {
                 const agentError = outputParser.detectErrorFromLine(line);
                 if (agentError) {
                   managedProcess.errorEmitted = true;
                   agentError.sessionId = sessionId;
+
+                  // Enhance auth error messages with SSH context when running via remote
+                  if (agentError.type === 'auth_expired' && managedProcess.sshRemoteHost) {
+                    const hostInfo = managedProcess.sshRemoteHost;
+                    agentError.message = `Authentication failed on remote host "${hostInfo}". SSH into the remote and run "claude login" to re-authenticate.`;
+                  }
+
                   logger.debug('[ProcessManager] Error detected from output', 'ProcessManager', {
                     sessionId,
                     errorType: agentError.type,
                     errorMessage: agentError.message,
+                    isRemote: !!managedProcess.sshRemoteId,
                   });
                   this.emit('agent-error', sessionId, agentError);
                 }
               }
 
-              // Check for SSH-specific errors (when running via SSH remote)
-              // These are checked separately because they can occur with any agent
-              if (!managedProcess.errorEmitted) {
+              // Check for SSH-specific errors (only when running via SSH remote)
+              // These are checked after agent patterns and catch SSH transport errors
+              // like connection refused, permission denied, command not found, etc.
+              if (!managedProcess.errorEmitted && managedProcess.sshRemoteId) {
                 const sshError = matchSshErrorPattern(line);
                 if (sshError) {
                   managedProcess.errorEmitted = true;
@@ -1047,9 +1065,9 @@ export class ProcessManager extends EventEmitter {
               }
             }
 
-            // Check for SSH-specific errors in stderr (when running via SSH remote)
+            // Check for SSH-specific errors in stderr (only when running via SSH remote)
             // SSH errors typically appear on stderr (connection refused, permission denied, etc.)
-            if (!managedProcess.errorEmitted) {
+            if (!managedProcess.errorEmitted && managedProcess.sshRemoteId) {
               const sshError = matchSshErrorPattern(stderrData);
               if (sshError) {
                 managedProcess.errorEmitted = true;
@@ -1175,9 +1193,9 @@ export class ProcessManager extends EventEmitter {
             }
           }
 
-          // Check for SSH-specific errors at exit (if not already emitted)
+          // Check for SSH-specific errors at exit (only when running via SSH remote)
           // This catches SSH errors that may not have been detected during streaming
-          if (!managedProcess.errorEmitted && (code !== 0 || managedProcess.stderrBuffer)) {
+          if (!managedProcess.errorEmitted && managedProcess.sshRemoteId && (code !== 0 || managedProcess.stderrBuffer)) {
             const stderrToCheck = managedProcess.stderrBuffer || '';
             const sshError = matchSshErrorPattern(stderrToCheck);
             if (sshError) {

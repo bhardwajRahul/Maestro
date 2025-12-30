@@ -320,6 +320,9 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
         noPromptSeparator: agent?.noPromptSeparator, // OpenCode doesn't support '--' before prompt
         // Stats tracking: use cwd as projectPath if not explicitly provided
         projectPath: config.cwd,
+        // SSH remote context (for SSH-specific error messages)
+        sshRemoteId: sshRemoteUsed?.id,
+        sshRemoteHost: sshRemoteUsed?.host,
       });
 
       logger.info(`Process spawned successfully`, LOG_CONTEXT, {

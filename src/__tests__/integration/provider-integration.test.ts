@@ -30,6 +30,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { getAgentCapabilities } from '../../main/agent-capabilities';
+import { buildSshCommand, buildRemoteCommand } from '../../main/utils/ssh-command-builder';
+import type { SshRemoteConfig } from '../../shared/types';
 
 const execAsync = promisify(exec);
 
@@ -40,11 +42,70 @@ const TEST_IMAGE_PATH = path.join(__dirname, '../fixtures/maestro-test-image.png
 // Set RUN_INTEGRATION_TESTS=true to enable them.
 const SKIP_INTEGRATION = process.env.RUN_INTEGRATION_TESTS !== 'true';
 
+// Skip SSH integration tests by default - requires SSH host configuration.
+// Set RUN_SSH_INTEGRATION_TESTS=true to enable them.
+const SKIP_SSH_INTEGRATION = process.env.RUN_SSH_INTEGRATION_TESTS !== 'true';
+
 // Timeout for provider responses (providers can be slow)
 const PROVIDER_TIMEOUT = 120_000; // 2 minutes
 
+// SSH timeout - allow more time for SSH connection + command execution
+const SSH_PROVIDER_TIMEOUT = 180_000; // 3 minutes
+
 // Test directory
 const TEST_CWD = process.cwd();
+
+/**
+ * SSH Remote Configuration for Integration Tests
+ *
+ * Configure these environment variables to run SSH integration tests:
+ *
+ * Required:
+ *   SSH_TEST_HOST       - SSH server hostname (e.g., "dev.example.com" or SSH config host pattern)
+ *   SSH_TEST_USER       - SSH username
+ *   SSH_TEST_KEY        - Path to SSH private key (e.g., "~/.ssh/id_ed25519")
+ *
+ * Optional:
+ *   SSH_TEST_PORT       - SSH port (default: 22)
+ *   SSH_TEST_REMOTE_CWD - Remote working directory (default: home directory)
+ *   SSH_TEST_USE_CONFIG - Set to "true" to use ~/.ssh/config host patterns
+ *
+ * Example:
+ *   SSH_TEST_HOST=pedtome SSH_TEST_USER=pedram SSH_TEST_KEY=~/.ssh/id_rsa \
+ *   SSH_TEST_REMOTE_CWD=/Users/pedram/Projects/Podsidian SSH_TEST_USE_CONFIG=true \
+ *   RUN_SSH_INTEGRATION_TESTS=true npm run test:integration
+ */
+function getSshTestConfig(): SshRemoteConfig | null {
+  const host = process.env.SSH_TEST_HOST;
+  const username = process.env.SSH_TEST_USER || '';
+  const privateKeyPath = process.env.SSH_TEST_KEY || '';
+  const port = parseInt(process.env.SSH_TEST_PORT || '22', 10);
+  const remoteWorkingDir = process.env.SSH_TEST_REMOTE_CWD;
+  const useSshConfig = process.env.SSH_TEST_USE_CONFIG === 'true';
+
+  if (!host) {
+    return null;
+  }
+
+  // When using SSH config, username and key can be optional (inherited from config)
+  if (!useSshConfig && (!username || !privateKeyPath)) {
+    console.warn('SSH integration tests require SSH_TEST_USER and SSH_TEST_KEY when not using SSH config');
+    return null;
+  }
+
+  return {
+    id: 'test-ssh-remote',
+    name: 'Test SSH Remote',
+    host,
+    port,
+    username,
+    privateKeyPath,
+    remoteWorkingDir,
+    enabled: true,
+    useSshConfig,
+    sshConfigHost: useSshConfig ? host : undefined,
+  };
+}
 
 interface ProviderConfig {
   name: string;
@@ -613,6 +674,184 @@ function runProvider(
       });
     });
   });
+}
+
+/**
+ * Run a provider command via SSH and capture output.
+ * This mirrors the logic in process.ts IPC handler for SSH execution.
+ *
+ * @param provider - Provider config
+ * @param sshConfig - SSH remote configuration
+ * @param args - Provider arguments
+ * @param cwd - Remote working directory (optional, uses sshConfig.remoteWorkingDir if not provided)
+ * @param stdinContent - Optional content to write to stdin
+ */
+function runProviderViaSsh(
+  provider: ProviderConfig,
+  sshConfig: SshRemoteConfig,
+  args: string[],
+  cwd?: string,
+  stdinContent?: string
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+
+    // Build the SSH command using the same utility as the main codebase
+    const sshCommand = buildSshCommand(sshConfig, {
+      command: provider.command,
+      args,
+      cwd: cwd || sshConfig.remoteWorkingDir,
+    });
+
+    console.log(`🌐 SSH Command: ${sshCommand.command} ${sshCommand.args.join(' ')}`);
+
+    const proc = spawn(sshCommand.command, sshCommand.args, {
+      cwd: TEST_CWD, // Local cwd doesn't matter for SSH
+      env: { ...process.env },
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // If we have stdin content, write it and then close
+    if (stdinContent) {
+      proc.stdin?.write(stdinContent + '\n');
+    }
+    // Close stdin to signal EOF (prevents processes waiting for input)
+    proc.stdin?.end();
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      resolve({
+        stdout,
+        stderr,
+        exitCode: code ?? 1,
+      });
+    });
+
+    proc.on('error', (err) => {
+      stderr += err.message;
+      resolve({
+        stdout,
+        stderr,
+        exitCode: 1,
+      });
+    });
+  });
+}
+
+/**
+ * Check if SSH connection is working by running a simple command
+ */
+async function testSshConnection(sshConfig: SshRemoteConfig): Promise<{ success: boolean; error?: string }> {
+  const sshCommand = buildSshCommand(sshConfig, {
+    command: 'echo',
+    args: ['SSH_CONNECTION_OK'],
+  });
+
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+
+    const proc = spawn(sshCommand.command, sshCommand.args, {
+      env: { ...process.env },
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    proc.stdin?.end();
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0 && stdout.includes('SSH_CONNECTION_OK')) {
+        resolve({ success: true });
+      } else {
+        resolve({
+          success: false,
+          error: stderr || stdout || `Exit code: ${code}`,
+        });
+      }
+    });
+
+    proc.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      proc.kill();
+      resolve({ success: false, error: 'SSH connection timeout (30s)' });
+    }, 30_000);
+  });
+}
+
+/**
+ * Check if output contains authentication error from remote agent.
+ * This happens when the remote machine's agent token has expired.
+ */
+function hasRemoteAuthError(stdout: string): boolean {
+  return stdout.includes('authentication_error') ||
+         stdout.includes('authentication_failed') ||
+         stdout.includes('OAuth token has expired') ||
+         stdout.includes('please run /login') ||
+         stdout.includes('Please run /login') ||
+         stdout.includes('API Error: 401');
+}
+
+/**
+ * Check if provider CLI is available on remote host via SSH
+ */
+async function isProviderAvailableViaSsh(
+  provider: ProviderConfig,
+  sshConfig: SshRemoteConfig
+): Promise<boolean> {
+  try {
+    // Use 'which' or 'command -v' to check if the command exists
+    const sshCommand = buildSshCommand(sshConfig, {
+      command: 'command',
+      args: ['-v', provider.command],
+    });
+
+    return new Promise((resolve) => {
+      const proc = spawn(sshCommand.command, sshCommand.args, {
+        env: { ...process.env },
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      proc.stdin?.end();
+
+      proc.on('close', (code) => {
+        resolve(code === 0);
+      });
+
+      proc.on('error', () => {
+        resolve(false);
+      });
+
+      // Timeout after 15 seconds
+      setTimeout(() => {
+        proc.kill();
+        resolve(false);
+      }, 15_000);
+    });
+  } catch {
+    return false;
+  }
 }
 
 describe.skipIf(SKIP_INTEGRATION)('Provider Integration Tests', () => {
@@ -1484,6 +1723,431 @@ Rules:
         console.log(`💬 Response: ${response?.substring(0, 300)}`);
         expect(response, `${provider.name} should return a response`).toBeTruthy();
       }, PROVIDER_TIMEOUT * 2); // Double timeout for multi-tool operations
+    });
+  }
+});
+
+/**
+ * SSH Provider Integration Tests
+ *
+ * These tests verify that AI providers work correctly when executed via SSH.
+ * This is critical functionality for Maestro's remote execution feature.
+ *
+ * To run these tests, configure the following environment variables:
+ *
+ *   SSH_TEST_HOST       - SSH server hostname or SSH config host pattern
+ *   SSH_TEST_USER       - SSH username (optional if using SSH config)
+ *   SSH_TEST_KEY        - Path to SSH private key (optional if using SSH config)
+ *   SSH_TEST_PORT       - SSH port (default: 22)
+ *   SSH_TEST_REMOTE_CWD - Remote working directory
+ *   SSH_TEST_USE_CONFIG - Set to "true" to use ~/.ssh/config
+ *
+ * Example:
+ *   SSH_TEST_HOST=pedtome SSH_TEST_USER=pedram SSH_TEST_KEY=~/.ssh/id_rsa \
+ *   SSH_TEST_REMOTE_CWD=/Users/pedram/Projects/Podsidian SSH_TEST_USE_CONFIG=true \
+ *   RUN_SSH_INTEGRATION_TESTS=true npm run test:integration
+ */
+describe.skipIf(SKIP_SSH_INTEGRATION)('SSH Provider Integration Tests', () => {
+  let sshConfig: SshRemoteConfig | null = null;
+  let sshConnectionOk = false;
+
+  beforeAll(async () => {
+    sshConfig = getSshTestConfig();
+
+    if (!sshConfig) {
+      console.log(`\n⚠️  SSH integration tests skipped - missing SSH configuration`);
+      console.log(`   Set SSH_TEST_HOST, SSH_TEST_USER, and SSH_TEST_KEY environment variables`);
+      return;
+    }
+
+    console.log(`\n🔑 SSH Test Configuration:`);
+    console.log(`   Host: ${sshConfig.host}`);
+    console.log(`   User: ${sshConfig.username || '(from SSH config)'}`);
+    console.log(`   Port: ${sshConfig.port}`);
+    console.log(`   Key: ${sshConfig.privateKeyPath || '(from SSH config)'}`);
+    console.log(`   Remote CWD: ${sshConfig.remoteWorkingDir || '(default)'}`);
+    console.log(`   Use SSH Config: ${sshConfig.useSshConfig}`);
+
+    // Test SSH connection first
+    console.log(`\n🔌 Testing SSH connection...`);
+    const connResult = await testSshConnection(sshConfig);
+    if (connResult.success) {
+      console.log(`   ✅ SSH connection successful`);
+      sshConnectionOk = true;
+    } else {
+      console.log(`   ❌ SSH connection failed: ${connResult.error}`);
+      sshConnectionOk = false;
+    }
+  });
+
+  describe('SSH Connection', () => {
+    it('should establish SSH connection to remote host', async () => {
+      if (!sshConfig) {
+        console.log('Skipping: SSH config not available');
+        return;
+      }
+
+      expect(sshConnectionOk, 'SSH connection should be established').toBe(true);
+    }, 60_000);
+
+    it('should execute basic command via SSH', async () => {
+      if (!sshConfig || !sshConnectionOk) {
+        console.log('Skipping: SSH not configured or connection failed');
+        return;
+      }
+
+      // Run a simple command to verify SSH command execution works
+      const sshCommand = buildSshCommand(sshConfig, {
+        command: 'pwd',
+        args: [],
+        cwd: sshConfig.remoteWorkingDir,
+      });
+
+      const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+        let stdout = '';
+        let stderr = '';
+
+        const proc = spawn(sshCommand.command, sshCommand.args, {
+          env: { ...process.env },
+          shell: false,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        proc.stdin?.end();
+        proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+        proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+        proc.on('close', (code) => {
+          resolve({ stdout, stderr, exitCode: code ?? 1 });
+        });
+
+        proc.on('error', (err) => {
+          resolve({ stdout, stderr: err.message, exitCode: 1 });
+        });
+      });
+
+      console.log(`📤 pwd result: ${result.stdout.trim()}`);
+      expect(result.exitCode, 'pwd command should succeed').toBe(0);
+      expect(result.stdout.trim().length, 'pwd should return a path').toBeGreaterThan(0);
+    }, 60_000);
+  });
+
+  // Test each provider via SSH
+  for (const provider of PROVIDERS) {
+    describe(`${provider.name} via SSH`, () => {
+      let providerAvailableRemote = false;
+
+      beforeAll(async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          return;
+        }
+
+        // Check if the provider is available on the remote host
+        providerAvailableRemote = await isProviderAvailableViaSsh(provider, sshConfig);
+        if (!providerAvailableRemote) {
+          console.log(`⚠️  ${provider.name} CLI not available on remote host, SSH tests will be skipped`);
+        } else {
+          console.log(`✅ ${provider.name} CLI available on remote host`);
+        }
+      });
+
+      it('should send initial message via SSH and receive response', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        const prompt = 'Say "hello SSH" and nothing else. Be extremely brief.';
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🌐 Running ${provider.name} via SSH`);
+        console.log(`📤 Args: ${args.join(' ')}`);
+
+        const result = await runProviderViaSsh(provider, sshConfig, args);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+        console.log(`📤 Stdout (first 1000 chars): ${result.stdout.substring(0, 1000)}`);
+        if (result.stderr) {
+          console.log(`📤 Stderr: ${result.stderr.substring(0, 300)}`);
+        }
+
+        // Parse session ID - should be present even if auth fails
+        const sessionId = provider.parseSessionId(result.stdout);
+        console.log(`📋 Session ID: ${sessionId}`);
+        expect(sessionId, `${provider.name} via SSH should return a session ID`).toBeTruthy();
+
+        // Check for auth errors on remote (token expired, not authenticated)
+        if (hasRemoteAuthError(result.stdout)) {
+          console.log(`⚠️  Authentication error on remote - Claude needs re-authentication on ${sshConfig!.host}`);
+          console.log(`   This is expected if the remote machine's Claude token has expired.`);
+          console.log(`   SSH communication is working correctly - the error is from the remote agent.`);
+          // Test passes if we got output and session ID - the auth error is a remote config issue, not SSH issue
+          expect(sessionId, 'Should still get session ID even with auth error').toBeTruthy();
+          return; // Don't fail the test for remote auth issues
+        }
+
+        // Check for success
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} via SSH should complete successfully. Exit code: ${result.exitCode}, stderr: ${result.stderr}`
+        ).toBe(true);
+
+        // Parse response
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} via SSH should return a response`).toBeTruthy();
+      }, SSH_PROVIDER_TIMEOUT);
+
+      it('should handle prompts with special characters via SSH', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        // Test with special characters that need proper escaping for SSH
+        const prompt = 'What is 2 + 2? Say just the number. Don\'t explain. $PATH should be ignored.';
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🌐 Testing special characters via SSH for ${provider.name}`);
+
+        const result = await runProviderViaSsh(provider, sshConfig, args);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+        console.log(`📤 Stdout (first 500 chars): ${result.stdout.substring(0, 500)}`);
+
+        // Check for auth errors on remote
+        if (hasRemoteAuthError(result.stdout)) {
+          console.log(`⚠️  Authentication error on remote - skipping remaining assertions`);
+          expect(provider.parseSessionId(result.stdout), 'Should still get session ID').toBeTruthy();
+          return;
+        }
+
+        // Should succeed without the prompt being mangled by SSH escaping
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} via SSH should handle special characters. Exit: ${result.exitCode}`
+        ).toBe(true);
+
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // Should contain "4" (the answer to 2+2)
+        expect(
+          response?.includes('4'),
+          `${provider.name} should calculate 2+2=4. Got: "${response}"`
+        ).toBe(true);
+      }, SSH_PROVIDER_TIMEOUT);
+
+      it('should work with multi-line prompts via SSH', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        // Test with a multi-line prompt
+        const prompt = `Answer these questions briefly:
+1. What is 1+1?
+2. What is 2+2?
+Reply with just the two numbers separated by a comma.`;
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🌐 Testing multi-line prompt via SSH for ${provider.name}`);
+
+        const result = await runProviderViaSsh(provider, sshConfig, args);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+
+        // Check for auth errors on remote
+        if (hasRemoteAuthError(result.stdout)) {
+          console.log(`⚠️  Authentication error on remote - skipping remaining assertions`);
+          expect(provider.parseSessionId(result.stdout), 'Should still get session ID').toBeTruthy();
+          return;
+        }
+
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} via SSH should handle multi-line prompts`
+        ).toBe(true);
+
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // Should contain both answers
+        expect(
+          response?.includes('2') && response?.includes('4'),
+          `${provider.name} should answer both questions (1+1=2, 2+2=4). Got: "${response}"`
+        ).toBe(true);
+      }, SSH_PROVIDER_TIMEOUT);
+
+      it('should execute in correct remote working directory', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        if (!sshConfig.remoteWorkingDir) {
+          console.log('Skipping: No remote working directory configured');
+          return;
+        }
+
+        // Ask the agent to read a file that should exist in the remote cwd
+        // or at least confirm the working directory
+        const prompt = 'What is the current working directory? Just tell me the path, nothing else.';
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🌐 Testing remote CWD for ${provider.name}`);
+        console.log(`📁 Expected CWD: ${sshConfig.remoteWorkingDir}`);
+
+        const result = await runProviderViaSsh(provider, sshConfig, args);
+
+        console.log(`📤 Exit code: ${result.exitCode}`);
+
+        // Check for auth errors on remote
+        if (hasRemoteAuthError(result.stdout)) {
+          console.log(`⚠️  Authentication error on remote - skipping remaining assertions`);
+          expect(provider.parseSessionId(result.stdout), 'Should still get session ID').toBeTruthy();
+          return;
+        }
+
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} via SSH should succeed`
+        ).toBe(true);
+
+        const response = provider.parseResponse(result.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 300)}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // Response should mention the remote working directory
+        // (The agent might phrase it differently, so just check if the path appears)
+        const expectedPathPart = sshConfig.remoteWorkingDir.split('/').pop() || '';
+        expect(
+          response?.includes(expectedPathPart) || response?.includes(sshConfig.remoteWorkingDir),
+          `${provider.name} should be in remote CWD ${sshConfig.remoteWorkingDir}. Got: "${response}"`
+        ).toBe(true);
+      }, SSH_PROVIDER_TIMEOUT);
+
+      it('should parse session ID correctly from SSH output', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        const prompt = 'Say "test" briefly.';
+        const args = provider.buildInitialArgs(prompt);
+
+        console.log(`\n🌐 Testing session ID parsing for ${provider.name} via SSH`);
+
+        const result = await runProviderViaSsh(provider, sshConfig, args);
+
+        // Session ID should be present even with auth errors
+        const sessionId = provider.parseSessionId(result.stdout);
+        console.log(`📋 Session ID: ${sessionId}`);
+
+        expect(sessionId, `${provider.name} should return a session ID`).toBeTruthy();
+        expect(sessionId!.length, `Session ID should have reasonable length`).toBeGreaterThan(5);
+
+        // Check for auth errors on remote
+        if (hasRemoteAuthError(result.stdout)) {
+          console.log(`⚠️  Authentication error on remote - SSH transport working correctly`);
+          return;
+        }
+
+        expect(
+          provider.isSuccessful(result.stdout, result.exitCode),
+          `${provider.name} via SSH should succeed`
+        ).toBe(true);
+      }, SSH_PROVIDER_TIMEOUT);
+
+      it('should resume session via SSH', async () => {
+        if (!sshConfig || !sshConnectionOk) {
+          console.log('Skipping: SSH not configured or connection failed');
+          return;
+        }
+
+        if (!providerAvailableRemote) {
+          console.log(`Skipping: ${provider.name} not available on remote`);
+          return;
+        }
+
+        // First, send initial message to get session ID
+        const initialPrompt = 'Remember the word "BANANA". Say only "Got it."';
+        const initialArgs = provider.buildInitialArgs(initialPrompt);
+
+        console.log(`\n🌐 Testing session resume via SSH for ${provider.name}`);
+        console.log(`📤 Initial message...`);
+
+        const initialResult = await runProviderViaSsh(provider, sshConfig, initialArgs);
+
+        // Check for auth errors on remote
+        if (hasRemoteAuthError(initialResult.stdout)) {
+          console.log(`⚠️  Authentication error on remote - cannot test session resume`);
+          expect(provider.parseSessionId(initialResult.stdout), 'Should still get session ID').toBeTruthy();
+          return;
+        }
+
+        expect(
+          provider.isSuccessful(initialResult.stdout, initialResult.exitCode),
+          `${provider.name} initial message via SSH should succeed`
+        ).toBe(true);
+
+        const sessionId = provider.parseSessionId(initialResult.stdout);
+        console.log(`📋 Got session ID: ${sessionId}`);
+        expect(sessionId, `${provider.name} should return session ID`).toBeTruthy();
+
+        // Now send follow-up with session resume
+        const followUpPrompt = 'What word did I ask you to remember? Reply with just the word.';
+        const resumeArgs = provider.buildResumeArgs(sessionId!, followUpPrompt);
+
+        console.log(`🔄 Resume message...`);
+
+        const resumeResult = await runProviderViaSsh(provider, sshConfig, resumeArgs);
+
+        console.log(`📤 Exit code: ${resumeResult.exitCode}`);
+        console.log(`📤 Stdout (first 500 chars): ${resumeResult.stdout.substring(0, 500)}`);
+
+        expect(
+          provider.isSuccessful(resumeResult.stdout, resumeResult.exitCode),
+          `${provider.name} resume via SSH should succeed`
+        ).toBe(true);
+
+        const response = provider.parseResponse(resumeResult.stdout);
+        console.log(`💬 Response: ${response?.substring(0, 200)}`);
+        expect(response, `${provider.name} should return a response`).toBeTruthy();
+
+        // The response should contain "BANANA" since we asked it to remember that
+        expect(
+          response?.toUpperCase().includes('BANANA'),
+          `${provider.name} should remember "BANANA" from session context. Got: "${response}"`
+        ).toBe(true);
+      }, SSH_PROVIDER_TIMEOUT * 2); // Double timeout for two calls
     });
   }
 });

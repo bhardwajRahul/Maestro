@@ -54,13 +54,41 @@ export const CLAUDE_ERROR_PATTERNS: AgentErrorPatterns = {
       recoverable: true,
     },
     {
+      pattern: /authentication_failed/i,
+      message: 'Authentication failed. Please run "claude login" to re-authenticate.',
+      recoverable: true,
+    },
+    {
+      pattern: /authentication_error/i,
+      message: 'Authentication error. Please run "claude login" to re-authenticate.',
+      recoverable: true,
+    },
+    {
+      // OAuth token expiration - matches Claude's structured error response
+      pattern: /oauth token has expired/i,
+      message: 'OAuth token has expired. Please run "claude login" to re-authenticate.',
+      recoverable: true,
+    },
+    {
       pattern: /please run.*claude login/i,
       message: 'Session expired. Please run "claude login" to re-authenticate.',
       recoverable: true,
     },
     {
+      // Matches Claude's "/login" command suggestion in error messages
+      pattern: /please run.*\/login/i,
+      message: 'Session expired. Please run "claude /login" to re-authenticate.',
+      recoverable: true,
+    },
+    {
       pattern: /unauthorized/i,
       message: 'Unauthorized access. Please check your credentials.',
+      recoverable: true,
+    },
+    {
+      // API 401 error from Claude
+      pattern: /api error:\s*401/i,
+      message: 'Authentication failed (401). Please run "claude login" to re-authenticate.',
       recoverable: true,
     },
     {
@@ -487,6 +515,10 @@ export const CODEX_ERROR_PATTERNS: AgentErrorPatterns = {
  * occur when ANY agent runs via SSH remote execution.
  */
 export const SSH_ERROR_PATTERNS: AgentErrorPatterns = {
+  // Note: Agent auth errors (OAuth expiration, API 401) are NOT included here because
+  // they would match local errors too. Agent-specific auth patterns are in CLAUDE_ERROR_PATTERNS.
+  // SSH_ERROR_PATTERNS are for SSH transport-level errors only.
+
   permission_denied: [
     {
       // SSH authentication failure - wrong key, key not authorized, etc.
