@@ -76,6 +76,8 @@ export interface DocumentGraphViewProps {
   defaultNeighborDepth?: number;
   /** Callback to persist neighbor depth changes */
   onNeighborDepthChange?: (depth: number) => void;
+  /** Optional SSH remote ID - if provided, shows unavailable message (can't scan remote filesystem) */
+  sshRemoteId?: string;
 }
 
 /**
@@ -95,6 +97,7 @@ export function DocumentGraphView({
   defaultMaxNodes = DEFAULT_MAX_NODES,
   defaultNeighborDepth = 2,
   onNeighborDepthChange,
+  sshRemoteId,
 }: DocumentGraphViewProps) {
   // Graph data state
   const [nodes, setNodes] = useState<ForceGraphNode[]>([]);
@@ -493,6 +496,96 @@ export function DocumentGraphView({
   }, [nodes, neighborDepth]);
 
   if (!isOpen) return null;
+
+  // Show unavailable message for remote sessions - Document Graph cannot scan remote filesystems
+  if (sshRemoteId) {
+    return (
+      <div
+        className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] animate-in fade-in duration-100"
+        onClick={onClose}
+      >
+        <div
+          ref={containerRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Document Graph - Not Available"
+          className="rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none"
+          style={{
+            backgroundColor: theme.colors.bgActivity,
+            borderColor: theme.colors.border,
+            width: 480,
+            maxWidth: '90vw',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            className="px-6 py-4 border-b flex items-center justify-between flex-shrink-0"
+            style={{ borderColor: theme.colors.border }}
+          >
+            <div className="flex items-center gap-3">
+              <Network className="w-5 h-5" style={{ color: theme.colors.textDim }} />
+              <h2 className="text-lg font-semibold" style={{ color: theme.colors.textMain }}>
+                Document Graph
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded transition-colors"
+              style={{ color: theme.colors.textDim }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = `${theme.colors.accent}20`)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              title="Close (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-8 flex flex-col items-center gap-4">
+            <div
+              className="p-4 rounded-full"
+              style={{ backgroundColor: `${theme.colors.accent}20` }}
+            >
+              <AlertCircle
+                className="w-8 h-8"
+                style={{ color: theme.colors.accent }}
+              />
+            </div>
+            <div className="text-center">
+              <h3 className="text-base font-medium mb-2" style={{ color: theme.colors.textMain }}>
+                Not Available for Remote Sessions
+              </h3>
+              <p className="text-sm" style={{ color: theme.colors.textDim }}>
+                Document Graph requires local filesystem access to scan and visualize markdown file relationships.
+                This feature is not available when connected to a remote host via SSH.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            className="px-6 py-4 border-t flex justify-end"
+            style={{ borderColor: theme.colors.border }}
+          >
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: theme.colors.accent,
+                color: theme.colors.bgMain,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const documentCount = nodes.filter(n => n.nodeType === 'document').length;
   const externalCount = nodes.filter(n => n.nodeType === 'external').length;

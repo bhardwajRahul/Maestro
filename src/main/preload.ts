@@ -149,8 +149,9 @@ contextBridge.exposeInMainWorld('maestro', {
     },
     // SSH remote execution status
     // Emitted when a process starts executing via SSH on a remote host
-    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => void) => {
-      const handler = (_: any, sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => callback(sessionId, sshRemote);
+    // Includes remoteWorkingDir for session-wide SSH context (file explorer, git, auto run, etc.)
+    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string; remoteWorkingDir?: string } | null) => void) => {
+      const handler = (_: any, sessionId: string, sshRemote: { id: string; name: string; host: string; remoteWorkingDir?: string } | null) => callback(sessionId, sshRemote);
       ipcRenderer.on('process:ssh-remote', handler);
       return () => ipcRenderer.removeListener('process:ssh-remote', handler);
     },
@@ -384,8 +385,9 @@ contextBridge.exposeInMainWorld('maestro', {
     showFile: (cwd: string, ref: string, filePath: string) =>
       ipcRenderer.invoke('git:showFile', cwd, ref, filePath) as Promise<{ content?: string; error?: string }>,
     // Git worktree operations for Auto Run parallelization
-    worktreeInfo: (worktreePath: string) =>
-      ipcRenderer.invoke('git:worktreeInfo', worktreePath) as Promise<{
+    // All worktree operations support SSH remote execution via optional sshRemoteId parameter
+    worktreeInfo: (worktreePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:worktreeInfo', worktreePath, sshRemoteId) as Promise<{
         success: boolean;
         exists?: boolean;
         isWorktree?: boolean;
@@ -393,14 +395,14 @@ contextBridge.exposeInMainWorld('maestro', {
         repoRoot?: string;
         error?: string;
       }>,
-    getRepoRoot: (cwd: string) =>
-      ipcRenderer.invoke('git:getRepoRoot', cwd) as Promise<{
+    getRepoRoot: (cwd: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:getRepoRoot', cwd, sshRemoteId) as Promise<{
         success: boolean;
         root?: string;
         error?: string;
       }>,
-    worktreeSetup: (mainRepoCwd: string, worktreePath: string, branchName: string) =>
-      ipcRenderer.invoke('git:worktreeSetup', mainRepoCwd, worktreePath, branchName) as Promise<{
+    worktreeSetup: (mainRepoCwd: string, worktreePath: string, branchName: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:worktreeSetup', mainRepoCwd, worktreePath, branchName, sshRemoteId) as Promise<{
         success: boolean;
         created?: boolean;
         currentBranch?: string;
@@ -408,8 +410,8 @@ contextBridge.exposeInMainWorld('maestro', {
         branchMismatch?: boolean;
         error?: string;
       }>,
-    worktreeCheckout: (worktreePath: string, branchName: string, createIfMissing: boolean) =>
-      ipcRenderer.invoke('git:worktreeCheckout', worktreePath, branchName, createIfMissing) as Promise<{
+    worktreeCheckout: (worktreePath: string, branchName: string, createIfMissing: boolean, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:worktreeCheckout', worktreePath, branchName, createIfMissing, sshRemoteId) as Promise<{
         success: boolean;
         hasUncommittedChanges: boolean;
         error?: string;
@@ -439,8 +441,9 @@ contextBridge.exposeInMainWorld('maestro', {
         error?: string;
       }>,
     // List all worktrees for a git repository
-    listWorktrees: (cwd: string) =>
-      ipcRenderer.invoke('git:listWorktrees', cwd) as Promise<{
+    // Supports SSH remote execution via optional sshRemoteId parameter
+    listWorktrees: (cwd: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:listWorktrees', cwd, sshRemoteId) as Promise<{
         worktrees: Array<{
           path: string;
           head: string;
@@ -460,10 +463,14 @@ contextBridge.exposeInMainWorld('maestro', {
         }>;
       }>,
     // Watch a worktree directory for new worktrees
-    watchWorktreeDirectory: (sessionId: string, worktreePath: string) =>
-      ipcRenderer.invoke('git:watchWorktreeDirectory', sessionId, worktreePath) as Promise<{
+    // Note: File watching is not available for SSH remote sessions.
+    // For remote sessions, returns isRemote: true indicating polling should be used instead.
+    watchWorktreeDirectory: (sessionId: string, worktreePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('git:watchWorktreeDirectory', sessionId, worktreePath, sshRemoteId) as Promise<{
         success: boolean;
         error?: string;
+        isRemote?: boolean;
+        message?: string;
       }>,
     // Stop watching a worktree directory
     unwatchWorktreeDirectory: (sessionId: string) =>
@@ -488,13 +495,16 @@ contextBridge.exposeInMainWorld('maestro', {
   // File System API
   fs: {
     homeDir: () => ipcRenderer.invoke('fs:homeDir') as Promise<string>,
-    readDir: (dirPath: string) => ipcRenderer.invoke('fs:readDir', dirPath),
-    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+    readDir: (dirPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:readDir', dirPath, sshRemoteId),
+    readFile: (filePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:readFile', filePath, sshRemoteId),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke('fs:writeFile', filePath, content) as Promise<{ success: boolean }>,
-    stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
-    directorySize: (dirPath: string) =>
-      ipcRenderer.invoke('fs:directorySize', dirPath) as Promise<{
+    stat: (filePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:stat', filePath, sshRemoteId),
+    directorySize: (dirPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:directorySize', dirPath, sshRemoteId) as Promise<{
         totalSize: number;
         fileCount: number;
         folderCount: number;
@@ -1165,13 +1175,14 @@ contextBridge.exposeInMainWorld('maestro', {
   },
 
   // Auto Run API (file-system-based document runner)
+  // SSH remote support: Core operations accept optional sshRemoteId for remote file operations
   autorun: {
-    listDocs: (folderPath: string) =>
-      ipcRenderer.invoke('autorun:listDocs', folderPath),
-    readDoc: (folderPath: string, filename: string) =>
-      ipcRenderer.invoke('autorun:readDoc', folderPath, filename),
-    writeDoc: (folderPath: string, filename: string, content: string) =>
-      ipcRenderer.invoke('autorun:writeDoc', folderPath, filename, content),
+    listDocs: (folderPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('autorun:listDocs', folderPath, sshRemoteId),
+    readDoc: (folderPath: string, filename: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('autorun:readDoc', folderPath, filename, sshRemoteId),
+    writeDoc: (folderPath: string, filename: string, content: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('autorun:writeDoc', folderPath, filename, content, sshRemoteId),
     saveImage: (
       folderPath: string,
       docName: string,
@@ -1192,8 +1203,9 @@ contextBridge.exposeInMainWorld('maestro', {
     deleteFolder: (projectPath: string) =>
       ipcRenderer.invoke('autorun:deleteFolder', projectPath),
     // File watching for live updates
-    watchFolder: (folderPath: string) =>
-      ipcRenderer.invoke('autorun:watchFolder', folderPath),
+    // For remote sessions (sshRemoteId provided), returns isRemote: true indicating polling should be used
+    watchFolder: (folderPath: string, sshRemoteId?: string): Promise<{ isRemote?: boolean; message?: string }> =>
+      ipcRenderer.invoke('autorun:watchFolder', folderPath, sshRemoteId),
     unwatchFolder: (folderPath: string) =>
       ipcRenderer.invoke('autorun:unwatchFolder', folderPath),
     onFileChanged: (handler: (data: { folderPath: string; filename: string; eventType: string }) => void) => {
@@ -1708,7 +1720,7 @@ export interface MaestroAPI {
     onSlashCommands: (callback: (sessionId: string, slashCommands: string[]) => void) => () => void;
     onThinkingChunk: (callback: (sessionId: string, content: string) => void) => () => void;
     onToolExecution: (callback: (sessionId: string, toolEvent: { toolName: string; state?: unknown; timestamp: number }) => void) => () => void;
-    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => void) => () => void;
+    onSshRemote: (callback: (sessionId: string, sshRemote: { id: string; name: string; host: string; remoteWorkingDir?: string } | null) => void) => () => void;
     onRemoteCommand: (callback: (sessionId: string, command: string) => void) => () => void;
     onRemoteSwitchMode: (callback: (sessionId: string, mode: 'ai' | 'terminal') => void) => () => void;
     onRemoteInterrupt: (callback: (sessionId: string) => void) => () => void;
@@ -1839,17 +1851,17 @@ export interface MaestroAPI {
   };
   fs: {
     homeDir: () => Promise<string>;
-    readDir: (dirPath: string) => Promise<DirectoryEntry[]>;
-    readFile: (filePath: string) => Promise<string>;
+    readDir: (dirPath: string, sshRemoteId?: string) => Promise<DirectoryEntry[]>;
+    readFile: (filePath: string, sshRemoteId?: string) => Promise<string>;
     writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-    stat: (filePath: string) => Promise<{
+    stat: (filePath: string, sshRemoteId?: string) => Promise<{
       size: number;
       createdAt: string;
       modifiedAt: string;
       isDirectory: boolean;
       isFile: boolean;
     }>;
-    directorySize: (dirPath: string) => Promise<{
+    directorySize: (dirPath: string, sshRemoteId?: string) => Promise<{
       totalSize: number;
       fileCount: number;
       folderCount: number;

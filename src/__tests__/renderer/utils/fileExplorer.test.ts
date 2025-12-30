@@ -209,7 +209,8 @@ describe('fileExplorer utils', () => {
 
       const result = await loadFileTree('/project');
 
-      expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/project');
+      // Should pass undefined for sshRemoteId when no SSH context is provided
+      expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/project', undefined);
       expect(result).toHaveLength(3);
       expect(result[0]).toEqual({
         name: 'src',
@@ -365,6 +366,33 @@ describe('fileExplorer utils', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('regular.txt');
+    });
+
+    it('passes SSH context to readDir for remote file operations', async () => {
+      vi.mocked(window.maestro.fs.readDir)
+        .mockResolvedValueOnce([
+          { name: 'src', isFile: false, isDirectory: true },
+          { name: 'README.md', isFile: true, isDirectory: false },
+        ])
+        .mockResolvedValue([]); // Empty children for src folder
+
+      const sshContext = { sshRemoteId: 'remote-1', remoteCwd: '/home/user' };
+      const result = await loadFileTree('/project', 10, 0, sshContext);
+
+      // Verify SSH remote ID is passed to all readDir calls
+      expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/project', 'remote-1');
+      expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/project/src', 'remote-1');
+      expect(result).toHaveLength(2);
+    });
+
+    it('passes undefined to readDir when no SSH context is provided', async () => {
+      vi.mocked(window.maestro.fs.readDir).mockResolvedValueOnce([
+        { name: 'file.txt', isFile: true, isDirectory: false },
+      ]);
+
+      await loadFileTree('/project');
+
+      expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/project', undefined);
     });
   });
 

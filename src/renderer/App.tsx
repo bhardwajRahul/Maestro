@@ -2348,7 +2348,8 @@ function MaestroConsoleInner() {
     });
 
     // Handle SSH remote status events - tracks when sessions are executing on remote hosts
-    const unsubscribeSshRemote = window.maestro.process.onSshRemote?.((sessionId: string, sshRemote: { id: string; name: string; host: string } | null) => {
+    // Also populates session-wide SSH context (sshRemoteId, remoteCwd) for file explorer, git, auto run, etc.
+    const unsubscribeSshRemote = window.maestro.process.onSshRemote?.((sessionId: string, sshRemote: { id: string; name: string; host: string; remoteWorkingDir?: string } | null) => {
       // Parse sessionId to get actual session ID (format: {id}-ai-{tabId} or {id}-terminal)
       let actualSessionId: string;
       const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
@@ -2360,14 +2361,20 @@ function MaestroConsoleInner() {
         actualSessionId = sessionId;
       }
 
-      // Update session with SSH remote info
+      // Update session with SSH remote info and session-wide SSH context
       setSessions(prev => prev.map(s => {
         if (s.id !== actualSessionId) return s;
         // Only update if the value actually changed (avoid unnecessary re-renders)
         const currentRemoteId = s.sshRemote?.id;
         const newRemoteId = sshRemote?.id;
         if (currentRemoteId === newRemoteId) return s;
-        return { ...s, sshRemote: sshRemote ?? undefined };
+        return {
+          ...s,
+          sshRemote: sshRemote ?? undefined,
+          // Populate session-wide SSH context for all operations (file explorer, git, auto run, etc.)
+          sshRemoteId: sshRemote?.id,
+          remoteCwd: sshRemote?.remoteWorkingDir,
+        };
       }));
     });
 
@@ -8773,6 +8780,7 @@ function MaestroConsoleInner() {
         defaultShowExternalLinks={documentGraphShowExternalLinks}
         onExternalLinksChange={settings.setDocumentGraphShowExternalLinks}
         defaultMaxNodes={documentGraphMaxNodes}
+        sshRemoteId={activeSession?.sshRemoteId}
       />
 
       {/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}

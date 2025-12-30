@@ -51,17 +51,32 @@ export interface FileTreeNode {
 }
 
 /**
+ * SSH context for remote file operations
+ */
+export interface SshContext {
+  /** SSH remote config ID */
+  sshRemoteId?: string;
+  /** Remote working directory */
+  remoteCwd?: string;
+}
+
+/**
  * Load file tree from directory recursively
+ * @param dirPath - The directory path to load
+ * @param maxDepth - Maximum recursion depth (default: 10)
+ * @param currentDepth - Current recursion depth (internal use)
+ * @param sshContext - Optional SSH context for remote file operations
  */
 export async function loadFileTree(
   dirPath: string,
   maxDepth = 10,
-  currentDepth = 0
+  currentDepth = 0,
+  sshContext?: SshContext
 ): Promise<FileTreeNode[]> {
   if (currentDepth >= maxDepth) return [];
 
   try {
-    const entries = await window.maestro.fs.readDir(dirPath);
+    const entries = await window.maestro.fs.readDir(dirPath, sshContext?.sshRemoteId);
     const tree: FileTreeNode[] = [];
 
     for (const entry of entries) {
@@ -71,7 +86,7 @@ export async function loadFileTree(
       }
 
       if (entry.isDirectory) {
-        const children = await loadFileTree(`${dirPath}/${entry.name}`, maxDepth, currentDepth + 1);
+        const children = await loadFileTree(`${dirPath}/${entry.name}`, maxDepth, currentDepth + 1, sshContext);
         tree.push({
           name: entry.name,
           type: 'folder',

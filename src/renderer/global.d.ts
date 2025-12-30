@@ -291,7 +291,8 @@ interface MaestroAPI {
       error?: string;
     }>;
     // Git worktree operations for Auto Run parallelization
-    worktreeInfo: (worktreePath: string) => Promise<{
+    // All worktree operations support SSH remote execution via optional sshRemoteId parameter
+    worktreeInfo: (worktreePath: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       exists?: boolean;
       isWorktree?: boolean;
@@ -299,12 +300,12 @@ interface MaestroAPI {
       repoRoot?: string;
       error?: string;
     }>;
-    getRepoRoot: (cwd: string) => Promise<{
+    getRepoRoot: (cwd: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       root?: string;
       error?: string;
     }>;
-    worktreeSetup: (mainRepoCwd: string, worktreePath: string, branchName: string) => Promise<{
+    worktreeSetup: (mainRepoCwd: string, worktreePath: string, branchName: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       created?: boolean;
       currentBranch?: string;
@@ -312,7 +313,7 @@ interface MaestroAPI {
       branchMismatch?: boolean;
       error?: string;
     }>;
-    worktreeCheckout: (worktreePath: string, branchName: string, createIfMissing: boolean) => Promise<{
+    worktreeCheckout: (worktreePath: string, branchName: string, createIfMissing: boolean, sshRemoteId?: string) => Promise<{
       success: boolean;
       hasUncommittedChanges: boolean;
       error?: string;
@@ -331,7 +332,8 @@ interface MaestroAPI {
       installed: boolean;
       authenticated: boolean;
     }>;
-    listWorktrees: (cwd: string) => Promise<{
+    // Supports SSH remote execution via optional sshRemoteId parameter
+    listWorktrees: (cwd: string, sshRemoteId?: string) => Promise<{
       worktrees: Array<{
         path: string;
         head: string;
@@ -348,9 +350,13 @@ interface MaestroAPI {
         repoRoot: string | null;
       }>;
     }>;
-    watchWorktreeDirectory: (sessionId: string, worktreePath: string) => Promise<{
+    // File watching is not available for SSH remote sessions.
+    // For remote sessions, returns isRemote: true indicating polling should be used instead.
+    watchWorktreeDirectory: (sessionId: string, worktreePath: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       error?: string;
+      isRemote?: boolean;
+      message?: string;
     }>;
     unwatchWorktreeDirectory: (sessionId: string) => Promise<{
       success: boolean;
@@ -364,17 +370,17 @@ interface MaestroAPI {
   };
   fs: {
     homeDir: () => Promise<string>;
-    readDir: (dirPath: string) => Promise<DirectoryEntry[]>;
-    readFile: (filePath: string) => Promise<string>;
+    readDir: (dirPath: string, sshRemoteId?: string) => Promise<DirectoryEntry[]>;
+    readFile: (filePath: string, sshRemoteId?: string) => Promise<string>;
     writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-    stat: (filePath: string) => Promise<{
+    stat: (filePath: string, sshRemoteId?: string) => Promise<{
       size: number;
       createdAt: string;
       modifiedAt: string;
       isDirectory: boolean;
       isFile: boolean;
     }>;
-    directorySize: (dirPath: string) => Promise<{
+    directorySize: (dirPath: string, sshRemoteId?: string) => Promise<{
       totalSize: number;
       fileCount: number;
       folderCount: number;
@@ -866,21 +872,23 @@ interface MaestroAPI {
     getPath: (sessionId: string) => Promise<{ success: boolean; path: string }>;
   };
   // Auto Run file operations
+  // SSH remote support: Core operations accept optional sshRemoteId for remote file operations
   autorun: {
-    listDocs: (folderPath: string) => Promise<{
+    listDocs: (folderPath: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       files: string[];
       tree?: AutoRunTreeNode[];
       error?: string;
     }>;
-    readDoc: (folderPath: string, filename: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-    writeDoc: (folderPath: string, filename: string, content: string) => Promise<{ success: boolean; error?: string }>;
+    readDoc: (folderPath: string, filename: string, sshRemoteId?: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+    writeDoc: (folderPath: string, filename: string, content: string, sshRemoteId?: string) => Promise<{ success: boolean; error?: string }>;
     saveImage: (folderPath: string, docName: string, base64Data: string, extension: string) => Promise<{ success: boolean; relativePath?: string; error?: string }>;
     deleteImage: (folderPath: string, relativePath: string) => Promise<{ success: boolean; error?: string }>;
     listImages: (folderPath: string, docName: string) => Promise<{ success: boolean; images?: Array<{ filename: string; relativePath: string }>; error?: string }>;
     deleteFolder: (projectPath: string) => Promise<{ success: boolean; error?: string }>;
     // File watching for live updates
-    watchFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
+    // For remote sessions (sshRemoteId provided), returns isRemote: true indicating polling should be used
+    watchFolder: (folderPath: string, sshRemoteId?: string) => Promise<{ success: boolean; isRemote?: boolean; message?: string; error?: string }>;
     unwatchFolder: (folderPath: string) => Promise<{ success: boolean; error?: string }>;
     onFileChanged: (handler: (data: { folderPath: string; filename: string; eventType: string }) => void) => () => void;
     // Backup operations for reset-on-completion documents (legacy)

@@ -40,7 +40,7 @@ describe('gitService', () => {
       const result = await gitService.isRepo('/path/to/repo');
 
       expect(result).toBe(true);
-      expect(mockGit.isRepo).toHaveBeenCalledWith('/path/to/repo');
+      expect(mockGit.isRepo).toHaveBeenCalledWith('/path/to/repo', undefined);
     });
 
     test('returns false when directory is not a git repository', async () => {
@@ -49,7 +49,16 @@ describe('gitService', () => {
       const result = await gitService.isRepo('/path/to/non-repo');
 
       expect(result).toBe(false);
-      expect(mockGit.isRepo).toHaveBeenCalledWith('/path/to/non-repo');
+      expect(mockGit.isRepo).toHaveBeenCalledWith('/path/to/non-repo', undefined);
+    });
+
+    test('passes sshRemoteId for remote repository check', async () => {
+      mockGit.isRepo.mockResolvedValue(true);
+
+      const result = await gitService.isRepo('/remote/path', 'ssh-remote-123');
+
+      expect(result).toBe(true);
+      expect(mockGit.isRepo).toHaveBeenCalledWith('/remote/path', 'ssh-remote-123');
     });
 
     test('returns false and logs error when IPC call fails', async () => {
@@ -167,7 +176,8 @@ UU both-changed-in-merge.ts`;
       const result = await gitService.getDiff('/path/to/repo');
 
       expect(result.diff).toBe(diffOutput);
-      expect(mockGit.diff).toHaveBeenCalledWith('/path/to/repo');
+      // When no files are specified, sshRemoteId defaults to undefined
+      expect(mockGit.diff).toHaveBeenCalledWith('/path/to/repo', undefined, undefined);
     });
 
     test('returns diff for all files when empty array specified', async () => {
@@ -177,7 +187,8 @@ UU both-changed-in-merge.ts`;
       const result = await gitService.getDiff('/path/to/repo', []);
 
       expect(result.diff).toBe(diffOutput);
-      expect(mockGit.diff).toHaveBeenCalledWith('/path/to/repo');
+      // sshRemoteId defaults to undefined
+      expect(mockGit.diff).toHaveBeenCalledWith('/path/to/repo', undefined, undefined);
     });
 
     test('returns diff for specific files when files array provided', async () => {
@@ -190,8 +201,18 @@ UU both-changed-in-merge.ts`;
       const result = await gitService.getDiff('/path/to/repo', ['file1.ts', 'file2.ts']);
 
       expect(result).toEqual({ diff: `${diffOutput1}\n${diffOutput2}` });
-      expect(mockGit.diff).toHaveBeenNthCalledWith(1, '/path/to/repo', 'file1.ts');
-      expect(mockGit.diff).toHaveBeenNthCalledWith(2, '/path/to/repo', 'file2.ts');
+      // sshRemoteId defaults to undefined
+      expect(mockGit.diff).toHaveBeenNthCalledWith(1, '/path/to/repo', 'file1.ts', undefined);
+      expect(mockGit.diff).toHaveBeenNthCalledWith(2, '/path/to/repo', 'file2.ts', undefined);
+    });
+
+    test('passes sshRemoteId for remote diff', async () => {
+      mockGit.diff.mockResolvedValue({ stdout: 'remote diff' });
+
+      const result = await gitService.getDiff('/remote/path', undefined, 'ssh-remote-123');
+
+      expect(result.diff).toBe('remote diff');
+      expect(mockGit.diff).toHaveBeenCalledWith('/remote/path', undefined, 'ssh-remote-123');
     });
 
     test('returns empty diff string on error', async () => {
@@ -375,7 +396,16 @@ invalid_line`;
       const result = await gitService.getBranches('/path/to/repo');
 
       expect(result).toEqual(['main', 'develop', 'feature/test']);
-      expect(mockGit.branches).toHaveBeenCalledWith('/path/to/repo');
+      expect(mockGit.branches).toHaveBeenCalledWith('/path/to/repo', undefined);
+    });
+
+    test('passes sshRemoteId for remote branches', async () => {
+      mockGit.branches.mockResolvedValue({ branches: ['main'] });
+
+      const result = await gitService.getBranches('/remote/path', 'ssh-remote-123');
+
+      expect(result).toEqual(['main']);
+      expect(mockGit.branches).toHaveBeenCalledWith('/remote/path', 'ssh-remote-123');
     });
 
     test('returns empty array when result.branches is undefined', async () => {
@@ -403,7 +433,16 @@ invalid_line`;
       const result = await gitService.getTags('/path/to/repo');
 
       expect(result).toEqual(['v1.0.0', 'v1.1.0', 'v2.0.0']);
-      expect(mockGit.tags).toHaveBeenCalledWith('/path/to/repo');
+      expect(mockGit.tags).toHaveBeenCalledWith('/path/to/repo', undefined);
+    });
+
+    test('passes sshRemoteId for remote tags', async () => {
+      mockGit.tags.mockResolvedValue({ tags: ['v1.0.0'] });
+
+      const result = await gitService.getTags('/remote/path', 'ssh-remote-123');
+
+      expect(result).toEqual(['v1.0.0']);
+      expect(mockGit.tags).toHaveBeenCalledWith('/remote/path', 'ssh-remote-123');
     });
 
     test('returns empty array when result.tags is undefined', async () => {

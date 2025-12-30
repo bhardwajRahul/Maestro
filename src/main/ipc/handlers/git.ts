@@ -16,6 +16,13 @@ import {
   getImageMimeType,
 } from '../../../shared/gitUtils';
 import { SshRemoteConfig } from '../../../shared/types';
+import {
+  worktreeInfoRemote,
+  worktreeSetupRemote,
+  worktreeCheckoutRemote,
+  listWorktreesRemote,
+  getRepoRootRemote,
+} from '../../utils/remote-git';
 
 const LOG_CONTEXT = '[Git]';
 
@@ -68,7 +75,7 @@ const handlerOpts = (operation: string, logSuccess = false): CreateHandlerOption
  * - Basic operations: status, diff, branch, remote, tags
  * - Advanced queries: log, info, commitCount
  * - File operations: show, showFile
- * - Worktree management: worktreeInfo, worktreeSetup, worktreeCheckout
+ * - Worktree management: worktreeInfo, worktreeSetup, worktreeCheckout (with SSH support)
  * - GitHub CLI integration: checkGhCli, createPR, getDefaultBranch
  *
  * @param deps Dependencies including settingsStore for SSH remote configuration lookup
@@ -314,9 +321,25 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   // Git worktree operations for Auto Run parallelization
 
   // Get information about a worktree at a given path
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:worktreeInfo', createIpcHandler(
     handlerOpts('worktreeInfo'),
-    async (worktreePath: string) => {
+    async (worktreePath: string, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote git operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} worktreeInfo via SSH: ${worktreePath}`, LOG_CONTEXT);
+        const result = await worktreeInfoRemote(worktreePath, sshConfig);
+        if (!result.success || !result.data) {
+          throw new Error(result.error || 'Remote worktreeInfo failed');
+        }
+        return result.data;
+      }
+
+      // Local execution (existing code)
       // Check if the path exists
       try {
         await fs.access(worktreePath);
@@ -375,9 +398,25 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   ));
 
   // Get the root directory of the git repository
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:getRepoRoot', createIpcHandler(
     handlerOpts('getRepoRoot'),
-    async (cwd: string) => {
+    async (cwd: string, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote git operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} getRepoRoot via SSH: ${cwd}`, LOG_CONTEXT);
+        const result = await getRepoRootRemote(cwd, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Not a git repository');
+        }
+        return { root: result.data };
+      }
+
+      // Local execution
       const result = await execFileNoThrow('git', ['rev-parse', '--show-toplevel'], cwd);
       if (result.exitCode !== 0) {
         throw new Error(result.stderr || 'Not a git repository');
@@ -387,9 +426,25 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   ));
 
   // Create or reuse a worktree
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:worktreeSetup', withIpcErrorLogging(
     handlerOpts('worktreeSetup'),
-    async (mainRepoCwd: string, worktreePath: string, branchName: string) => {
+    async (mainRepoCwd: string, worktreePath: string, branchName: string, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote git operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} worktreeSetup via SSH: ${JSON.stringify({ mainRepoCwd, worktreePath, branchName })}`, LOG_CONTEXT);
+        const result = await worktreeSetupRemote(mainRepoCwd, worktreePath, branchName, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Remote worktreeSetup failed');
+        }
+        return result.data;
+      }
+
+      // Local execution (existing code)
       logger.debug(`worktreeSetup called with: ${JSON.stringify({ mainRepoCwd, worktreePath, branchName })}`, LOG_CONTEXT);
 
       // Resolve paths to absolute for proper comparison
@@ -497,9 +552,25 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   ));
 
   // Checkout a branch in a worktree (with uncommitted changes check)
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:worktreeCheckout', withIpcErrorLogging(
     handlerOpts('worktreeCheckout'),
-    async (worktreePath: string, branchName: string, createIfMissing: boolean) => {
+    async (worktreePath: string, branchName: string, createIfMissing: boolean, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote git operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} worktreeCheckout via SSH: ${JSON.stringify({ worktreePath, branchName, createIfMissing })}`, LOG_CONTEXT);
+        const result = await worktreeCheckoutRemote(worktreePath, branchName, createIfMissing, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Remote worktreeCheckout failed');
+        }
+        return result.data;
+      }
+
+      // Local execution (existing code)
       // Check for uncommitted changes
       const statusResult = await execFileNoThrow('git', ['status', '--porcelain'], worktreePath);
       if (statusResult.exitCode !== 0) {
@@ -646,9 +717,25 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   ));
 
   // List all worktrees for a git repository
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle('git:listWorktrees', createIpcHandler(
     handlerOpts('listWorktrees'),
-    async (cwd: string) => {
+    async (cwd: string, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote git operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} listWorktrees via SSH: ${cwd}`, LOG_CONTEXT);
+        const result = await listWorktreesRemote(cwd, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Remote listWorktrees failed');
+        }
+        return { worktrees: result.data };
+      }
+
+      // Local execution (existing code)
       // Run git worktree list --porcelain for machine-readable output
       const result = await execFileNoThrow('git', ['worktree', 'list', '--porcelain'], cwd);
       if (result.exitCode !== 0) {
@@ -781,9 +868,19 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
   ));
 
   // Watch a worktree directory for new worktrees
+  // Note: File watching is not supported for SSH remote sessions.
+  // Remote sessions will get success: true but isRemote: true flag indicating
+  // watching is not active. The UI should periodically poll listWorktrees instead.
   ipcMain.handle('git:watchWorktreeDirectory', createIpcHandler(
     handlerOpts('watchWorktreeDirectory'),
-    async (sessionId: string, worktreePath: string) => {
+    async (sessionId: string, worktreePath: string, sshRemoteId?: string) => {
+      // SSH remote: file watching is not supported
+      // Return success with isRemote flag so UI knows to poll instead
+      if (sshRemoteId) {
+        logger.debug(`${LOG_CONTEXT} Worktree watching not supported for SSH remote sessions. Session ${sessionId} should poll instead.`, LOG_CONTEXT);
+        return { success: true, isRemote: true, message: 'File watching not available for remote sessions. Use polling instead.' };
+      }
+
       // Stop existing watcher if any
       const existingWatcher = worktreeWatchers.get(sessionId);
       if (existingWatcher) {

@@ -13,6 +13,7 @@ interface AutoRunExpandedModalProps {
   onClose: () => void;
   // Pass through all AutoRun props
   sessionId: string;
+  sshRemoteId?: string; // SSH remote config ID - when set, all fs/autorun operations use SSH
   folderPath: string | null;
   selectedFile: string | null;
   documentList: string[];

@@ -22,6 +22,9 @@ interface AutoRunProps {
   theme: Theme;
   sessionId: string; // Maestro session ID for per-session attachment storage
 
+  // SSH Remote context (for remote sessions)
+  sshRemoteId?: string; // SSH remote config ID - when set, all fs/autorun operations use SSH
+
   // Folder & document state
   folderPath: string | null;
   selectedFile: string | null;
@@ -103,12 +106,14 @@ function AttachmentImage({
   src,
   alt,
   folderPath,
+  sshRemoteId,
   theme,
   onImageClick
 }: {
   src?: string;
   alt?: string;
   folderPath: string | null;
+  sshRemoteId?: string; // SSH remote ID for loading images from remote sessions
   theme: any;
   onImageClick?: (filename: string) => void;
 }) {
@@ -141,7 +146,7 @@ function AttachmentImage({
 
       // Load from folder using absolute path
       const absolutePath = `${folderPath}/${decodedSrc}`;
-      window.maestro.fs.readFile(absolutePath)
+      window.maestro.fs.readFile(absolutePath, sshRemoteId)
         .then((result) => {
           if (result.startsWith('data:')) {
             imageCache.set(cacheKey, result);
@@ -168,7 +173,7 @@ function AttachmentImage({
     } else if (src.startsWith('/')) {
       // Absolute file path - load via IPC
       setFilename(src.split('/').pop() || null);
-      window.maestro.fs.readFile(src)
+      window.maestro.fs.readFile(src, sshRemoteId)
         .then((result) => {
           if (result.startsWith('data:')) {
             setDataUrl(result);
@@ -185,7 +190,7 @@ function AttachmentImage({
       // Other relative path - try to load as file from folderPath if available
       setFilename(src.split('/').pop() || null);
       const pathToLoad = folderPath ? `${folderPath}/${src}` : src;
-      window.maestro.fs.readFile(pathToLoad)
+      window.maestro.fs.readFile(pathToLoad, sshRemoteId)
         .then((result) => {
           if (result.startsWith('data:')) {
             setDataUrl(result);
@@ -199,7 +204,7 @@ function AttachmentImage({
           setLoading(false);
         });
     }
-  }, [src, folderPath]);
+  }, [src, folderPath, sshRemoteId]);
 
   if (loading) {
     return (
@@ -317,6 +322,7 @@ function ImagePreview({
 const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInner({
   theme,
   sessionId,
+  sshRemoteId,
   folderPath,
   selectedFile,
   documentList,
@@ -487,12 +493,12 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     if (!folderPath || !selectedFile || !isDirty) return;
 
     try {
-      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent);
+      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', localContent, sshRemoteId);
       setSavedContent(localContent);
     } catch (err) {
       console.error('Failed to save:', err);
     }
-  }, [folderPath, selectedFile, localContent, isDirty, setSavedContent]);
+  }, [folderPath, selectedFile, localContent, isDirty, setSavedContent, sshRemoteId]);
 
   // Revert function - discard changes
   const handleRevert = useCallback(() => {
@@ -569,12 +575,12 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 
     // Auto-save the reset content
     try {
-      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', resetContent);
+      await window.maestro.autorun.writeDoc(folderPath, selectedFile + '.md', resetContent, sshRemoteId);
       setSavedContent(resetContent);
     } catch (err) {
       console.error('Failed to save after reset:', err);
     }
-  }, [folderPath, selectedFile, localContent, setLocalContent, setSavedContent, pushUndoState, lastUndoSnapshotRef]);
+  }, [folderPath, selectedFile, localContent, setLocalContent, setSavedContent, pushUndoState, lastUndoSnapshotRef, sshRemoteId]);
 
   // Image handling hook (attachments, paste, upload, lightbox)
   const {
@@ -1225,13 +1231,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           src={src}
           alt={alt}
           folderPath={folderPath}
+          sshRemoteId={sshRemoteId}
           theme={theme}
           onImageClick={openLightboxByFilename}
           {...props}
         />
       ),
     };
-  }, [theme, folderPath, openLightboxByFilename, handleFileClick]);
+  }, [theme, folderPath, sshRemoteId, openLightboxByFilename, handleFileClick]);
 
   // Search-highlighted components - only used in preview mode with active search
   // This allows the base components to remain stable during editing
@@ -1263,13 +1270,14 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
           src={src}
           alt={alt}
           folderPath={folderPath}
+          sshRemoteId={sshRemoteId}
           theme={theme}
           onImageClick={openLightboxByFilename}
           {...props}
         />
       ),
     };
-  }, [theme, folderPath, openLightboxByFilename, handleFileClick, searchOpen, searchQuery, totalMatches, currentMatchIndex, handleMatchRendered]);
+  }, [theme, folderPath, sshRemoteId, openLightboxByFilename, handleFileClick, searchOpen, searchQuery, totalMatches, currentMatchIndex, handleMatchRendered]);
 
   // Use search-highlighted components when available, otherwise use base components
   const markdownComponents = searchHighlightedComponents || baseMarkdownComponents;

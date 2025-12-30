@@ -2,8 +2,18 @@ import { ipcMain, BrowserWindow, App } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import chokidar, { FSWatcher } from 'chokidar';
+import Store from 'electron-store';
 import { logger } from '../../utils/logger';
 import { createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';
+import { SshRemoteConfig } from '../../../shared/types';
+import { MaestroSettings } from './persistence';
+import {
+  readDirRemote,
+  readFileRemote,
+  writeFileRemote,
+  existsRemote,
+  mkdirRemote,
+} from '../../utils/remote-fs';
 
 const LOG_CONTEXT = '[AutoRun]';
 
@@ -13,6 +23,31 @@ const handlerOpts = (operation: string, logSuccess = true): CreateHandlerOptions
   operation,
   logSuccess,
 });
+
+/**
+ * Dependencies required for Auto Run handler registration.
+ * Optional for backward compatibility - SSH remote support requires settingsStore.
+ */
+export interface AutorunHandlerDependencies {
+  /** The settings store (MaestroSettings) - required for SSH remote lookup */
+  settingsStore?: Store<MaestroSettings>;
+}
+
+/**
+ * Get SSH remote configuration by ID from the settings store.
+ * Returns undefined if not found or store not provided.
+ */
+function getSshRemoteById(
+  store: Store<MaestroSettings> | undefined,
+  sshRemoteId: string
+): SshRemoteConfig | undefined {
+  if (!store) {
+    logger.warn(`${LOG_CONTEXT} Settings store not available for SSH remote lookup`, LOG_CONTEXT);
+    return undefined;
+  }
+  const sshRemotes = store.get('sshRemotes', []) as SshRemoteConfig[];
+  return sshRemotes.find((r) => r.id === sshRemoteId);
+}
 
 // State managed by this module
 const autoRunWatchers = new Map<string, FSWatcher>();
@@ -80,6 +115,61 @@ async function scanDirectory(dirPath: string, relativePath: string = ''): Promis
 }
 
 /**
+ * Recursively scan directory for markdown files on a remote host via SSH.
+ * This is the SSH version of scanDirectory.
+ */
+async function scanDirectoryRemote(
+  dirPath: string,
+  sshRemote: SshRemoteConfig,
+  relativePath: string = ''
+): Promise<TreeNode[]> {
+  const result = await readDirRemote(dirPath, sshRemote);
+  if (!result.success || !result.data) {
+    logger.warn(`${LOG_CONTEXT} Failed to read remote directory: ${result.error}`, LOG_CONTEXT);
+    return [];
+  }
+
+  const nodes: TreeNode[] = [];
+
+  // Sort entries: folders first, then files, both alphabetically
+  const sortedEntries = result.data
+    .filter((entry) => !entry.name.startsWith('.'))
+    .sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+
+  for (const entry of sortedEntries) {
+    const entryRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+
+    if (entry.isDirectory) {
+      // Recursively scan subdirectory
+      // Use forward slashes for remote paths (Unix style)
+      const children = await scanDirectoryRemote(`${dirPath}/${entry.name}`, sshRemote, entryRelativePath);
+      // Only include folders that contain .md files (directly or in subfolders)
+      if (children.length > 0) {
+        nodes.push({
+          name: entry.name,
+          type: 'folder',
+          path: entryRelativePath,
+          children,
+        });
+      }
+    } else if (!entry.isDirectory && !entry.isSymlink && entry.name.toLowerCase().endsWith('.md')) {
+      // Add .md file (without extension in name, but keep in path)
+      nodes.push({
+        name: entry.name.slice(0, -3),
+        type: 'file',
+        path: entryRelativePath.slice(0, -3), // Remove .md from path too
+      });
+    }
+  }
+
+  return nodes;
+}
+
+/**
  * Flatten tree structure to flat list of paths.
  *
  * Note: This is intentionally NOT using shared/treeUtils.getAllFilePaths because:
@@ -119,19 +209,37 @@ function validatePathWithinFolder(filePath: string, folderPath: string): boolean
  * - Image management (save, delete, list)
  * - Folder watching for external changes
  * - Folder deletion (wizard "start fresh" feature)
+ *
+ * SSH remote support: Handlers accept optional sshRemoteId parameter for remote file operations.
  */
 export function registerAutorunHandlers(deps: {
   mainWindow: BrowserWindow | null;
   getMainWindow: () => BrowserWindow | null;
   app: App;
-}): void {
-  const { getMainWindow, app } = deps;
+} & AutorunHandlerDependencies): void {
+  const { getMainWindow, app, settingsStore } = deps;
 
   // List markdown files in a directory for Auto Run (with recursive subfolder support)
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle(
     'autorun:listDocs',
-    createIpcHandler(handlerOpts('listDocs'), async (folderPath: string) => {
-      // Validate the folder path exists
+    createIpcHandler(handlerOpts('listDocs'), async (folderPath: string, sshRemoteId?: string) => {
+      // SSH remote: dispatch to remote operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        logger.debug(`${LOG_CONTEXT} listDocs via SSH: ${folderPath}`, LOG_CONTEXT);
+
+        const tree = await scanDirectoryRemote(folderPath, sshConfig);
+        const files = flattenTree(tree);
+
+        logger.info(`Listed ${files.length} remote markdown files in ${folderPath} (with subfolders)`, LOG_CONTEXT);
+        return { files, tree };
+      }
+
+      // Local: Validate the folder path exists
       const folderStat = await fs.stat(folderPath);
       if (!folderStat.isDirectory()) {
         throw new Error('Path is not a directory');
@@ -146,9 +254,10 @@ export function registerAutorunHandlers(deps: {
   );
 
   // Read a markdown document for Auto Run (supports subdirectories)
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle(
     'autorun:readDoc',
-    createIpcHandler(handlerOpts('readDoc'), async (folderPath: string, filename: string) => {
+    createIpcHandler(handlerOpts('readDoc'), async (folderPath: string, filename: string, sshRemoteId?: string) => {
       // Reject obvious traversal attempts
       if (filename.includes('..')) {
         throw new Error('Invalid filename');
@@ -157,6 +266,27 @@ export function registerAutorunHandlers(deps: {
       // Ensure filename has .md extension
       const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
 
+      // SSH remote: dispatch to remote operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+
+        // Construct remote path (use forward slashes)
+        const remotePath = `${folderPath}/${fullFilename}`;
+        logger.debug(`${LOG_CONTEXT} readDoc via SSH: ${remotePath}`, LOG_CONTEXT);
+
+        const result = await readFileRemote(remotePath, sshConfig);
+        if (!result.success || result.data === undefined) {
+          throw new Error(result.error || 'Failed to read remote file');
+        }
+
+        logger.info(`Read remote Auto Run doc: ${fullFilename}`, LOG_CONTEXT);
+        return { content: result.data };
+      }
+
+      // Local: Validate and read
       const filePath = path.join(folderPath, fullFilename);
 
       // Validate the file is within the folder path (prevent traversal)
@@ -180,9 +310,10 @@ export function registerAutorunHandlers(deps: {
   );
 
   // Write a markdown document for Auto Run (supports subdirectories)
+  // Supports SSH remote execution via optional sshRemoteId parameter
   ipcMain.handle(
     'autorun:writeDoc',
-    createIpcHandler(handlerOpts('writeDoc'), async (folderPath: string, filename: string, content: string) => {
+    createIpcHandler(handlerOpts('writeDoc'), async (folderPath: string, filename: string, content: string, sshRemoteId?: string) => {
       // DEBUG: Log all write attempts to trace cross-session contamination
       logger.info(
         `[DEBUG] writeDoc called: folder=${folderPath}, file=${filename}, content.length=${content.length}, content.slice(0,50)="${content.slice(0, 50).replace(/\n/g, '\\n')}"`,
@@ -198,6 +329,40 @@ export function registerAutorunHandlers(deps: {
       // Ensure filename has .md extension
       const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
 
+      // SSH remote: dispatch to remote operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+
+        // Construct remote path (use forward slashes)
+        const remotePath = `${folderPath}/${fullFilename}`;
+
+        // Ensure parent directory exists on remote
+        const remoteParentDir = remotePath.substring(0, remotePath.lastIndexOf('/'));
+        if (remoteParentDir && remoteParentDir !== folderPath) {
+          const parentExists = await existsRemote(remoteParentDir, sshConfig);
+          if (!parentExists.success || !parentExists.data) {
+            const mkdirResult = await mkdirRemote(remoteParentDir, sshConfig, true);
+            if (!mkdirResult.success) {
+              throw new Error(mkdirResult.error || 'Failed to create remote parent directory');
+            }
+          }
+        }
+
+        logger.debug(`${LOG_CONTEXT} writeDoc via SSH: ${remotePath}`, LOG_CONTEXT);
+
+        const result = await writeFileRemote(remotePath, content, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to write remote file');
+        }
+
+        logger.info(`Wrote remote Auto Run doc: ${fullFilename}`, LOG_CONTEXT);
+        return {};
+      }
+
+      // Local: Validate and write
       const filePath = path.join(folderPath, fullFilename);
 
       // Validate the file is within the folder path (prevent traversal)
@@ -402,10 +567,35 @@ export function registerAutorunHandlers(deps: {
   );
 
   // Start watching an Auto Run folder for changes
+  // Supports SSH remote execution via optional sshRemoteId parameter
+  // For remote sessions, file watching is not supported (chokidar can't watch remote directories)
+  // Returns isRemote: true to indicate the UI should poll using listDocs instead
   ipcMain.handle(
     'autorun:watchFolder',
-    createIpcHandler(handlerOpts('watchFolder'), async (folderPath: string) => {
-      // Stop any existing watcher for this folder
+    createIpcHandler(handlerOpts('watchFolder'), async (folderPath: string, sshRemoteId?: string) => {
+      // SSH remote: Cannot use chokidar for remote directories
+      // Return success with isRemote flag so UI can fall back to polling
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(settingsStore, sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+
+        // Ensure remote folder exists (create if not)
+        const folderExists = await existsRemote(folderPath, sshConfig);
+        if (!folderExists.success || !folderExists.data) {
+          const mkdirResult = await mkdirRemote(folderPath, sshConfig, true);
+          if (!mkdirResult.success) {
+            throw new Error(mkdirResult.error || 'Failed to create remote Auto Run folder');
+          }
+          logger.info(`Created remote Auto Run folder: ${folderPath}`, LOG_CONTEXT);
+        }
+
+        logger.info(`Remote Auto Run folder ready (polling mode): ${folderPath}`, LOG_CONTEXT);
+        return { isRemote: true, message: 'File watching not available for remote sessions. Use polling.' };
+      }
+
+      // Local: Stop any existing watcher for this folder
       if (autoRunWatchers.has(folderPath)) {
         autoRunWatchers.get(folderPath)?.close();
         autoRunWatchers.delete(folderPath);

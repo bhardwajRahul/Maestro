@@ -265,6 +265,7 @@ export const RightPanel = memo(forwardRef<RightPanelHandle, RightPanelProps>(fun
   const autoRunSharedProps = {
     theme,
     sessionId: session.id,
+    sshRemoteId: session.sshRemoteId,
     folderPath: session.autoRunFolderPath || null,
     selectedFile: session.autoRunSelectedFile || null,
     documentList: autoRunDocumentList,

@@ -23,6 +23,7 @@ import { initializeOutputParsers, getOutputParser } from './parsers';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
 import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
+import { readDirRemote, readFileRemote, statRemote, directorySizeRemote } from './utils/remote-fs';
 
 // ============================================================================
 // Custom Storage Location Configuration
@@ -277,6 +278,15 @@ const agentSessionOriginsStore = new Store<AgentSessionOriginsData>({
     origins: {},
   },
 });
+
+/**
+ * Get SSH remote configuration by ID.
+ * Returns undefined if not found.
+ */
+function getSshRemoteById(sshRemoteId: string): SshRemoteConfig | undefined {
+  const sshRemotes = store.get('sshRemotes', []) as SshRemoteConfig[];
+  return sshRemotes.find((r) => r.id === sshRemoteId);
+}
 
 let mainWindow: BrowserWindow | null = null;
 let processManager: ProcessManager | null = null;
@@ -994,6 +1004,7 @@ function setupIpcHandlers() {
     mainWindow,
     getMainWindow: () => mainWindow,
     app,
+    settingsStore: store,
   });
 
   // Playbook operations - extracted to src/main/ipc/handlers/playbooks.ts
@@ -1149,7 +1160,26 @@ function setupIpcHandlers() {
     return os.homedir();
   });
 
-  ipcMain.handle('fs:readDir', async (_, dirPath: string) => {
+  ipcMain.handle('fs:readDir', async (_, dirPath: string, sshRemoteId?: string) => {
+    // SSH remote: dispatch to remote fs operations
+    if (sshRemoteId) {
+      const sshConfig = getSshRemoteById(sshRemoteId);
+      if (!sshConfig) {
+        throw new Error(`SSH remote not found: ${sshRemoteId}`);
+      }
+      const result = await readDirRemote(dirPath, sshConfig);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to read remote directory');
+      }
+      // Map remote entries to match local format (isFile derived from !isDirectory && !isSymlink)
+      return result.data!.map((entry) => ({
+        name: entry.name,
+        isDirectory: entry.isDirectory,
+        isFile: !entry.isDirectory && !entry.isSymlink,
+      }));
+    }
+
+    // Local: use standard fs operations
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     // Convert Dirent objects to plain objects for IPC serialization
     return entries.map((entry: any) => ({
@@ -1159,8 +1189,33 @@ function setupIpcHandlers() {
     }));
   });
 
-  ipcMain.handle('fs:readFile', async (_, filePath: string) => {
+  ipcMain.handle('fs:readFile', async (_, filePath: string, sshRemoteId?: string) => {
     try {
+      // SSH remote: dispatch to remote fs operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        const result = await readFileRemote(filePath, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to read remote file');
+        }
+        // For images over SSH, we'd need to base64 encode on remote and decode here
+        // For now, return raw content (text files work, binary images may have issues)
+        const ext = filePath.split('.').pop()?.toLowerCase();
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'];
+        const isImage = imageExtensions.includes(ext || '');
+        if (isImage) {
+          // The remote readFile returns raw bytes as string - convert to base64 data URL
+          const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+          const base64 = Buffer.from(result.data!, 'binary').toString('base64');
+          return `data:${mimeType};base64,${base64}`;
+        }
+        return result.data!;
+      }
+
+      // Local: use standard fs operations
       // Check if file is an image
       const ext = filePath.split('.').pop()?.toLowerCase();
       const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'];
@@ -1182,8 +1237,31 @@ function setupIpcHandlers() {
     }
   });
 
-  ipcMain.handle('fs:stat', async (_, filePath: string) => {
+  ipcMain.handle('fs:stat', async (_, filePath: string, sshRemoteId?: string) => {
     try {
+      // SSH remote: dispatch to remote fs operations
+      if (sshRemoteId) {
+        const sshConfig = getSshRemoteById(sshRemoteId);
+        if (!sshConfig) {
+          throw new Error(`SSH remote not found: ${sshRemoteId}`);
+        }
+        const result = await statRemote(filePath, sshConfig);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to get remote file stats');
+        }
+        // Map remote stat result to match local format
+        // Note: remote stat doesn't provide createdAt (birthtime), use mtime as fallback
+        const mtimeDate = new Date(result.data!.mtime);
+        return {
+          size: result.data!.size,
+          createdAt: mtimeDate.toISOString(), // Fallback: use mtime for createdAt
+          modifiedAt: mtimeDate.toISOString(),
+          isDirectory: result.data!.isDirectory,
+          isFile: !result.data!.isDirectory,
+        };
+      }
+
+      // Local: use standard fs operations
       const stats = await fs.stat(filePath);
       return {
         size: stats.size,
@@ -1199,7 +1277,27 @@ function setupIpcHandlers() {
 
   // Calculate total size of a directory recursively
   // Respects the same ignore patterns as loadFileTree (node_modules, __pycache__)
-  ipcMain.handle('fs:directorySize', async (_, dirPath: string) => {
+  ipcMain.handle('fs:directorySize', async (_, dirPath: string, sshRemoteId?: string) => {
+    // SSH remote: dispatch to remote fs operations
+    if (sshRemoteId) {
+      const sshConfig = getSshRemoteById(sshRemoteId);
+      if (!sshConfig) {
+        throw new Error(`SSH remote not found: ${sshRemoteId}`);
+      }
+      const result = await directorySizeRemote(dirPath, sshConfig);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get remote directory size');
+      }
+      // Remote directorySizeRemote only returns totalSize (via du -sb)
+      // File/folder counts are not available without recursive listing
+      return {
+        totalSize: result.data!,
+        fileCount: 0, // Not available from remote du command
+        folderCount: 0, // Not available from remote du command
+      };
+    }
+
+    // Local: use standard fs operations
     let totalSize = 0;
     let fileCount = 0;
     let folderCount = 0;

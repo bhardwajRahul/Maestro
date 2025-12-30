@@ -38,6 +38,8 @@ export interface UseWorktreeValidationDeps {
   worktreeEnabled: boolean;
   /** The session's current working directory (main repo) */
   sessionCwd: string;
+  /** SSH remote ID for remote sessions (optional) */
+  sshRemoteId?: string;
 }
 
 /**
@@ -90,6 +92,7 @@ export function useWorktreeValidation({
   branchName,
   worktreeEnabled,
   sessionCwd,
+  sshRemoteId,
 }: UseWorktreeValidationDeps): UseWorktreeValidationReturn {
   const [validation, setValidation] = useState<WorktreeValidationState>(INITIAL_VALIDATION_STATE);
 
@@ -108,7 +111,7 @@ export function useWorktreeValidation({
     const timeoutId = setTimeout(async () => {
       try {
         // Check if the path exists and get worktree info
-        const worktreeInfoResult = await window.maestro.git.worktreeInfo(worktreePath);
+        const worktreeInfoResult = await window.maestro.git.worktreeInfo(worktreePath, sshRemoteId);
 
         if (!worktreeInfoResult.success) {
           setValidation({
@@ -138,7 +141,7 @@ export function useWorktreeValidation({
 
         // Path exists - check if it's part of the same repo
         // If there's no repoRoot, the directory exists but isn't a git repo - that's fine for a new worktree
-        const mainRepoRootResult = await window.maestro.git.getRepoRoot(sessionCwd);
+        const mainRepoRootResult = await window.maestro.git.getRepoRoot(sessionCwd, sshRemoteId);
         const sameRepo =
           !worktreeInfoResult.repoRoot ||
           (mainRepoRootResult.success && worktreeInfoResult.repoRoot === mainRepoRootResult.root);
@@ -156,7 +159,8 @@ export function useWorktreeValidation({
         if (branchMismatch && sameRepo) {
           try {
             // Use git status to check for uncommitted changes in the worktree
-            const statusResult = await window.maestro.git.status(worktreePath);
+            // Pass sshRemoteId to support remote worktree validation
+            const statusResult = await window.maestro.git.status(worktreePath, sshRemoteId);
             hasChanges = hasUncommittedChanges(statusResult.stdout);
           } catch {
             // If we can't check, assume no uncommitted changes
@@ -190,7 +194,7 @@ export function useWorktreeValidation({
 
     // Cleanup timeout on unmount or when dependencies change
     return () => clearTimeout(timeoutId);
-  }, [worktreePath, branchName, worktreeEnabled, sessionCwd]);
+  }, [worktreePath, branchName, worktreeEnabled, sessionCwd, sshRemoteId]);
 
   return { validation };
 }

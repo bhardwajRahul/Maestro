@@ -26,6 +26,8 @@ export interface WorktreeConfig {
   prTargetBranch?: string;
   /** Path to gh CLI binary (if not in PATH) */
   ghPath?: string;
+  /** SSH remote ID for remote sessions (optional) */
+  sshRemoteId?: string;
 }
 
 /**
@@ -167,7 +169,8 @@ ${docList}
         const setupResult = await window.maestro.git.worktreeSetup(
           sessionCwd,
           worktree.path,
-          worktree.branchName
+          worktree.branchName,
+          worktree.sshRemoteId
         );
 
         window.maestro.logger.log('info', 'worktreeSetup result', 'WorktreeManager', {
@@ -205,7 +208,8 @@ ${docList}
           const checkoutResult = await window.maestro.git.worktreeCheckout(
             worktree.path,
             worktree.branchName,
-            true // createIfMissing
+            true, // createIfMissing
+            worktree.sshRemoteId
           );
 
           window.maestro.logger.log('info', 'worktreeCheckout result', 'WorktreeManager', {

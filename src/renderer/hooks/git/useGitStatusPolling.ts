@@ -167,9 +167,12 @@ export function useGitStatusPolling(
 
             const isActiveSession = session.id === currentActiveSessionId;
 
+            // Get SSH remote ID from session for remote git operations
+            const sshRemoteId = session.sshRemoteId;
+
             // For non-active sessions, just get basic status (file count)
             if (!isActiveSession) {
-              const status = await gitService.getStatus(cwd);
+              const status = await gitService.getStatus(cwd, sshRemoteId);
               const statusData: GitStatusData = {
                 fileCount: status.files.length,
                 branch: status.branch,
@@ -187,9 +190,9 @@ export function useGitStatusPolling(
             // Use git:info for branch/remote/ahead/behind (single IPC call, 4 parallel git commands)
             // Plus get detailed file changes with numstat
             const [gitInfo, status, numstat] = await Promise.all([
-              window.maestro.git.info(cwd),
-              gitService.getStatus(cwd),
-              gitService.getNumstat(cwd),
+              window.maestro.git.info(cwd, sshRemoteId),
+              gitService.getStatus(cwd, sshRemoteId),
+              gitService.getNumstat(cwd, sshRemoteId),
             ]);
 
             // Create a map of path -> numstat data

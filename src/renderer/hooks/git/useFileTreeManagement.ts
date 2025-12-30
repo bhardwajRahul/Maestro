@@ -2,11 +2,26 @@ import { useCallback, useEffect, useMemo } from 'react';
 import type { RightPanelHandle } from '../../components/RightPanel';
 import type { Session } from '../../types';
 import type { FileNode } from '../../types/fileTree';
-import { loadFileTree, compareFileTrees, type FileTreeChanges } from '../../utils/fileExplorer';
+import { loadFileTree, compareFileTrees, type FileTreeChanges, type SshContext } from '../../utils/fileExplorer';
 import { fuzzyMatch } from '../../utils/search';
 import { gitService } from '../../services/git';
 
+/**
+ * Extract SSH context from session for remote file operations.
+ * Returns undefined if no SSH remote is configured.
+ */
+function getSshContext(session: Session): SshContext | undefined {
+  if (!session.sshRemoteId) {
+    return undefined;
+  }
+  return {
+    sshRemoteId: session.sshRemoteId,
+    remoteCwd: session.remoteCwd,
+  };
+}
+
 export type { RightPanelHandle } from '../../components/RightPanel';
+export type { SshContext } from '../../utils/fileExplorer';
 
 /**
  * Dependencies for the useFileTreeManagement hook.
@@ -68,17 +83,22 @@ export function useFileTreeManagement(
   /**
    * Refresh file tree for a session and return the changes detected.
    * Uses sessionsRef to avoid dependency on sessions state (prevents timer reset on every session change).
+   * Passes SSH context for remote sessions to enable remote file operations (Phase 2+).
    */
   const refreshFileTree = useCallback(async (sessionId: string): Promise<FileTreeChanges | undefined> => {
     // Use sessionsRef to avoid dependency on sessions state (prevents timer reset on every session change)
     const session = sessionsRef.current.find(s => s.id === sessionId);
     if (!session) return undefined;
 
+    // Extract SSH context for remote file operations
+    const sshContext = getSshContext(session);
+
     try {
       // Fetch tree and stats in parallel
+      // Pass SSH context for remote file operations
       const [newTree, stats] = await Promise.all([
-        loadFileTree(session.cwd),
-        window.maestro.fs.directorySize(session.cwd)
+        loadFileTree(session.cwd, 10, 0, sshContext),
+        window.maestro.fs.directorySize(session.cwd, sshContext?.sshRemoteId)
       ]);
       const oldTree = session.fileTree || [];
       const changes = compareFileTrees(oldTree, newTree);
@@ -115,6 +135,7 @@ export function useFileTreeManagement(
   /**
    * Refresh both file tree and git state for a session.
    * Loads file tree, checks git repo status, and fetches branches/tags if applicable.
+   * Passes SSH context for remote sessions to enable remote operations (Phase 2+).
    */
   const refreshGitFileState = useCallback(async (sessionId: string) => {
     const session = sessions.find(s => s.id === sessionId);
@@ -122,11 +143,15 @@ export function useFileTreeManagement(
 
     const cwd = session.inputMode === 'terminal' ? (session.shellCwd || session.cwd) : session.cwd;
 
+    // Extract SSH context for remote file/git operations
+    const sshContext = getSshContext(session);
+
     try {
       // Refresh file tree, stats, git repo status, branches, and tags in parallel
+      // Pass SSH context for remote file operations
       const [tree, stats, isGitRepo] = await Promise.all([
-        loadFileTree(cwd),
-        window.maestro.fs.directorySize(cwd),
+        loadFileTree(cwd, 10, 0, sshContext),
+        window.maestro.fs.directorySize(cwd, sshContext?.sshRemoteId),
         gitService.isRepo(cwd)
       ]);
 
@@ -179,6 +204,7 @@ export function useFileTreeManagement(
   /**
    * Load file tree when active session changes.
    * Only loads if file tree is empty.
+   * Passes SSH context for remote sessions to enable remote operations (Phase 2+).
    */
   useEffect(() => {
     const session = sessions.find(s => s.id === activeSessionId);
@@ -186,9 +212,12 @@ export function useFileTreeManagement(
 
     // Only load if file tree is empty
     if (!session.fileTree || session.fileTree.length === 0) {
+      // Extract SSH context for remote file operations
+      const sshContext = getSshContext(session);
+
       Promise.all([
-        loadFileTree(session.cwd),
-        window.maestro.fs.directorySize(session.cwd)
+        loadFileTree(session.cwd, 10, 0, sshContext),
+        window.maestro.fs.directorySize(session.cwd, sshContext?.sshRemoteId)
       ]).then(([tree, stats]) => {
         setSessions(prev => prev.map(s =>
           s.id === activeSessionId ? {

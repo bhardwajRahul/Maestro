@@ -401,7 +401,9 @@ export function useBatchProcessor({
     delete errorResolutionRefs.current[sessionId];
 
     // Set up worktree if enabled using extracted hook
-    const worktreeResult = await worktreeManager.setupWorktree(session.cwd, worktree);
+    // Inject sshRemoteId from session into worktree config for remote worktree operations
+    const worktreeWithSsh = worktree ? { ...worktree, sshRemoteId: session.sshRemoteId } : undefined;
+    const worktreeResult = await worktreeManager.setupWorktree(session.cwd, worktreeWithSsh);
     if (!worktreeResult.success) {
       window.maestro.logger.log('error', 'Worktree setup failed', 'BatchProcessor', { sessionId, error: worktreeResult.error });
       return;

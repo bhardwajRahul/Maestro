@@ -138,7 +138,9 @@ describe('useFileTreeManagement', () => {
       returnedChanges = await result.current.refreshFileTree(state.getSessions()[0].id);
     });
 
-    expect(loadFileTree).toHaveBeenCalledWith('/test/project');
+    // loadFileTree is now called with (path, maxDepth, currentDepth, sshContext)
+    // For local sessions (no sshRemoteId), sshContext is undefined
+    expect(loadFileTree).toHaveBeenCalledWith('/test/project', 10, 0, undefined);
     expect(compareFileTrees).toHaveBeenCalledWith(initialTree, nextTree);
     expect(returnedChanges).toEqual(changes);
     expect(state.getSessions()[0].fileTree).toEqual(nextTree);
@@ -187,7 +189,8 @@ describe('useFileTreeManagement', () => {
       await result.current.refreshGitFileState(session.id);
     });
 
-    expect(loadFileTree).toHaveBeenCalledWith('/test/shell');
+    // loadFileTree is now called with (path, maxDepth, currentDepth, sshContext)
+    expect(loadFileTree).toHaveBeenCalledWith('/test/shell', 10, 0, undefined);
     expect(gitService.isRepo).toHaveBeenCalledWith('/test/shell');
     expect(gitService.getBranches).toHaveBeenCalledWith('/test/shell');
     expect(gitService.getTags).toHaveBeenCalledWith('/test/shell');
@@ -243,8 +246,37 @@ describe('useFileTreeManagement', () => {
     renderHook(() => useFileTreeManagement(deps));
 
     await waitFor(() => {
-      expect(loadFileTree).toHaveBeenCalledWith('/test/project');
+      // loadFileTree is now called with (path, maxDepth, currentDepth, sshContext)
+      expect(loadFileTree).toHaveBeenCalledWith('/test/project', 10, 0, undefined);
       expect(state.getSessions()[0].fileTree).toEqual(nextTree);
+    });
+  });
+
+  it('passes SSH context when session has sshRemoteId', async () => {
+    const nextTree: FileNode[] = [{ name: 'remote-file.txt', type: 'file' }];
+    const changes = { totalChanges: 0, newFiles: 0, newFolders: 0, removedFiles: 0, removedFolders: 0 };
+
+    vi.mocked(loadFileTree).mockResolvedValue(nextTree);
+    vi.mocked(compareFileTrees).mockReturnValue(changes);
+
+    // Create session with SSH context
+    const sshSession = createMockSession({
+      fileTree: [],
+      sshRemoteId: 'my-ssh-remote',
+      remoteCwd: '/remote/project',
+    });
+    const state = createSessionsState([sshSession]);
+    const deps = createDeps(state);
+    const { result } = renderHook(() => useFileTreeManagement(deps));
+
+    await act(async () => {
+      await result.current.refreshFileTree(sshSession.id);
+    });
+
+    // Verify SSH context is passed to loadFileTree
+    expect(loadFileTree).toHaveBeenCalledWith('/test/project', 10, 0, {
+      sshRemoteId: 'my-ssh-remote',
+      remoteCwd: '/remote/project',
     });
   });
 });

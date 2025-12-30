@@ -9,7 +9,7 @@
 
 import { BrowserWindow, App } from 'electron';
 import Store from 'electron-store';
-import { registerGitHandlers } from './git';
+import { registerGitHandlers, GitHandlerDependencies } from './git';
 import { registerAutorunHandlers } from './autorun';
 import { registerPlaybooksHandlers } from './playbooks';
 import { registerHistoryHandlers } from './history';
@@ -69,6 +69,7 @@ export type { ContextHandlerDependencies };
 export type { StatsHandlerDependencies };
 export type { DocumentGraphHandlerDependencies };
 export type { SshRemoteHandlerDependencies };
+export type { GitHandlerDependencies };
 export type { MaestroSettings, SessionsData, GroupsData };
 
 /**

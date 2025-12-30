@@ -300,6 +300,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           id: sshRemoteUsed.id,
           name: sshRemoteUsed.name,
           host: sshRemoteUsed.host,
+          remoteWorkingDir: sshRemoteUsed.remoteWorkingDir,
         } : null;
         mainWindow.webContents.send('process:ssh-remote', config.sessionId, sshRemoteInfo);
       }
@@ -311,6 +312,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
           id: sshRemoteUsed.id,
           name: sshRemoteUsed.name,
           host: sshRemoteUsed.host,
+          remoteWorkingDir: sshRemoteUsed.remoteWorkingDir,
         } : undefined,
       };
     })

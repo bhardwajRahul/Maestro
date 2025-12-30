@@ -198,7 +198,8 @@ describe('useWorktreeValidation', () => {
 
       expect(result.current.validation.branchMismatch).toBe(true);
       expect(result.current.validation.hasUncommittedChanges).toBe(true);
-      expect(mockGit.status).toHaveBeenCalledWith('/path/to/worktree');
+      // sshRemoteId is undefined when not provided in deps
+      expect(mockGit.status).toHaveBeenCalledWith('/path/to/worktree', undefined);
     });
 
     it('does not check uncommitted changes when repos differ', async () => {
