@@ -364,17 +364,17 @@ interface MaestroAPI {
   };
   fs: {
     homeDir: () => Promise<string>;
-    readDir: (dirPath: string) => Promise<DirectoryEntry[]>;
-    readFile: (filePath: string) => Promise<string>;
+    readDir: (dirPath: string, sshRemoteId?: string) => Promise<DirectoryEntry[]>;
+    readFile: (filePath: string, sshRemoteId?: string) => Promise<string>;
     writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-    stat: (filePath: string) => Promise<{
+    stat: (filePath: string, sshRemoteId?: string) => Promise<{
       size: number;
       createdAt: string;
       modifiedAt: string;
       isDirectory: boolean;
       isFile: boolean;
     }>;
-    directorySize: (dirPath: string) => Promise<{
+    directorySize: (dirPath: string, sshRemoteId?: string) => Promise<{
       totalSize: number;
       fileCount: number;
       folderCount: number;

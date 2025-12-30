@@ -489,13 +489,16 @@ contextBridge.exposeInMainWorld('maestro', {
   // File System API
   fs: {
     homeDir: () => ipcRenderer.invoke('fs:homeDir') as Promise<string>,
-    readDir: (dirPath: string) => ipcRenderer.invoke('fs:readDir', dirPath),
-    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
+    readDir: (dirPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:readDir', dirPath, sshRemoteId),
+    readFile: (filePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:readFile', filePath, sshRemoteId),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke('fs:writeFile', filePath, content) as Promise<{ success: boolean }>,
-    stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
-    directorySize: (dirPath: string) =>
-      ipcRenderer.invoke('fs:directorySize', dirPath) as Promise<{
+    stat: (filePath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:stat', filePath, sshRemoteId),
+    directorySize: (dirPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('fs:directorySize', dirPath, sshRemoteId) as Promise<{
         totalSize: number;
         fileCount: number;
         folderCount: number;
@@ -1840,17 +1843,17 @@ export interface MaestroAPI {
   };
   fs: {
     homeDir: () => Promise<string>;
-    readDir: (dirPath: string) => Promise<DirectoryEntry[]>;
-    readFile: (filePath: string) => Promise<string>;
+    readDir: (dirPath: string, sshRemoteId?: string) => Promise<DirectoryEntry[]>;
+    readFile: (filePath: string, sshRemoteId?: string) => Promise<string>;
     writeFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-    stat: (filePath: string) => Promise<{
+    stat: (filePath: string, sshRemoteId?: string) => Promise<{
       size: number;
       createdAt: string;
       modifiedAt: string;
       isDirectory: boolean;
       isFile: boolean;
     }>;
-    directorySize: (dirPath: string) => Promise<{
+    directorySize: (dirPath: string, sshRemoteId?: string) => Promise<{
       totalSize: number;
       fileCount: number;
       folderCount: number;
