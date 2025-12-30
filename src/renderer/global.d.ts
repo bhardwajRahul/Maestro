@@ -640,6 +640,19 @@ interface MaestroAPI {
       };
       error?: string;
     }>;
+    getSshConfigHosts: () => Promise<{
+      success: boolean;
+      hosts: Array<{
+        host: string;
+        hostName?: string;
+        port?: number;
+        user?: string;
+        identityFile?: string;
+        proxyJump?: string;
+      }>;
+      error?: string;
+      configPath: string;
+    }>;
   };
   devtools: {
     open: () => Promise<void>;

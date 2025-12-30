@@ -18,7 +18,7 @@ import { sshRemoteManager } from '../../ssh-remote-manager';
 import { createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';
 import { logger } from '../../utils/logger';
 import { MaestroSettings } from './persistence';
-import { parseSshConfig, SshConfigHost, SshConfigParseResult } from '../../utils/ssh-config-parser';
+import { parseSshConfig, SshConfigParseResult } from '../../utils/ssh-config-parser';
 
 const LOG_CONTEXT = '[SshRemote]';
 
@@ -111,6 +111,8 @@ export function registerSshRemoteHandlers(deps: SshRemoteHandlerDependencies): v
           remoteWorkingDir: config.remoteWorkingDir,
           remoteEnv: config.remoteEnv,
           enabled: config.enabled ?? true,
+          useSshConfig: config.useSshConfig,
+          sshConfigHost: config.sshConfigHost,
         };
 
         // Validate the configuration
@@ -271,14 +273,14 @@ export function registerSshRemoteHandlers(deps: SshRemoteHandlerDependencies): v
     'ssh-remote:getSshConfigHosts',
     createIpcHandler(
       handlerOpts('getSshConfigHosts', false),
-      async (): Promise<SshConfigParseResult> => {
+      async () => {
         const result = parseSshConfig();
         if (result.success) {
           logger.debug(`Found ${result.hosts.length} hosts in SSH config`, LOG_CONTEXT);
         } else {
           logger.warn(`Failed to parse SSH config: ${result.error}`, LOG_CONTEXT);
         }
-        return result;
+        return result as SshConfigParseResult & Record<string, unknown>;
       }
     )
   );

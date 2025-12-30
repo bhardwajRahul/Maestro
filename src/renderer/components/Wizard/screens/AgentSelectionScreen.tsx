@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Check, X, Settings, ArrowLeft } from 'lucide-react';
 import type { Theme, AgentConfig } from '../../../types';
+import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../../shared/types';
 import { useWizard } from '../WizardContext';
 import { ScreenReaderAnnouncement } from '../ScreenReaderAnnouncement';
 import { AgentConfigPanel } from '../../shared/AgentConfigPanel';
@@ -318,6 +319,11 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   const [loadingModels, setLoadingModels] = useState(false);
   const [refreshingAgent, setRefreshingAgent] = useState(false);
 
+  // SSH Remote configuration state
+  const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
+  const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
+  const [globalDefaultSshRemoteId, setGlobalDefaultSshRemoteId] = useState<string | null>(null);
+
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -376,6 +382,24 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
     }
 
     detectAgents();
+
+    // Load SSH remote configurations
+    async function loadSshRemotes() {
+      try {
+        const configsResult = await window.maestro.sshRemote.getConfigs();
+        if (mounted && configsResult.success && configsResult.configs) {
+          setSshRemotes(configsResult.configs);
+        }
+        const defaultResult = await window.maestro.sshRemote.getDefaultId();
+        if (mounted && defaultResult.success) {
+          setGlobalDefaultSshRemoteId(defaultResult.id ?? null);
+        }
+      } catch (error) {
+        console.error('Failed to load SSH remotes:', error);
+      }
+    }
+    loadSshRemotes();
+
     return () => { mounted = false; };
   }, [setAvailableAgents, setSelectedAgent, state.selectedAgent]);
 
@@ -592,7 +616,18 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
   /**
    * Close the configuration panel and return to grid
    */
-  const handleCloseConfig = useCallback(() => {
+  const handleCloseConfig = useCallback(async () => {
+    // Save SSH remote config to agent config before closing
+    if (configuringAgentId) {
+      const currentConfig = { ...agentConfig };
+      if (sshRemoteConfig) {
+        currentConfig.sshRemote = sshRemoteConfig;
+      } else {
+        delete currentConfig.sshRemote;
+      }
+      await window.maestro.agents.setConfig(configuringAgentId, currentConfig);
+    }
+
     setIsTransitioning(true);
     setTimeout(() => {
       setViewMode('grid');
@@ -608,7 +643,7 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 
     setAnnouncement('Returned to agent selection');
     setAnnouncementKey((prev) => prev + 1);
-  }, [configuringAgentId]);
+  }, [configuringAgentId, agentConfig, sshRemoteConfig]);
 
   /**
    * Refresh agent detection after config changes
@@ -781,6 +816,10 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
               refreshingAgent={refreshingAgent}
               compact
               showBuiltInEnvVars
+              sshRemotes={sshRemotes}
+              sshRemoteConfig={sshRemoteConfig}
+              onSshRemoteConfigChange={setSshRemoteConfig}
+              globalDefaultSshRemoteId={globalDefaultSshRemoteId}
             />
           </div>
         </div>

@@ -50,8 +50,8 @@ const DEFAULT_OPTIONS: Required<LayoutOptions> = {
   nodeWidth: 280,
   nodeHeight: 120,
   rankDirection: 'TB',
-  nodeSeparation: 80,  // Increased from 50 for better spacing
-  rankSeparation: 150, // Increased from 100 for better vertical spacing
+  nodeSeparation: 100,
+  rankSeparation: 180,
   centerX: 0,
   centerY: 0,
 };
@@ -75,10 +75,13 @@ interface ForceLinkDatum extends SimulationLinkDatum<ForceNodeDatum> {
 }
 
 /**
- * Apply force-directed layout using d3-force.
+ * Apply force-directed layout using d3-force with a two-phase approach.
  *
- * Creates an organic layout where nodes repel each other and edges act as springs.
- * This works well for visualizing document relationships without strict hierarchy.
+ * Phase 1: Layout document nodes using force simulation
+ * Phase 2: Position external nodes around the periphery in a ring
+ *
+ * This approach prevents the chaos that occurs when external hub nodes
+ * are included in the force simulation (they get pulled in all directions).
  *
  * @param nodes - React Flow nodes to position
  * @param edges - React Flow edges defining relationships
@@ -94,85 +97,103 @@ export function applyForceLayout(
 
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
-  // Create simulation nodes
-  const simNodes: ForceNodeDatum[] = nodes.map((node) => ({
+  // Separate document nodes from external nodes
+  const documentNodes = nodes.filter((n) => n.type !== 'externalLinkNode');
+  const externalNodes = nodes.filter((n) => n.type === 'externalLinkNode');
+
+  // If no document nodes, just arrange external nodes in a grid
+  if (documentNodes.length === 0) {
+    return arrangeNodesInGrid(externalNodes, opts);
+  }
+
+  // PHASE 1: Layout document nodes only (internal links)
+  const internalEdges = edges.filter((e) => e.type !== 'external');
+
+  const simNodes: ForceNodeDatum[] = documentNodes.map((node) => ({
     id: node.id,
-    x: node.position.x || Math.random() * 500,
-    y: node.position.y || Math.random() * 500,
-    width: node.type === 'externalLinkNode' ? 160 : opts.nodeWidth,
-    height: node.type === 'externalLinkNode' ? 60 : opts.nodeHeight,
-    isExternal: node.type === 'externalLinkNode',
+    x: node.position.x || Math.random() * 400 - 200,
+    y: node.position.y || Math.random() * 400 - 200,
+    width: opts.nodeWidth,
+    height: opts.nodeHeight,
+    isExternal: false,
   }));
 
-  // Create node lookup map
   const nodeMap = new Map(simNodes.map((n) => [n.id, n]));
 
-  // Create simulation links (only for edges where both nodes exist)
-  const simLinks: ForceLinkDatum[] = edges
+  const simLinks: ForceLinkDatum[] = internalEdges
     .filter((edge) => nodeMap.has(edge.source) && nodeMap.has(edge.target))
     .map((edge) => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      isExternal: edge.type === 'external',
+      isExternal: false,
     }));
 
-  // Calculate link distance based on node sizes - ensure adequate spacing
-  const baseLinkDistance = opts.nodeSeparation + Math.max(opts.nodeWidth, opts.nodeHeight);
+  const baseLinkDistance = opts.nodeSeparation + opts.nodeWidth * 0.8;
 
-  // Create and run the force simulation
   const simulation = forceSimulation<ForceNodeDatum>(simNodes)
     .force(
       'link',
       forceLink<ForceNodeDatum, ForceLinkDatum>(simLinks)
         .id((d) => d.id)
-        .distance((link) => {
-          // External links need more distance to avoid clustering
-          return link.isExternal ? baseLinkDistance * 2 : baseLinkDistance * 1.2;
-        })
-        .strength((link) => {
-          // Stronger links to keep connected nodes closer but not overlapping
-          return link.isExternal ? 0.4 : 0.6;
-        })
+        .distance(baseLinkDistance)
+        .strength(0.5)
     )
     .force(
       'charge',
       forceManyBody<ForceNodeDatum>()
-        .strength((d) => {
-          // Strong repulsion to prevent overlap - external nodes need even more
-          return d.isExternal ? -800 : -600;
-        })
-        .distanceMax(1000)
+        .strength(-500)
+        .distanceMax(800)
     )
     .force(
       'collide',
       forceCollide<ForceNodeDatum>()
-        .radius((d) => {
-          // Generous collision radius to absolutely prevent overlap
-          const baseRadius = Math.max(d.width, d.height) / 2;
-          return d.isExternal ? baseRadius + 60 : baseRadius + 40;
-        })
+        .radius((d) => Math.max(d.width, d.height) / 2 + opts.nodeSeparation / 2)
         .strength(1.0)
-        .iterations(5)  // More iterations for better collision resolution
+        .iterations(3)
     )
     .force('center', forceCenter(opts.centerX, opts.centerY))
-    .force(
-      'x',
-      forceX<ForceNodeDatum>(opts.centerX).strength(0.03)  // Weaker centering to allow spread
-    )
-    .force(
-      'y',
-      forceY<ForceNodeDatum>(opts.centerY).strength(0.03)
-    )
+    .force('x', forceX<ForceNodeDatum>(opts.centerX).strength(0.05))
+    .force('y', forceY<ForceNodeDatum>(opts.centerY).strength(0.05))
     .stop();
 
-  // Run simulation synchronously for more iterations to ensure convergence
-  const iterations = 500;
-  simulation.tick(iterations);
+  simulation.tick(400);
 
-  // Build result nodes with updated positions
+  // Build position map for document nodes
   const positionMap = new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
 
+  // Calculate bounding box of document nodes
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of simNodes) {
+    const x = n.x ?? 0;
+    const y = n.y ?? 0;
+    minX = Math.min(minX, x - n.width / 2);
+    maxX = Math.max(maxX, x + n.width / 2);
+    minY = Math.min(minY, y - n.height / 2);
+    maxY = Math.max(maxY, y + n.height / 2);
+  }
+
+  // PHASE 2: Position external nodes around the periphery
+  if (externalNodes.length > 0) {
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    // Place external nodes in a ring outside the document cluster
+    const ringRadius = Math.max(width, height) / 2 + 250; // 250px outside the cluster
+    const angleStep = (2 * Math.PI) / externalNodes.length;
+    const startAngle = -Math.PI / 2; // Start at top
+
+    externalNodes.forEach((node, i) => {
+      const angle = startAngle + i * angleStep;
+      const x = centerX + ringRadius * Math.cos(angle);
+      const y = centerY + ringRadius * Math.sin(angle);
+      positionMap.set(node.id, { x: x - 80, y: y - 30 }); // Offset for node center
+    });
+  }
+
+  // Return all nodes with their positions
   return nodes.map((node) => {
     const pos = positionMap.get(node.id);
     return {
@@ -183,10 +204,38 @@ export function applyForceLayout(
 }
 
 /**
- * Apply hierarchical layout using dagre.
+ * Arrange nodes in a simple grid layout
+ */
+function arrangeNodesInGrid(
+  nodes: Node<GraphNodeData>[],
+  opts: Required<LayoutOptions>
+): Node<GraphNodeData>[] {
+  const cols = Math.ceil(Math.sqrt(nodes.length));
+  const nodeWidth = 180;
+  const nodeHeight = 80;
+  const gap = opts.nodeSeparation;
+
+  return nodes.map((node, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    return {
+      ...node,
+      position: {
+        x: col * (nodeWidth + gap) - (cols * (nodeWidth + gap)) / 2,
+        y: row * (nodeHeight + gap) - (Math.ceil(nodes.length / cols) * (nodeHeight + gap)) / 2,
+      },
+    };
+  });
+}
+
+/**
+ * Apply hierarchical layout using dagre with a two-phase approach.
  *
- * Creates a tree-like layout with clear levels/ranks. Documents that link to
- * each other are arranged in a directed acyclic graph structure.
+ * Phase 1: Layout document nodes in a hierarchical tree structure
+ * Phase 2: Position external nodes in a row below the document tree
+ *
+ * This keeps the document hierarchy clean and puts external links
+ * in a predictable location.
  *
  * @param nodes - React Flow nodes to position
  * @param edges - React Flow edges defining relationships
@@ -202,67 +251,95 @@ export function applyHierarchicalLayout(
 
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
-  // Create a new dagre graph
+  // Separate document nodes from external nodes
+  const documentNodes = nodes.filter((n) => n.type !== 'externalLinkNode');
+  const externalNodes = nodes.filter((n) => n.type === 'externalLinkNode');
+
+  // If no document nodes, just arrange external nodes in a grid
+  if (documentNodes.length === 0) {
+    return arrangeNodesInGrid(externalNodes, opts);
+  }
+
+  // PHASE 1: Layout document nodes only using dagre
+  const internalEdges = edges.filter((e) => e.type !== 'external');
+
   const g = new dagre.graphlib.Graph();
 
-  // Configure the graph with generous spacing
   g.setGraph({
     rankdir: opts.rankDirection,
-    nodesep: opts.nodeSeparation * 1.5,  // More horizontal spacing
-    ranksep: opts.rankSeparation * 1.2,  // More vertical spacing
-    marginx: 80,
-    marginy: 80,
-    ranker: 'network-simplex',  // Better ranking algorithm
+    nodesep: opts.nodeSeparation,
+    ranksep: opts.rankSeparation,
+    marginx: 50,
+    marginy: 50,
+    ranker: 'network-simplex',
   });
 
-  // Default edge label
   g.setDefaultEdgeLabel(() => ({}));
 
-  // Add nodes to the graph with generous sizing
-  for (const node of nodes) {
-    const width = node.type === 'externalLinkNode' ? 180 : opts.nodeWidth;
-    const height = node.type === 'externalLinkNode' ? 80 : opts.nodeHeight;
-
+  // Add document nodes
+  for (const node of documentNodes) {
     g.setNode(node.id, {
-      // Add substantial padding to prevent overlap
-      width: node.type === 'externalLinkNode' ? width + 60 : width + 40,
-      height: node.type === 'externalLinkNode' ? height + 40 : height + 20,
+      width: opts.nodeWidth + 20,
+      height: opts.nodeHeight + 10,
       label: node.id,
     });
   }
 
-  // Add edges to the graph
-  for (const edge of edges) {
-    // Only add edge if both nodes exist
+  // Add internal edges
+  for (const edge of internalEdges) {
     if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-      g.setEdge(edge.source, edge.target, {
-        minlen: edge.type === 'external' ? 3 : 2,  // Increased minimum length
-        weight: edge.type === 'external' ? 0.5 : 1,  // External edges have less weight
-      });
+      g.setEdge(edge.source, edge.target);
     }
   }
 
-  // Run the layout algorithm
   dagre.layout(g);
 
-  // Extract positions from dagre and update nodes
-  return nodes.map((node) => {
+  // Build position map for document nodes
+  const positionMap = new Map<string, { x: number; y: number }>();
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+  for (const node of documentNodes) {
     const dagreNode = g.node(node.id);
-    if (!dagreNode) {
-      return node;
+    if (dagreNode) {
+      const x = dagreNode.x - opts.nodeWidth / 2;
+      const y = dagreNode.y - opts.nodeHeight / 2;
+      positionMap.set(node.id, { x, y });
+
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x + opts.nodeWidth);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y + opts.nodeHeight);
     }
+  }
 
-    // Dagre returns center positions, convert to top-left for React Flow
-    // Use the actual display size (not the padded size used for layout)
-    const displayWidth = node.type === 'externalLinkNode' ? 160 : opts.nodeWidth;
-    const displayHeight = node.type === 'externalLinkNode' ? 60 : opts.nodeHeight;
+  // PHASE 2: Position external nodes in a row below the document tree
+  if (externalNodes.length > 0) {
+    const externalNodeWidth = 160;
+    const externalNodeHeight = 60;
+    const externalGap = 40;
 
+    // Calculate total width needed for external nodes
+    const totalExternalWidth = externalNodes.length * externalNodeWidth + (externalNodes.length - 1) * externalGap;
+
+    // Center the external nodes below the document tree
+    const centerX = (minX + maxX) / 2;
+    const startX = centerX - totalExternalWidth / 2;
+    const externalY = maxY + opts.rankSeparation; // Below the document tree
+
+    externalNodes.forEach((node, i) => {
+      positionMap.set(node.id, {
+        x: startX + i * (externalNodeWidth + externalGap),
+        y: externalY,
+      });
+    });
+  }
+
+  // Return all nodes with their positions
+  return nodes.map((node) => {
+    const pos = positionMap.get(node.id);
     return {
       ...node,
-      position: {
-        x: dagreNode.x - displayWidth / 2,
-        y: dagreNode.y - displayHeight / 2,
-      },
+      position: pos ?? node.position,
     };
   });
 }

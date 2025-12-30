@@ -149,6 +149,8 @@ export function SshRemoteModal({
   const [sshConfigHosts, setSshConfigHosts] = useState<SshConfigHost[]>([]);
   const [sshConfigLoading, setSshConfigLoading] = useState(false);
   const [showSshConfigDropdown, setShowSshConfigDropdown] = useState(false);
+  const [sshConfigFilter, setSshConfigFilter] = useState('');
+  const [sshConfigHighlightIndex, setSshConfigHighlightIndex] = useState(0);
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -164,6 +166,7 @@ export function SshRemoteModal({
   // Refs
   const nameInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
   // Load SSH config hosts when modal opens
   useEffect(() => {
@@ -194,6 +197,56 @@ export function SshRemoteModal({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Reset filter and highlight when dropdown opens, focus filter input
+  useEffect(() => {
+    if (showSshConfigDropdown) {
+      setSshConfigFilter('');
+      setSshConfigHighlightIndex(0);
+      // Focus filter input after dropdown renders
+      setTimeout(() => filterInputRef.current?.focus(), 0);
+    }
+  }, [showSshConfigDropdown]);
+
+  // Filter SSH config hosts based on search input
+  const filteredSshConfigHosts = sshConfigHosts.filter((host) => {
+    if (!sshConfigFilter) return true;
+    const filterLower = sshConfigFilter.toLowerCase();
+    const summary = getSshConfigHostSummary(host).toLowerCase();
+    return (
+      host.host.toLowerCase().includes(filterLower) ||
+      summary.includes(filterLower) ||
+      host.hostName?.toLowerCase().includes(filterLower) ||
+      host.user?.toLowerCase().includes(filterLower)
+    );
+  });
+
+  // Reset highlight index when filter changes
+  useEffect(() => {
+    setSshConfigHighlightIndex(0);
+  }, [sshConfigFilter]);
+
+  // Handle keyboard navigation in dropdown
+  const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowSshConfigDropdown(false);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSshConfigHighlightIndex((prev) =>
+        prev < filteredSshConfigHosts.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSshConfigHighlightIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredSshConfigHosts.length > 0 && filteredSshConfigHosts[sshConfigHighlightIndex]) {
+        handleSelectSshConfigHost(filteredSshConfigHosts[sshConfigHighlightIndex]);
+      }
+    }
+  };
 
   // Reset form when modal opens/closes or initialConfig changes
   useEffect(() => {
@@ -240,13 +293,9 @@ export function SshRemoteModal({
     if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
       return 'Port must be between 1 and 65535';
     }
-    // Username and key are optional when using SSH config
-    if (!useSshConfig) {
-      if (!username.trim()) return 'Username is required';
-      if (!privateKeyPath.trim()) return 'Private key path is required';
-    }
+    // Username and key are always optional - SSH will use defaults from config or ssh-agent
     return null;
-  }, [name, host, port, username, privateKeyPath, useSshConfig]);
+  }, [name, host, port]);
 
   const isValid = validateForm() === null;
 
@@ -270,14 +319,20 @@ export function SshRemoteModal({
   }, [initialConfig, name, host, port, username, privateKeyPath, remoteWorkingDir, envVars, enabled, useSshConfig, sshConfigHost]);
 
   // Handle selecting an SSH config host
+  // This imports values as a template - user can edit freely and choose whether to use SSH config mode
   const handleSelectSshConfigHost = (configHost: SshConfigHost) => {
-    setUseSshConfig(true);
-    setSshConfigHost(configHost.host);
+    // Pre-fill the host pattern (this is what SSH will connect to)
     setHost(configHost.host);
-    setName(configHost.host); // Use host pattern as default name
+    // Use host pattern as default display name
+    if (!name.trim()) setName(configHost.host);
+    // Pre-fill other values from SSH config as defaults
     if (configHost.port) setPort(String(configHost.port));
     if (configHost.user) setUsername(configHost.user);
     if (configHost.identityFile) setPrivateKeyPath(configHost.identityFile);
+    // Enable SSH config mode since we're importing from it
+    // User can disable this if they want to override everything manually
+    setUseSshConfig(true);
+    setSshConfigHost(configHost.host);
     setShowSshConfigDropdown(false);
   };
 
@@ -497,26 +552,62 @@ export function SshRemoteModal({
               </button>
               {showSshConfigDropdown && (
                 <div
-                  className="absolute top-full left-0 right-0 mt-1 rounded border shadow-lg z-10 max-h-48 overflow-y-auto"
+                  className="absolute top-full left-0 right-0 mt-1 rounded border shadow-lg z-10"
                   style={{
                     backgroundColor: theme.colors.bgMain,
                     borderColor: theme.colors.border,
                   }}
+                  onKeyDown={handleDropdownKeyDown}
                 >
-                  {sshConfigHosts.map((configHost) => (
-                    <button
-                      key={configHost.host}
-                      type="button"
-                      onClick={() => handleSelectSshConfigHost(configHost)}
-                      className="w-full px-3 py-2 text-left hover:bg-white/10 transition-colors"
-                      style={{ color: theme.colors.textMain }}
-                    >
-                      <div className="font-mono text-sm">{configHost.host}</div>
-                      <div className="text-xs" style={{ color: theme.colors.textDim }}>
-                        {getSshConfigHostSummary(configHost)}
+                  {/* Filter input */}
+                  <div className="p-2 border-b" style={{ borderColor: theme.colors.border }}>
+                    <input
+                      ref={filterInputRef}
+                      type="text"
+                      value={sshConfigFilter}
+                      onChange={(e) => setSshConfigFilter(e.target.value)}
+                      onKeyDown={handleDropdownKeyDown}
+                      placeholder="Type to filter..."
+                      className="w-full px-2 py-1 rounded text-sm bg-transparent outline-none"
+                      style={{
+                        color: theme.colors.textMain,
+                        backgroundColor: theme.colors.bgActivity,
+                      }}
+                    />
+                  </div>
+                  {/* Host list */}
+                  <div className="max-h-40 overflow-y-auto">
+                    {filteredSshConfigHosts.length === 0 ? (
+                      <div
+                        className="px-3 py-2 text-sm text-center"
+                        style={{ color: theme.colors.textDim }}
+                      >
+                        No hosts match filter
                       </div>
-                    </button>
-                  ))}
+                    ) : (
+                      filteredSshConfigHosts.map((configHost, index) => (
+                        <button
+                          key={configHost.host}
+                          type="button"
+                          onClick={() => handleSelectSshConfigHost(configHost)}
+                          className="w-full px-3 py-2 text-left transition-colors"
+                          style={{
+                            color: theme.colors.textMain,
+                            backgroundColor:
+                              index === sshConfigHighlightIndex
+                                ? theme.colors.accent + '30'
+                                : 'transparent',
+                          }}
+                          onMouseEnter={() => setSshConfigHighlightIndex(index)}
+                        >
+                          <div className="font-mono text-sm">{configHost.host}</div>
+                          <div className="text-xs" style={{ color: theme.colors.textDim }}>
+                            {getSshConfigHostSummary(configHost)}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -534,7 +625,7 @@ export function SshRemoteModal({
           >
             <FileCode className="w-4 h-4" />
             <span>
-              Using settings from SSH config: <code className="font-mono">{sshConfigHost}</code>
+              Imported from: <code className="font-mono">{sshConfigHost}</code>
             </span>
             <button
               type="button"
@@ -543,8 +634,9 @@ export function SshRemoteModal({
                 setSshConfigHost(undefined);
               }}
               className="ml-auto text-xs opacity-70 hover:opacity-100"
+              title="Stop tracking SSH config origin"
             >
-              Clear
+              ×
             </button>
           </div>
         )}
@@ -565,12 +657,12 @@ export function SshRemoteModal({
           <div className="flex-1">
             <FormInput
               theme={theme}
-              label={useSshConfig ? 'SSH Config Host' : 'Host'}
+              label="Host"
               value={host}
               onChange={setHost}
-              placeholder={useSshConfig ? 'dev-server' : '192.168.1.100 or server.example.com'}
+              placeholder="hostname, IP, or SSH config alias"
               monospace
-              helperText={useSshConfig ? 'The Host pattern from ~/.ssh/config' : undefined}
+              helperText="Hostname, IP address, or Host pattern from ~/.ssh/config"
             />
           </div>
           <div className="w-24">
@@ -581,7 +673,6 @@ export function SshRemoteModal({
               onChange={setPort}
               placeholder="22"
               monospace
-              helperText={useSshConfig ? 'Override' : undefined}
             />
           </div>
         </div>
@@ -589,27 +680,23 @@ export function SshRemoteModal({
         {/* Username */}
         <FormInput
           theme={theme}
-          label={useSshConfig ? 'Username (optional override)' : 'Username'}
+          label="Username (optional)"
           value={username}
           onChange={setUsername}
-          placeholder={useSshConfig ? 'Leave empty to use SSH config' : 'username'}
+          placeholder="username"
           monospace
-          helperText={useSshConfig ? 'Override the User from SSH config, or leave empty' : undefined}
+          helperText="Leave empty to use SSH config or system defaults"
         />
 
         {/* Private Key Path */}
         <FormInput
           theme={theme}
-          label={useSshConfig ? 'Private Key Path (optional override)' : 'Private Key Path'}
+          label="Private Key Path (optional)"
           value={privateKeyPath}
           onChange={setPrivateKeyPath}
-          placeholder={useSshConfig ? 'Leave empty to use SSH config' : '~/.ssh/id_ed25519'}
+          placeholder="~/.ssh/id_ed25519"
           monospace
-          helperText={
-            useSshConfig
-              ? 'Override the IdentityFile from SSH config, or leave empty'
-              : 'Path to your SSH private key file (password-protected keys require ssh-agent)'
-          }
+          helperText="Leave empty to use SSH config or ssh-agent"
         />
 
         {/* Remote Working Directory (optional) */}

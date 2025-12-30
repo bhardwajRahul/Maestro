@@ -454,7 +454,19 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
           backgroundColor: theme.colors.bgSidebar
         }}
       >
-        <span className="opacity-50 truncate min-w-0 flex-1" title={session.cwd}>{session.cwd}</span>
+        <span
+          className="opacity-50 min-w-0 flex-1 overflow-hidden whitespace-nowrap cursor-pointer"
+          style={{
+            direction: 'rtl',
+            textOverflow: 'ellipsis',
+            textAlign: 'left',
+          }}
+          title={session.cwd}
+          onDoubleClick={() => {
+            navigator.clipboard.writeText(session.cwd);
+            onShowFlash?.('Path copied to clipboard');
+          }}
+        ><bdi>{session.cwd}</bdi></span>
         <div className="flex items-center gap-1 flex-shrink-0">
           {onOpenGraphView && (
             <button
