@@ -61,6 +61,7 @@
               "openspec-commands",
               "history",
               "context-management",
+              "document-graph",
               "autorun-playbooks",
               "playbook-exchange",
               "git-worktrees",

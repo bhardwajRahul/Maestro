@@ -15,15 +15,19 @@ SSH Remote Execution wraps agent commands in SSH, executing them on a configured
 - Access tools or SDKs installed only on specific servers
 - Work with codebases that require particular OS or architecture
 - Execute agents in secure/isolated environments
+- Coordinate multiple agents across different machines in [Group Chat](./group-chat)
+- Run Auto Run playbooks on remote projects
 
 ## Configuring SSH Remotes
 
 ### Adding a Remote Host
 
 1. Open **Settings** (`Cmd+,` / `Ctrl+,`)
-2. Scroll to the **SSH Remote Hosts** section under Remote Execution
+2. Navigate to the **SSH Hosts** tab
 3. Click **Add SSH Remote**
 4. Configure the connection:
+
+![SSH Remote Hosts Settings](./screenshots/ssh-agents-servers.png)
 
 | Field | Description |
 |-------|-------------|
@@ -118,8 +122,10 @@ Each agent can have its own SSH remote setting, overriding the global default.
 ### Configuring an Agent
 
 1. Open the agent's configuration panel (gear icon in session header, or via Settings → Agents)
-2. Find the **SSH Remote** dropdown
+2. Find the **SSH Remote Execution** dropdown
 3. Select an option:
+
+![SSH Agent Mapping](./screenshots/ssh-agents-mapping.png)
 
 | Option | Behavior |
 |--------|----------|
@@ -139,10 +145,63 @@ When spawning an agent, Maestro resolves which SSH remote to use:
 
 ## Status Visibility
 
-When a session is running via SSH remote:
-- The session displays the remote host name in the status area
+When a session is running via SSH remote, you can easily identify it:
+
+![SSH Agent Status](./screenshots/ssh-agents-status.png)
+
+- **REMOTE pill** — Appears in the Left Bar next to the agent, indicating it's configured for remote execution
+- **Host name badge** — Displayed in the Main Panel header showing which SSH host the agent is running on (e.g., "PEDTOME")
+- **Agent type indicator** — Shows "claude-code (SSH)" to clarify the execution mode
 - Connection state reflects SSH connectivity
 - Errors are detected and displayed with SSH-specific context
+
+## Full Remote Capabilities
+
+Remote agents support all the features you'd expect from local agents:
+
+### Remote File System Access
+
+The File Explorer works seamlessly with remote agents:
+- Browse files and directories on the remote host
+- Open and edit files directly
+- Use `@` file mentions to reference remote files in prompts
+
+### Remote Auto Run
+
+Run Auto Run playbooks on remote projects:
+- Auto Run documents can reference files on the remote host
+- Task execution happens on the remote machine
+- Progress and results stream back to Maestro in real-time
+
+### Remote Git Worktrees
+
+Create and manage git worktrees on remote repositories:
+- Worktree sub-agents run on the same remote host
+- Branch isolation works just like local worktrees
+- PR creation connects to the remote repository
+
+### Remote Command Terminal
+
+The Command Terminal executes commands on the remote host:
+- Full PTY support for interactive commands
+- Tab completion works with remote file paths
+- Command history is preserved per-session
+
+### Group Chat with Remote Agents
+
+Remote agents can participate in Group Chat alongside local agents. This enables powerful cross-machine collaboration:
+
+![Group Chat with SSH Agents](./screenshots/group-chat-over-ssh.png)
+
+- Mix local and remote agents in the same conversation
+- The moderator can be local or remote
+- Each agent works in their own environment (local or remote)
+- Synthesize information across different machines and codebases
+
+This is especially useful for:
+- Comparing implementations across different environments
+- Coordinating changes that span multiple servers
+- Getting perspectives from agents with access to different resources
 
 ## Troubleshooting
 

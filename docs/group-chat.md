@@ -14,6 +14,7 @@ Group Chat lets you coordinate multiple AI agents in a single conversation. A mo
 - **Architecture discussions**: Get perspectives from agents with different codebase contexts
 - **Comparative analysis**: "Compare the testing approach in these three repositories"
 - **Knowledge synthesis**: Combine expertise from specialized agents
+- **Cross-machine collaboration**: Coordinate agents running on different machines via [SSH Remote Execution](./ssh-remote-execution)
 
 ## How It Works
 
@@ -57,9 +58,30 @@ Moderator: "Here's how they relate:
             Next steps: Would you like details on any specific integration?"
 ```
 
+## Remote Agents in Group Chat
+
+Group Chat works seamlessly with [SSH Remote Execution](./ssh-remote-execution). You can mix local and remote agents in the same conversation:
+
+![Group Chat with Remote Agents](./screenshots/group-chat-over-ssh.png)
+
+**Supported configurations:**
+- Local moderator with remote participants
+- Remote moderator with local participants
+- Any mix of local and remote agents
+- Agents spread across multiple SSH hosts
+
+Remote agents are identified by the **REMOTE** pill in the participant list. Each agent works in their own environment — the moderator coordinates across machines transparently.
+
+**Use cases for remote Group Chat:**
+- Compare implementations across development and production environments
+- Get perspectives from agents with access to different servers
+- Coordinate changes that span multiple machines
+- Synthesize information from agents with different tool installations
+
 ## Tips for Effective Group Chats
 
 - **Name agents descriptively** - Agent names appear in the chat, so "Frontend-React" is clearer than "Agent1"
 - **Be specific in questions** - The more context you provide, the better the moderator can route
 - **@mention explicitly** - You can direct questions to specific agents: "What does @Backend think?"
 - **Let the moderator work** - It may take multiple rounds for complex questions
+- **Mix local and remote** - Combine agents across machines for maximum coverage

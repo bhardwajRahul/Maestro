@@ -124,15 +124,16 @@ In AI mode, use `@` to reference files in your prompts:
 
 ## Navigation & Search
 
-| Action | Key |
-|--------|-----|
-| Navigate Agents | `Up/Down Arrow` while in sidebar |
-| Select Agent | `Enter` while in sidebar |
-| Open Session Filter | `Cmd+F` while in sidebar |
-| Navigate Files | `Up/Down Arrow` while in file tree |
-| Open File Tree Filter | `Cmd+F` while in file tree |
-| Open File Preview | `Enter` on selected file |
-| Close Preview/Filter/Modal | `Esc` |
+| Action | macOS | Windows/Linux |
+|--------|-------|---------------|
+| Go to File (fuzzy finder) | `Cmd+G` | `Ctrl+G` |
+| Navigate Agents | `Up/Down Arrow` while in sidebar | `Up/Down Arrow` while in sidebar |
+| Select Agent | `Enter` while in sidebar | `Enter` while in sidebar |
+| Open Session Filter | `Cmd+F` while in sidebar | `Ctrl+F` while in sidebar |
+| Navigate Files | `Up/Down Arrow` while in file tree | `Up/Down Arrow` while in file tree |
+| Open File Tree Filter | `Cmd+F` while in file tree | `Ctrl+F` while in file tree |
+| Open File Preview | `Enter` on selected file | `Enter` on selected file |
+| Close Preview/Filter/Modal | `Esc` | `Esc` |
 
 ## File Preview
 
@@ -140,8 +141,19 @@ In AI mode, use `@` to reference files in your prompts:
 |--------|-------|---------------|
 | Copy File Path | `Cmd+P` | `Ctrl+P` |
 | Open Search | `Cmd+F` | `Ctrl+F` |
+| Open Document Graph | `Cmd+Shift+G` | `Ctrl+Shift+G` |
 | Scroll | `Up/Down Arrow` | `Up/Down Arrow` |
 | Close | `Esc` | `Esc` |
+
+## Document Graph
+
+| Action | Key |
+|--------|-----|
+| Navigate to connected nodes | `Arrow Keys` |
+| Focus/select a node | `Enter` |
+| Open the selected document | `O` |
+| Cycle through connected nodes | `Tab` |
+| Close the graph | `Esc` |
 
 ## Customizing Shortcuts
 

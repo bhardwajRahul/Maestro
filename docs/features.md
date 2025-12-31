@@ -23,6 +23,7 @@ icon: sparkles
 - 📋 **Session Discovery** - Automatically discovers and imports existing sessions from all supported providers, including conversations from before Maestro was installed. Browse, search, star, rename, and resume any session.
 - 🔀 **Git Integration** - Automatic repo detection, branch display, diff viewer, commit logs, and git-aware file completion. Work with git without leaving the app.
 - 📁 **[File Explorer](./general-usage)** - Browse project files with syntax highlighting, markdown preview, and image viewing. Reference files in prompts with `@` mentions.
+- 🕸️ **[Document Graph](./document-graph)** - Visualize markdown file relationships and wiki-link connections in an interactive graph. Navigate with keyboard shortcuts, adjust depth, and see how your documentation connects.
 - 🔍 **[Powerful Output Filtering](./general-usage)** - Search and filter AI output with include/exclude modes, regex support, and per-response local filters.
 - ⚡ **[Slash Commands](./slash-commands)** - Extensible command system with autocomplete. Create custom commands with template variables for your workflows. Includes bundled [Spec-Kit](./speckit-commands) for feature specifications and [OpenSpec](./openspec-commands) for change proposals.
 - 💾 **Draft Auto-Save** - Never lose work. Drafts are automatically saved and restored per session.

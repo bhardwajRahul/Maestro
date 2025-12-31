@@ -9,14 +9,18 @@ import { gitService } from '../../services/git';
 /**
  * Extract SSH context from session for remote file operations.
  * Returns undefined if no SSH remote is configured.
+ *
+ * Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+ * we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
  */
 function getSshContext(session: Session): SshContext | undefined {
-  if (!session.sshRemoteId) {
+  const sshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
+  if (!sshRemoteId) {
     return undefined;
   }
   return {
-    sshRemoteId: session.sshRemoteId,
-    remoteCwd: session.remoteCwd,
+    sshRemoteId,
+    remoteCwd: session.remoteCwd || session.sessionSshRemoteConfig?.workingDirOverride,
   };
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Folder, RefreshCw, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Folder, RefreshCw, ChevronRight, AlertTriangle, Copy, Check, X } from 'lucide-react';
 import type { AgentConfig, Session, ToolType } from '../types';
 import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../shared/types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
@@ -856,11 +856,24 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
   const [customEnvVars, setCustomEnvVars] = useState<Record<string, string>>({});
   const [_customModel, setCustomModel] = useState('');
   const [refreshingAgent, setRefreshingAgent] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   // SSH Remote configuration
   const [sshRemotes, setSshRemotes] = useState<SshRemoteConfig[]>([]);
   const [sshRemoteConfig, setSshRemoteConfig] = useState<AgentSshRemoteConfig | undefined>(undefined);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Copy session ID to clipboard
+  const handleCopySessionId = useCallback(async () => {
+    if (!session) return;
+    try {
+      await navigator.clipboard.writeText(session.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy session ID:', err);
+    }
+  }, [session]);
 
   // Load agent info, config, custom settings, and models when modal opens
   useEffect(() => {
@@ -1041,6 +1054,44 @@ export function EditAgentModal({ isOpen, onClose, onSave, theme, session, existi
         onClose={onClose}
         width={500}
         initialFocusRef={nameInputRef}
+        customHeader={
+          <div
+            className="p-4 border-b flex items-center justify-between shrink-0"
+            style={{ borderColor: theme.colors.border }}
+          >
+            <h2
+              className="text-sm font-bold"
+              style={{ color: theme.colors.textMain }}
+            >
+              Edit Agent: {session.name}
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopySessionId}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase transition-colors hover:opacity-80"
+                style={{
+                  backgroundColor: copiedId ? theme.colors.success + '20' : theme.colors.accent + '20',
+                  color: copiedId ? theme.colors.success : theme.colors.accent,
+                  border: `1px solid ${copiedId ? theme.colors.success : theme.colors.accent}40`
+                }}
+                title={copiedId ? 'Copied!' : `Click to copy: ${session.id}`}
+              >
+                {copiedId ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                <span>{session.id.slice(0, 8)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1 rounded hover:bg-white/10 transition-colors"
+                style={{ color: theme.colors.textDim }}
+                aria-label="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        }
         footer={
           <ModalFooter
             theme={theme}

@@ -61,8 +61,11 @@ export function WorktreeConfigModal({
   // gh CLI status
   const [ghCliStatus, setGhCliStatus] = useState<GhCliStatus | null>(null);
 
-  // SSH remote awareness
-  const isRemoteSession = !!session.sshRemoteId;
+  // SSH remote awareness - check both runtime sshRemoteId and configured sessionSshRemoteConfig
+  // Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+  // we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
+  const sshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
+  const isRemoteSession = !!sshRemoteId;
 
   // Register with layer stack for Escape handling
   useEffect(() => {
@@ -118,7 +121,7 @@ export function WorktreeConfigModal({
     setIsValidating(true);
     setError(null);
     try {
-      const exists = await validateDirectory(basePath.trim(), session.sshRemoteId);
+      const exists = await validateDirectory(basePath.trim(), sshRemoteId);
       if (!exists) {
         setError(isRemoteSession
           ? 'Directory not found on remote server. Please enter a valid path.'

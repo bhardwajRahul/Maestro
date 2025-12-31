@@ -1204,11 +1204,12 @@ describe('FileExplorerPanel', () => {
       expect(screen.getByText('src')).toBeInTheDocument();
     });
 
-    it('handles very long cwd path', () => {
+    it('handles very long projectRoot path', () => {
       const longPath = '/Users/test/very/long/path/to/project/that/is/really/deep';
-      const session = createMockSession({ cwd: longPath });
+      const session = createMockSession({ projectRoot: longPath });
       render(<FileExplorerPanel {...defaultProps} session={session} />);
 
+      // FileExplorerPanel header uses projectRoot for the title attribute
       expect(screen.getByTitle(longPath)).toBeInTheDocument();
     });
 
@@ -1359,30 +1360,30 @@ describe('FileExplorerPanel', () => {
       expect(screen.getByText('Reveal in Finder')).toBeInTheDocument();
     });
 
-    it('shows Focus in Graph option only for markdown files', () => {
+    it('shows Document Graph option only for markdown files', () => {
       const onFocusFileInGraph = vi.fn();
       const { container } = render(
         <FileExplorerPanel {...defaultProps} onFocusFileInGraph={onFocusFileInGraph} />
       );
 
-      // Right-click on markdown file - should show Focus in Graph
+      // Right-click on markdown file - should show Document Graph
       const mdFile = Array.from(container.querySelectorAll('[data-file-index]'))
         .find(el => el.textContent?.includes('README.md'));
       fireEvent.contextMenu(mdFile!, { clientX: 100, clientY: 200 });
-      expect(screen.getByText('Focus in Graph')).toBeInTheDocument();
+      expect(screen.getByText('Document Graph')).toBeInTheDocument();
     });
 
-    it('does not show Focus in Graph option for non-markdown files', () => {
+    it('does not show Document Graph option for non-markdown files', () => {
       const onFocusFileInGraph = vi.fn();
       const { container } = render(
         <FileExplorerPanel {...defaultProps} onFocusFileInGraph={onFocusFileInGraph} />
       );
 
-      // Right-click on non-markdown file - should not show Focus in Graph
+      // Right-click on non-markdown file - should not show Document Graph
       const jsonFile = Array.from(container.querySelectorAll('[data-file-index]'))
         .find(el => el.textContent?.includes('package.json'));
       fireEvent.contextMenu(jsonFile!, { clientX: 100, clientY: 200 });
-      expect(screen.queryByText('Focus in Graph')).not.toBeInTheDocument();
+      expect(screen.queryByText('Document Graph')).not.toBeInTheDocument();
     });
 
     it('calls onFocusFileInGraph with relative path when clicked', () => {
@@ -1395,7 +1396,7 @@ describe('FileExplorerPanel', () => {
         .find(el => el.textContent?.includes('README.md'));
       fireEvent.contextMenu(mdFile!, { clientX: 100, clientY: 200 });
 
-      const focusButton = screen.getByText('Focus in Graph');
+      const focusButton = screen.getByText('Document Graph');
       fireEvent.click(focusButton);
 
       expect(onFocusFileInGraph).toHaveBeenCalledWith('README.md');

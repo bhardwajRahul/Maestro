@@ -168,7 +168,9 @@ export function useGitStatusPolling(
             const isActiveSession = session.id === currentActiveSessionId;
 
             // Get SSH remote ID from session for remote git operations
-            const sshRemoteId = session.sshRemoteId;
+            // Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+            // we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
+            const sshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
 
             // For non-active sessions, just get basic status (file count)
             if (!isActiveSession) {

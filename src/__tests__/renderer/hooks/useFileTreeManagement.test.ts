@@ -189,8 +189,9 @@ describe('useFileTreeManagement', () => {
       await result.current.refreshGitFileState(session.id);
     });
 
-    // loadFileTree is now called with (path, maxDepth, currentDepth, sshContext)
-    expect(loadFileTree).toHaveBeenCalledWith('/test/shell', 10, 0, undefined);
+    // loadFileTree always uses projectRoot (treeRoot), not shellCwd
+    // But git operations use shellCwd when inputMode is 'terminal'
+    expect(loadFileTree).toHaveBeenCalledWith('/test/project', 10, 0, undefined);
     expect(gitService.isRepo).toHaveBeenCalledWith('/test/shell');
     expect(gitService.getBranches).toHaveBeenCalledWith('/test/shell');
     expect(gitService.getTags).toHaveBeenCalledWith('/test/shell');

@@ -331,7 +331,8 @@ describe('useAutoRunHandlers', () => {
 
       expect(window.maestro.autorun.readDoc).toHaveBeenCalledWith(
         '/test/autorun',
-        'Phase 2.md'
+        'Phase 2.md',
+        undefined // sshRemoteId - not set in test session
       );
 
       const updateFn = mockDeps.setSessions.mock.calls[0][0];
@@ -443,7 +444,7 @@ describe('useAutoRunHandlers', () => {
       });
 
       expect(mockDeps.setAutoRunIsLoadingDocuments).toHaveBeenCalledWith(true);
-      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/test/autorun');
+      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/test/autorun', undefined);
       expect(mockDeps.setAutoRunDocumentList).toHaveBeenCalledWith(['Phase 1', 'Phase 2', 'Phase 3']);
       expect(mockDeps.setAutoRunDocumentTree).toHaveBeenCalled();
       expect(mockDeps.setAutoRunIsLoadingDocuments).toHaveBeenCalledWith(false);
@@ -625,7 +626,8 @@ describe('useAutoRunHandlers', () => {
       expect(window.maestro.autorun.writeDoc).toHaveBeenCalledWith(
         '/test/autorun',
         'New Document.md',
-        ''
+        '',
+        undefined // sshRemoteId - not set in test session
       );
     });
 
@@ -648,7 +650,7 @@ describe('useAutoRunHandlers', () => {
         await result.current.handleAutoRunCreateDocument('New Doc');
       });
 
-      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/test/autorun');
+      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/test/autorun', undefined);
       expect(mockDeps.setAutoRunDocumentList).toHaveBeenCalledWith(['Phase 1', 'New Doc']);
       expect(mockDeps.setAutoRunDocumentTree).toHaveBeenCalledWith([
         { name: 'Phase 1', type: 'file', path: 'Phase 1.md' }
@@ -806,7 +808,8 @@ describe('useAutoRunHandlers', () => {
       expect(count).toBe(3);
       expect(window.maestro.autorun.readDoc).toHaveBeenCalledWith(
         '/test/autorun',
-        'Tasks.md'
+        'Tasks.md',
+        undefined // sshRemoteId - not set in test session
       );
     });
 
@@ -991,7 +994,7 @@ describe('useAutoRunHandlers', () => {
         await result.current.handleAutoRunFolderSelected('/new/folder');
       });
 
-      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/new/folder');
+      expect(window.maestro.autorun.listDocs).toHaveBeenCalledWith('/new/folder', undefined);
       expect(mockDeps.setAutoRunDocumentList).toHaveBeenCalledWith(['Phase 1', 'Phase 2']);
       expect(mockDeps.setAutoRunDocumentTree).toHaveBeenCalled();
       expect(mockDeps.setAutoRunSetupModalOpen).toHaveBeenCalledWith(false);
@@ -1022,7 +1025,7 @@ describe('useAutoRunHandlers', () => {
         await result.current.handleAutoRunFolderSelected('/folder');
       });
 
-      expect(window.maestro.autorun.readDoc).toHaveBeenCalledWith('/folder', 'First Doc.md');
+      expect(window.maestro.autorun.readDoc).toHaveBeenCalledWith('/folder', 'First Doc.md', undefined);
 
       const updateFn = mockDeps.setSessions.mock.calls[0][0];
       const updatedSessions = updateFn([mockSession]);

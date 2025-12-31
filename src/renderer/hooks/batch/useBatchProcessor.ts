@@ -402,7 +402,10 @@ export function useBatchProcessor({
 
     // Set up worktree if enabled using extracted hook
     // Inject sshRemoteId from session into worktree config for remote worktree operations
-    const worktreeWithSsh = worktree ? { ...worktree, sshRemoteId: session.sshRemoteId } : undefined;
+    // Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
+    // we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
+    const sshRemoteId = session.sshRemoteId || session.sessionSshRemoteConfig?.remoteId || undefined;
+    const worktreeWithSsh = worktree ? { ...worktree, sshRemoteId } : undefined;
     const worktreeResult = await worktreeManager.setupWorktree(session.cwd, worktreeWithSsh);
     if (!worktreeResult.success) {
       window.maestro.logger.log('error', 'Worktree setup failed', 'BatchProcessor', { sessionId, error: worktreeResult.error });
