@@ -19,6 +19,7 @@ import { logger } from '../utils/logger';
 import { CLAUDE_SESSION_PARSE_LIMITS } from '../constants';
 import { calculateClaudeCost } from '../utils/pricing';
 import { encodeClaudeProjectPath } from '../utils/statsCache';
+import { readDirRemote, readFileRemote, statRemote } from '../utils/remote-fs';
 import type {
   AgentSessionStorage,
   AgentSessionInfo,
@@ -32,7 +33,7 @@ import type {
   SessionOriginInfo,
   SessionMessage,
 } from '../agent-session-storage';
-import type { ToolType } from '../../shared/types';
+import type { ToolType, SshRemoteConfig } from '../../shared/types';
 
 const LOG_CONTEXT = '[ClaudeSessionStorage]';
 
@@ -71,16 +72,15 @@ function extractTextFromContent(content: unknown): string {
 
 
 /**
- * Parse a session file and extract metadata
+ * Parse session content and extract metadata
  */
-async function parseSessionFile(
-  filePath: string,
+function parseSessionContent(
+  content: string,
   sessionId: string,
   projectPath: string,
   stats: { size: number; mtimeMs: number }
-): Promise<AgentSessionInfo | null> {
+): AgentSessionInfo | null {
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
     const lines = content.split('\n').filter((l) => l.trim());
 
     let firstAssistantMessage = '';
@@ -193,7 +193,48 @@ async function parseSessionFile(
       durationSeconds,
     };
   } catch (error) {
+    logger.error(`Error parsing session content for session: ${sessionId}`, LOG_CONTEXT, error);
+    return null;
+  }
+}
+
+/**
+ * Parse a session file and extract metadata (local filesystem)
+ */
+async function parseSessionFile(
+  filePath: string,
+  sessionId: string,
+  projectPath: string,
+  stats: { size: number; mtimeMs: number }
+): Promise<AgentSessionInfo | null> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return parseSessionContent(content, sessionId, projectPath, stats);
+  } catch (error) {
     logger.error(`Error reading session file: ${filePath}`, LOG_CONTEXT, error);
+    return null;
+  }
+}
+
+/**
+ * Parse a session file and extract metadata (remote via SSH)
+ */
+async function parseSessionFileRemote(
+  filePath: string,
+  sessionId: string,
+  projectPath: string,
+  stats: { size: number; mtimeMs: number },
+  sshConfig: SshRemoteConfig
+): Promise<AgentSessionInfo | null> {
+  try {
+    const result = await readFileRemote(filePath, sshConfig);
+    if (!result.success || !result.data) {
+      logger.error(`Failed to read remote session file: ${filePath} - ${result.error}`, LOG_CONTEXT);
+      return null;
+    }
+    return parseSessionContent(result.data, sessionId, projectPath, stats);
+  } catch (error) {
+    logger.error(`Error reading remote session file: ${filePath}`, LOG_CONTEXT, error);
     return null;
   }
 }
@@ -202,6 +243,7 @@ async function parseSessionFile(
  * Claude Code Session Storage Implementation
  *
  * Provides access to Claude Code's local session storage at ~/.claude/projects/
+ * Supports both local filesystem access and remote access via SSH.
  */
 export class ClaudeSessionStorage implements AgentSessionStorage {
   readonly agentId: ToolType = 'claude-code';
@@ -219,18 +261,35 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
   }
 
   /**
-   * Get the Claude projects directory path
+   * Get the Claude projects directory path (local)
    */
   private getProjectsDir(): string {
     return path.join(os.homedir(), '.claude', 'projects');
   }
 
   /**
-   * Get the encoded project directory path
+   * Get the Claude projects directory path (remote via SSH)
+   * On remote Linux hosts, ~ expands to the user's home directory
+   */
+  private getRemoteProjectsDir(): string {
+    return '~/.claude/projects';
+  }
+
+  /**
+   * Get the encoded project directory path (local)
    */
   private getEncodedProjectDir(projectPath: string): string {
     const encodedPath = encodeClaudeProjectPath(projectPath);
     return path.join(this.getProjectsDir(), encodedPath);
+  }
+
+  /**
+   * Get the encoded project directory path (remote)
+   * Uses POSIX-style paths for remote Linux hosts
+   */
+  private getRemoteEncodedProjectDir(projectPath: string): string {
+    const encodedPath = encodeClaudeProjectPath(projectPath);
+    return `${this.getRemoteProjectsDir()}/${encodedPath}`;
   }
 
   /**
@@ -260,7 +319,12 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     };
   }
 
-  async listSessions(projectPath: string): Promise<AgentSessionInfo[]> {
+  async listSessions(projectPath: string, sshConfig?: SshRemoteConfig): Promise<AgentSessionInfo[]> {
+    // Use SSH remote access if config provided
+    if (sshConfig) {
+      return this.listSessionsRemote(projectPath, sshConfig);
+    }
+
     const projectDir = this.getEncodedProjectDir(projectPath);
 
     // Check if the directory exists
@@ -314,10 +378,84 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     return sessionsWithOrigins;
   }
 
+  /**
+   * List sessions from remote host via SSH
+   */
+  private async listSessionsRemote(
+    projectPath: string,
+    sshConfig: SshRemoteConfig
+  ): Promise<AgentSessionInfo[]> {
+    const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+
+    // List directory via SSH
+    const dirResult = await readDirRemote(projectDir, sshConfig);
+    if (!dirResult.success || !dirResult.data) {
+      logger.info(
+        `No Claude sessions directory found on remote for project: ${projectPath}`,
+        LOG_CONTEXT
+      );
+      return [];
+    }
+
+    // Filter for .jsonl files
+    const sessionFiles = dirResult.data.filter(
+      (entry) => !entry.isDirectory && entry.name.endsWith('.jsonl')
+    );
+
+    // Get metadata for each session
+    const sessions = await Promise.all(
+      sessionFiles.map(async (entry) => {
+        const sessionId = entry.name.replace('.jsonl', '');
+        const filePath = `${projectDir}/${entry.name}`;
+
+        try {
+          // Get file stats via SSH
+          const statResult = await statRemote(filePath, sshConfig);
+          if (!statResult.success || !statResult.data) {
+            logger.error(`Failed to stat remote file: ${filePath}`, LOG_CONTEXT);
+            return null;
+          }
+
+          return await parseSessionFileRemote(filePath, sessionId, projectPath, {
+            size: statResult.data.size,
+            mtimeMs: statResult.data.mtime,
+          }, sshConfig);
+        } catch (error) {
+          logger.error(`Error processing remote session file: ${entry.name}`, LOG_CONTEXT, error);
+          return null;
+        }
+      })
+    );
+
+    // Filter out nulls, 0-byte sessions, and sort by modified date
+    const validSessions = sessions
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .filter((s) => s.sizeBytes > 0)
+      .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+
+    // Attach origin info (origins are stored locally, not on remote)
+    const projectOrigins = this.getProjectOrigins(projectPath);
+    const sessionsWithOrigins = validSessions.map((session) =>
+      this.attachOriginInfo(session, projectOrigins)
+    );
+
+    logger.info(
+      `Found ${validSessions.length} Claude sessions for project: ${projectPath} (remote via SSH)`,
+      LOG_CONTEXT
+    );
+    return sessionsWithOrigins;
+  }
+
   async listSessionsPaginated(
     projectPath: string,
-    options?: SessionListOptions
+    options?: SessionListOptions,
+    sshConfig?: SshRemoteConfig
   ): Promise<PaginatedSessionsResult> {
+    // Use SSH remote access if config provided
+    if (sshConfig) {
+      return this.listSessionsPaginatedRemote(projectPath, options, sshConfig);
+    }
+
     const { cursor, limit = 100 } = options || {};
     const projectDir = this.getEncodedProjectDir(projectPath);
 
@@ -402,15 +540,128 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     };
   }
 
+  /**
+   * List sessions with pagination from remote host via SSH
+   */
+  private async listSessionsPaginatedRemote(
+    projectPath: string,
+    options: SessionListOptions | undefined,
+    sshConfig: SshRemoteConfig
+  ): Promise<PaginatedSessionsResult> {
+    const { cursor, limit = 100 } = options || {};
+    const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+
+    // List directory via SSH
+    const dirResult = await readDirRemote(projectDir, sshConfig);
+    if (!dirResult.success || !dirResult.data) {
+      return { sessions: [], hasMore: false, totalCount: 0, nextCursor: null };
+    }
+
+    // Filter for .jsonl files
+    const sessionFiles = dirResult.data.filter(
+      (entry) => !entry.isDirectory && entry.name.endsWith('.jsonl')
+    );
+
+    // Get file stats for all session files
+    const fileStats = await Promise.all(
+      sessionFiles.map(async (entry) => {
+        const sessionId = entry.name.replace('.jsonl', '');
+        const filePath = `${projectDir}/${entry.name}`;
+        try {
+          const statResult = await statRemote(filePath, sshConfig);
+          if (!statResult.success || !statResult.data) {
+            return null;
+          }
+          return {
+            sessionId,
+            filename: entry.name,
+            filePath,
+            modifiedAt: statResult.data.mtime,
+            sizeBytes: statResult.data.size,
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const sortedFiles = fileStats
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .filter((s) => s.sizeBytes > 0)
+      .sort((a, b) => b.modifiedAt - a.modifiedAt);
+
+    const totalCount = sortedFiles.length;
+
+    // Find cursor position
+    let startIndex = 0;
+    if (cursor) {
+      const cursorIndex = sortedFiles.findIndex((f) => f.sessionId === cursor);
+      startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    }
+
+    const pageFiles = sortedFiles.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < totalCount;
+    const nextCursor = hasMore ? pageFiles[pageFiles.length - 1]?.sessionId : null;
+
+    // Get project origins (stored locally)
+    const projectOrigins = this.getProjectOrigins(projectPath);
+
+    // Read full content for sessions in this page
+    const sessions = await Promise.all(
+      pageFiles.map(async (fileInfo) => {
+        const session = await parseSessionFileRemote(
+          fileInfo.filePath,
+          fileInfo.sessionId,
+          projectPath,
+          { size: fileInfo.sizeBytes, mtimeMs: fileInfo.modifiedAt },
+          sshConfig
+        );
+        if (session) {
+          return this.attachOriginInfo(session, projectOrigins);
+        }
+        return null;
+      })
+    );
+
+    const validSessions = sessions.filter((s): s is NonNullable<typeof s> => s !== null);
+
+    logger.info(
+      `Paginated Claude sessions (remote) - returned ${validSessions.length} of ${totalCount} total (cursor: ${cursor || 'null'}, startIndex: ${startIndex}, hasMore: ${hasMore}, nextCursor: ${nextCursor || 'null'})`,
+      LOG_CONTEXT
+    );
+
+    return {
+      sessions: validSessions,
+      hasMore,
+      totalCount,
+      nextCursor,
+    };
+  }
+
   async readSessionMessages(
     projectPath: string,
     sessionId: string,
-    options?: SessionReadOptions
+    options?: SessionReadOptions,
+    sshConfig?: SshRemoteConfig
   ): Promise<SessionMessagesResult> {
-    const projectDir = this.getEncodedProjectDir(projectPath);
-    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+    // Get content either locally or via SSH
+    let content: string;
 
-    const content = await fs.readFile(sessionFile, 'utf-8');
+    if (sshConfig) {
+      const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+      const sessionFile = `${projectDir}/${sessionId}.jsonl`;
+      const result = await readFileRemote(sessionFile, sshConfig);
+      if (!result.success || !result.data) {
+        logger.error(`Failed to read remote session messages: ${sessionFile} - ${result.error}`, LOG_CONTEXT);
+        return { messages: [], total: 0, hasMore: false };
+      }
+      content = result.data;
+    } else {
+      const projectDir = this.getEncodedProjectDir(projectPath);
+      const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+      content = await fs.readFile(sessionFile, 'utf-8');
+    }
+
     const lines = content.split('\n').filter((l) => l.trim());
 
     const messages: SessionMessage[] = [];
@@ -474,32 +725,62 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
   async searchSessions(
     projectPath: string,
     query: string,
-    searchMode: SessionSearchMode
+    searchMode: SessionSearchMode,
+    sshConfig?: SshRemoteConfig
   ): Promise<SessionSearchResult[]> {
     if (!query.trim()) {
       return [];
     }
 
-    const projectDir = this.getEncodedProjectDir(projectPath);
+    // Get list of session files
+    let sessionFiles: string[];
 
-    try {
-      await fs.access(projectDir);
-    } catch {
-      return [];
+    if (sshConfig) {
+      const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+      const dirResult = await readDirRemote(projectDir, sshConfig);
+      if (!dirResult.success || !dirResult.data) {
+        return [];
+      }
+      sessionFiles = dirResult.data
+        .filter((entry) => !entry.isDirectory && entry.name.endsWith('.jsonl'))
+        .map((entry) => entry.name);
+    } else {
+      const localProjectDir = this.getEncodedProjectDir(projectPath);
+      try {
+        await fs.access(localProjectDir);
+      } catch {
+        return [];
+      }
+      const files = await fs.readdir(localProjectDir);
+      sessionFiles = files.filter((f) => f.endsWith('.jsonl'));
     }
-
-    const files = await fs.readdir(projectDir);
-    const sessionFiles = files.filter((f) => f.endsWith('.jsonl'));
 
     const searchLower = query.toLowerCase();
     const matchingSessions: SessionSearchResult[] = [];
 
+    // Get the appropriate project directory for path construction
+    const projectDir = sshConfig
+      ? this.getRemoteEncodedProjectDir(projectPath)
+      : this.getEncodedProjectDir(projectPath);
+
     for (const filename of sessionFiles) {
       const sessionId = filename.replace('.jsonl', '');
-      const filePath = path.join(projectDir, filename);
+      const filePath = sshConfig
+        ? `${projectDir}/${filename}`
+        : path.join(projectDir, filename);
 
       try {
-        const content = await fs.readFile(filePath, 'utf-8');
+        // Get content either locally or via SSH
+        let content: string;
+        if (sshConfig) {
+          const result = await readFileRemote(filePath, sshConfig);
+          if (!result.success || !result.data) {
+            continue; // Skip files we can't read
+          }
+          content = result.data;
+        } else {
+          content = await fs.readFile(filePath, 'utf-8');
+        }
         const lines = content.split('\n').filter((l) => l.trim());
 
         let titleMatch = false;
@@ -611,7 +892,11 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     return matchingSessions;
   }
 
-  getSessionPath(projectPath: string, sessionId: string): string | null {
+  getSessionPath(projectPath: string, sessionId: string, sshConfig?: SshRemoteConfig): string | null {
+    if (sshConfig) {
+      const projectDir = this.getRemoteEncodedProjectDir(projectPath);
+      return `${projectDir}/${sessionId}.jsonl`;
+    }
     const projectDir = this.getEncodedProjectDir(projectPath);
     return path.join(projectDir, `${sessionId}.jsonl`);
   }
@@ -620,8 +905,16 @@ export class ClaudeSessionStorage implements AgentSessionStorage {
     projectPath: string,
     sessionId: string,
     userMessageUuid: string,
-    fallbackContent?: string
+    fallbackContent?: string,
+    sshConfig?: SshRemoteConfig
   ): Promise<{ success: boolean; error?: string; linesRemoved?: number }> {
+    // Note: Delete operations on remote sessions are not supported yet
+    // This would require implementing writeFileRemote
+    if (sshConfig) {
+      logger.warn('Delete message pair not supported for SSH remote sessions', LOG_CONTEXT);
+      return { success: false, error: 'Delete not supported for remote sessions' };
+    }
+
     const projectDir = this.getEncodedProjectDir(projectPath);
     const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
 

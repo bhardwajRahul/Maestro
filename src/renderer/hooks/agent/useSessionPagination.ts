@@ -11,6 +11,8 @@ export interface UseSessionPaginationDeps {
   agentId?: string;
   /** Callback to update starred sessions from origins data */
   onStarredSessionsLoaded?: (starredIds: Set<string>) => void;
+  /** Optional SSH remote ID for accessing sessions on a remote host */
+  sshRemoteId?: string;
 }
 
 /**
@@ -70,6 +72,7 @@ export function useSessionPagination({
   projectPath,
   agentId = 'claude-code',
   onStarredSessionsLoaded,
+  sshRemoteId,
 }: UseSessionPaginationDeps): UseSessionPaginationReturn {
   // Session list state
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
@@ -136,7 +139,8 @@ export function useSessionPagination({
         originsMapRef.current = originsMap;
 
         // Use generic agentSessions API with agentId parameter for paginated loading
-        const result = await window.maestro.agentSessions.listPaginated(agentId, projectPath, { limit: 100 });
+        // Pass sshRemoteId for SSH remote session access
+        const result = await window.maestro.agentSessions.listPaginated(agentId, projectPath, { limit: 100 }, sshRemoteId);
 
         // Merge origins data (sessionName, starred) into sessions
         // Type cast to ClaudeSession since the API returns compatible data
@@ -168,7 +172,7 @@ export function useSessionPagination({
     };
 
     loadSessions();
-  }, [projectPath, agentId, onStarredSessionsLoaded]);
+  }, [projectPath, agentId, onStarredSessionsLoaded, sshRemoteId]);
 
   // Load more sessions when scrolling near bottom
   const loadMoreSessions = useCallback(async () => {
@@ -177,10 +181,11 @@ export function useSessionPagination({
     setIsLoadingMoreSessions(true);
     try {
       // Use generic agentSessions API with agentId parameter
+      // Pass sshRemoteId for SSH remote session access
       const result = await window.maestro.agentSessions.listPaginated(agentId, projectPath, {
         cursor: nextCursorRef.current,
         limit: 100,
-      });
+      }, sshRemoteId);
 
       // Merge origins data (sessionName, starred) into new sessions
       // Type cast to ClaudeSession since the API returns compatible data
@@ -207,7 +212,7 @@ export function useSessionPagination({
     } finally {
       setIsLoadingMoreSessions(false);
     }
-  }, [projectPath, agentId, hasMoreSessions, isLoadingMoreSessions]);
+  }, [projectPath, agentId, hasMoreSessions, isLoadingMoreSessions, sshRemoteId]);
 
   // Handle scroll for sessions list pagination - load more at 70% scroll
   const handleSessionsScroll = useCallback(() => {
@@ -247,10 +252,10 @@ export function useSessionPagination({
     }
   }, [loading, isLoadingMoreSessions, hasMoreSessions, sessions.length, loadMoreSessions]);
 
-  // Reset the last loaded count when projectPath or agentId changes
+  // Reset the last loaded count when projectPath, agentId, or sshRemoteId changes
   useEffect(() => {
     lastLoadedCountRef.current = 0;
-  }, [projectPath, agentId]);
+  }, [projectPath, agentId, sshRemoteId]);
 
   // Update a specific session in the list
   const updateSession = useCallback((sessionId: string, updates: Partial<ClaudeSession>) => {

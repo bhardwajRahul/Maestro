@@ -43,7 +43,8 @@ import type {
   SessionListOptions,
   SessionReadOptions,
 } from '../../agent-session-storage';
-import type { GlobalAgentStats, ProviderStats } from '../../../shared/types';
+import type { GlobalAgentStats, ProviderStats, SshRemoteConfig } from '../../../shared/types';
+import type { MaestroSettings } from './persistence';
 
 // Re-export for backwards compatibility
 export type { GlobalAgentStats, ProviderStats };
@@ -64,6 +65,24 @@ export interface AgentSessionOriginsData {
 export interface AgentSessionsHandlerDependencies {
   getMainWindow: () => BrowserWindow | null;
   agentSessionOriginsStore?: Store<AgentSessionOriginsData>;
+  /** Settings store for SSH remote configuration lookup */
+  settingsStore?: Store<MaestroSettings>;
+}
+
+// Module-level reference to settings store (set during registration)
+let agentSessionsSettingsStore: Store<MaestroSettings> | undefined;
+
+/**
+ * Get SSH remote configuration by ID from the settings store.
+ * Returns undefined if not found or store not provided.
+ */
+function getSshRemoteById(sshRemoteId: string): SshRemoteConfig | undefined {
+  if (!agentSessionsSettingsStore) {
+    logger.warn(`${LOG_CONTEXT} Settings store not available for SSH remote lookup`, LOG_CONTEXT);
+    return undefined;
+  }
+  const sshRemotes = agentSessionsSettingsStore.get('sshRemotes', []) as SshRemoteConfig[];
+  return sshRemotes.find((r) => r.id === sshRemoteId && r.enabled);
 }
 
 /**
@@ -344,22 +363,29 @@ function aggregateProviderStats(
  */
 export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDependencies): void {
   const getMainWindow = deps?.getMainWindow;
+
+  // Store settings reference for SSH remote lookups
+  agentSessionsSettingsStore = deps?.settingsStore;
+
   // ============ List Sessions ============
 
   ipcMain.handle(
     'agentSessions:list',
     withIpcErrorLogging(
       handlerOpts('list'),
-      async (agentId: string, projectPath: string): Promise<AgentSessionInfo[]> => {
+      async (agentId: string, projectPath: string, sshRemoteId?: string): Promise<AgentSessionInfo[]> => {
         const storage = getSessionStorage(agentId);
         if (!storage) {
           logger.warn(`No session storage available for agent: ${agentId}`, LOG_CONTEXT);
           return [];
         }
 
-        const sessions = await storage.listSessions(projectPath);
+        // Get SSH config if provided
+        const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+
+        const sessions = await storage.listSessions(projectPath, sshConfig);
         logger.info(
-          `Listed ${sessions.length} sessions for agent ${agentId} at ${projectPath}`,
+          `Listed ${sessions.length} sessions for agent ${agentId} at ${projectPath}${sshRemoteId ? ' (remote via SSH)' : ''}`,
           LOG_CONTEXT
         );
         return sessions;
@@ -376,7 +402,8 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
       async (
         agentId: string,
         projectPath: string,
-        options?: SessionListOptions
+        options?: SessionListOptions,
+        sshRemoteId?: string
       ): Promise<PaginatedSessionsResult> => {
         const storage = getSessionStorage(agentId);
         if (!storage) {
@@ -384,9 +411,12 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
           return { sessions: [], hasMore: false, totalCount: 0, nextCursor: null };
         }
 
-        const result = await storage.listSessionsPaginated(projectPath, options);
+        // Get SSH config if provided
+        const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+
+        const result = await storage.listSessionsPaginated(projectPath, options, sshConfig);
         logger.info(
-          `Listed paginated sessions for agent ${agentId}: ${result.sessions.length} of ${result.totalCount}`,
+          `Listed paginated sessions for agent ${agentId}: ${result.sessions.length} of ${result.totalCount}${sshRemoteId ? ' (remote via SSH)' : ''}`,
           LOG_CONTEXT
         );
         return result;
@@ -404,7 +434,8 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
         agentId: string,
         projectPath: string,
         sessionId: string,
-        options?: SessionReadOptions
+        options?: SessionReadOptions,
+        sshRemoteId?: string
       ): Promise<SessionMessagesResult> => {
         const storage = getSessionStorage(agentId);
         if (!storage) {
@@ -412,9 +443,12 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
           return { messages: [], total: 0, hasMore: false };
         }
 
-        const result = await storage.readSessionMessages(projectPath, sessionId, options);
+        // Get SSH config if provided
+        const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+
+        const result = await storage.readSessionMessages(projectPath, sessionId, options, sshConfig);
         logger.info(
-          `Read ${result.messages.length} messages for session ${sessionId} (agent: ${agentId})`,
+          `Read ${result.messages.length} messages for session ${sessionId} (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
           LOG_CONTEXT
         );
         return result;
@@ -432,7 +466,8 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
         agentId: string,
         projectPath: string,
         query: string,
-        searchMode: SessionSearchMode
+        searchMode: SessionSearchMode,
+        sshRemoteId?: string
       ): Promise<SessionSearchResult[]> => {
         const storage = getSessionStorage(agentId);
         if (!storage) {
@@ -440,9 +475,12 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
           return [];
         }
 
-        const results = await storage.searchSessions(projectPath, query, searchMode);
+        // Get SSH config if provided
+        const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+
+        const results = await storage.searchSessions(projectPath, query, searchMode, sshConfig);
         logger.info(
-          `Found ${results.length} matching sessions for query "${query}" (agent: ${agentId})`,
+          `Found ${results.length} matching sessions for query "${query}" (agent: ${agentId})${sshRemoteId ? ' (remote via SSH)' : ''}`,
           LOG_CONTEXT
         );
         return results;

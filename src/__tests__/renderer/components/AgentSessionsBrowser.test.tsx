@@ -1029,7 +1029,8 @@ describe('AgentSessionsBrowser', () => {
         'claude-code',
         '/path/to/project',
         'search term',
-        'all'
+        'all',
+        undefined  // sshRemoteId - not set for local sessions
       );
     });
 

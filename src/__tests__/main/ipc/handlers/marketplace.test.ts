@@ -13,11 +13,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain, App } from 'electron';
 import fs from 'fs/promises';
 import crypto from 'crypto';
+import Store from 'electron-store';
 import {
   registerMarketplaceHandlers,
   MarketplaceHandlerDependencies,
 } from '../../../../main/ipc/handlers/marketplace';
 import type { MarketplaceManifest, MarketplaceCache } from '../../../../shared/marketplace-types';
+import type { SshRemoteConfig } from '../../../../shared/types';
 
 // Mock electron's ipcMain
 vi.mock('electron', () => ({
@@ -46,6 +48,27 @@ vi.mock('crypto', () => ({
   },
 }));
 
+// Mock electron-store
+vi.mock('electron-store', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      get: vi.fn(),
+      set: vi.fn(),
+    })),
+  };
+});
+
+// Mock remote-fs for SSH operations using vi.hoisted for factory hoisting
+const { mockWriteFileRemote, mockMkdirRemote } = vi.hoisted(() => ({
+  mockWriteFileRemote: vi.fn(),
+  mockMkdirRemote: vi.fn(),
+}));
+
+vi.mock('../../../../main/utils/remote-fs', () => ({
+  writeFileRemote: mockWriteFileRemote,
+  mkdirRemote: mockMkdirRemote,
+}));
+
 // Mock the logger
 vi.mock('../../../../main/utils/logger', () => ({
   logger: {
@@ -63,7 +86,17 @@ global.fetch = mockFetch;
 describe('marketplace IPC handlers', () => {
   let handlers: Map<string, Function>;
   let mockApp: App;
+  let mockSettingsStore: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
   let mockDeps: MarketplaceHandlerDependencies;
+
+  // Sample SSH remote configuration for testing
+  const sampleSshRemote: SshRemoteConfig = {
+    id: 'ssh-remote-1',
+    label: 'Test Remote',
+    host: 'testserver.example.com',
+    username: 'testuser',
+    enabled: true,
+  };
 
   // Sample test data
   const sampleManifest: MarketplaceManifest = {
@@ -115,13 +148,30 @@ describe('marketplace IPC handlers', () => {
       getPath: vi.fn().mockReturnValue('/mock/userData'),
     } as unknown as App;
 
+    // Setup mock settings store for SSH remote lookup
+    // The get function is called with (key, defaultValue) - we mock it to return sshRemotes
+    mockSettingsStore = {
+      get: vi.fn().mockImplementation((key: string, defaultValue?: unknown) => {
+        if (key === 'sshRemotes') {
+          return [sampleSshRemote];
+        }
+        return defaultValue;
+      }),
+      set: vi.fn(),
+    };
+
     // Setup dependencies
     mockDeps = {
       app: mockApp,
+      settingsStore: mockSettingsStore as unknown as Store,
     };
 
     // Default mock for crypto.randomUUID
     vi.mocked(crypto.randomUUID).mockReturnValue('test-uuid-123');
+
+    // Reset remote-fs mocks
+    mockWriteFileRemote.mockReset();
+    mockMkdirRemote.mockReset();
 
     // Register handlers
     registerMarketplaceHandlers(mockDeps);
@@ -637,6 +687,233 @@ describe('marketplace IPC handlers', () => {
       // Should have imported the second doc
       expect(result.importedDocs).toEqual(['phase-2']);
     });
+
+    describe('SSH remote import', () => {
+      it('should use remote-fs for SSH imports with POSIX paths', async () => {
+        const validCache: MarketplaceCache = {
+          fetchedAt: Date.now(),
+          manifest: sampleManifest,
+        };
+
+        vi.mocked(fs.readFile)
+          .mockResolvedValueOnce(JSON.stringify(validCache))
+          .mockRejectedValueOnce({ code: 'ENOENT' }); // No existing playbooks
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+        // Remote functions return RemoteFsResult with success: true
+        mockMkdirRemote.mockResolvedValue({ success: true });
+        mockWriteFileRemote.mockResolvedValue({ success: true });
+
+        // Mock document fetches
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: true,
+            text: () => Promise.resolve('# Phase 1 Content'),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            text: () => Promise.resolve('# Phase 2 Content'),
+          });
+
+        const handler = handlers.get('marketplace:importPlaybook');
+        const result = await handler!(
+          {} as any,
+          'test-playbook-1',
+          'My Test Playbook',
+          '/remote/autorun/folder',
+          'session-123',
+          'ssh-remote-1' // SSH remote ID
+        );
+
+        // Verify remote mkdir was called with POSIX path
+        // mkdirRemote(dirPath, sshRemote, recursive)
+        expect(mockMkdirRemote).toHaveBeenCalledWith(
+          '/remote/autorun/folder/My Test Playbook',
+          sampleSshRemote,
+          true
+        );
+
+        // Verify remote writeFile was called with POSIX paths
+        // writeFileRemote(filePath, content, sshRemote)
+        expect(mockWriteFileRemote).toHaveBeenCalledWith(
+          '/remote/autorun/folder/My Test Playbook/phase-1.md',
+          '# Phase 1 Content',
+          sampleSshRemote
+        );
+        expect(mockWriteFileRemote).toHaveBeenCalledWith(
+          '/remote/autorun/folder/My Test Playbook/phase-2.md',
+          '# Phase 2 Content',
+          sampleSshRemote
+        );
+
+        // Should NOT use local fs for documents
+        expect(fs.mkdir).not.toHaveBeenCalledWith(
+          '/remote/autorun/folder/My Test Playbook',
+          expect.anything()
+        );
+
+        // Local fs.writeFile should only be used for playbooks metadata
+        const docWriteCalls = vi.mocked(fs.writeFile).mock.calls.filter(
+          (call) => (call[0] as string).includes('phase-')
+        );
+        expect(docWriteCalls).toHaveLength(0);
+
+        expect(result.success).toBe(true);
+        expect(result.importedDocs).toEqual(['phase-1', 'phase-2']);
+      });
+
+      it('should fall back to local fs when SSH remote not found', async () => {
+        // Return empty array - no SSH remotes configured
+        mockSettingsStore.get.mockImplementation((key: string, defaultValue?: unknown) => {
+          if (key === 'sshRemotes') return [];
+          return defaultValue;
+        });
+
+        const validCache: MarketplaceCache = {
+          fetchedAt: Date.now(),
+          manifest: sampleManifest,
+        };
+
+        vi.mocked(fs.readFile)
+          .mockResolvedValueOnce(JSON.stringify(validCache))
+          .mockRejectedValueOnce({ code: 'ENOENT' });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+
+        mockFetch.mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve('# Content'),
+        });
+
+        const handler = handlers.get('marketplace:importPlaybook');
+        const result = await handler!(
+          {} as any,
+          'test-playbook-2',
+          'Test',
+          '/autorun',
+          'session-123',
+          'non-existent-ssh-remote'
+        );
+
+        // Should fall back to local fs operations
+        expect(mockMkdirRemote).not.toHaveBeenCalled();
+        expect(mockWriteFileRemote).not.toHaveBeenCalled();
+        expect(fs.mkdir).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+
+      it('should fall back to local fs when SSH remote is disabled', async () => {
+        // Return SSH remote that is disabled
+        mockSettingsStore.get.mockImplementation((key: string, defaultValue?: unknown) => {
+          if (key === 'sshRemotes') return [{ ...sampleSshRemote, enabled: false }];
+          return defaultValue;
+        });
+
+        const validCache: MarketplaceCache = {
+          fetchedAt: Date.now(),
+          manifest: sampleManifest,
+        };
+
+        vi.mocked(fs.readFile)
+          .mockResolvedValueOnce(JSON.stringify(validCache))
+          .mockRejectedValueOnce({ code: 'ENOENT' });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+
+        mockFetch.mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve('# Content'),
+        });
+
+        const handler = handlers.get('marketplace:importPlaybook');
+        const result = await handler!(
+          {} as any,
+          'test-playbook-2',
+          'Test',
+          '/autorun',
+          'session-123',
+          'ssh-remote-1'
+        );
+
+        // Should fall back to local fs because remote is disabled
+        expect(mockMkdirRemote).not.toHaveBeenCalled();
+        expect(mockWriteFileRemote).not.toHaveBeenCalled();
+        expect(fs.mkdir).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+
+      it('should handle SSH mkdir failure gracefully', async () => {
+        const validCache: MarketplaceCache = {
+          fetchedAt: Date.now(),
+          manifest: sampleManifest,
+        };
+
+        vi.mocked(fs.readFile)
+          .mockResolvedValueOnce(JSON.stringify(validCache))
+          .mockRejectedValueOnce({ code: 'ENOENT' });
+        // Return RemoteFsResult with success: false and error message (use mockResolvedValueOnce)
+        mockMkdirRemote.mockResolvedValueOnce({ success: false, error: 'SSH connection failed' });
+
+        const handler = handlers.get('marketplace:importPlaybook');
+        const result = await handler!(
+          {} as any,
+          'test-playbook-1',
+          'Test',
+          '/remote/autorun',
+          'session-123',
+          'ssh-remote-1'
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('SSH connection failed');
+      });
+
+      // Note: The SSH writeFile failure scenario is already covered by the
+      // non-SSH test "should continue importing when individual document fetch fails".
+      // The SSH path uses the same try/catch pattern to continue on errors.
+
+      it('should use local fs when no sshRemoteId provided', async () => {
+        // Reset mocks from previous tests
+        mockMkdirRemote.mockReset();
+        mockWriteFileRemote.mockReset();
+        vi.mocked(fs.readFile).mockReset();
+        vi.mocked(fs.mkdir).mockReset();
+        vi.mocked(fs.writeFile).mockReset();
+        mockFetch.mockReset();
+
+        const validCache: MarketplaceCache = {
+          fetchedAt: Date.now(),
+          manifest: sampleManifest,
+        };
+
+        vi.mocked(fs.readFile)
+          .mockResolvedValueOnce(JSON.stringify(validCache))
+          .mockRejectedValueOnce({ code: 'ENOENT' });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+
+        mockFetch.mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve('# Content'),
+        });
+
+        const handler = handlers.get('marketplace:importPlaybook');
+        const result = await handler!(
+          {} as any,
+          'test-playbook-2',
+          'Test',
+          '/autorun',
+          'session-123'
+          // No sshRemoteId
+        );
+
+        // Should succeed and use local fs, not remote
+        expect(result.success).toBe(true);
+        expect(mockMkdirRemote).not.toHaveBeenCalled();
+        expect(mockWriteFileRemote).not.toHaveBeenCalled();
+        expect(fs.mkdir).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('cache TTL validation', () => {
@@ -651,7 +928,10 @@ describe('marketplace IPC handlers', () => {
       ];
 
       for (const testCase of testCases) {
-        vi.clearAllMocks();
+        // Reset only the mocks we use in this test
+        vi.mocked(fs.readFile).mockReset();
+        vi.mocked(fs.writeFile).mockReset();
+        mockFetch.mockReset();
 
         const cache: MarketplaceCache = {
           fetchedAt: Date.now() - testCase.age,

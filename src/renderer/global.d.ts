@@ -451,8 +451,9 @@ interface MaestroAPI {
     getModels: (agentId: string, forceRefresh?: boolean) => Promise<string[]>;
     discoverSlashCommands: (agentId: string, cwd: string, customPath?: string) => Promise<string[] | null>;
   };
+  // Agent Sessions API - all methods accept optional sshRemoteId for SSH remote session storage access
   agentSessions: {
-    list: (agentId: string, projectPath: string) => Promise<Array<{
+    list: (agentId: string, projectPath: string, sshRemoteId?: string) => Promise<Array<{
       sessionId: string;
       projectPath: string;
       timestamp: string;
@@ -467,7 +468,7 @@ interface MaestroAPI {
       cacheCreationTokens: number;
       durationSeconds: number;
     }>>;
-    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }) => Promise<{
+    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }, sshRemoteId?: string) => Promise<{
       sessions: Array<{
         sessionId: string;
         projectPath: string;
@@ -490,7 +491,7 @@ interface MaestroAPI {
       totalCount: number;
       nextCursor: string | null;
     }>;
-    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) => Promise<{
+    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }, sshRemoteId?: string) => Promise<{
       messages: Array<{
         type: string;
         role?: string;
@@ -502,13 +503,14 @@ interface MaestroAPI {
       total: number;
       hasMore: boolean;
     }>;
-    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') => Promise<Array<{
+    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all', sshRemoteId?: string) => Promise<Array<{
       sessionId: string;
       matchType: 'title' | 'user' | 'assistant';
       matchPreview: string;
       matchCount: number;
     }>>;
-    getPath: (agentId: string, projectPath: string, sessionId: string) => Promise<string | null>;
+    getPath: (agentId: string, projectPath: string, sessionId: string, sshRemoteId?: string) => Promise<string | null>;
+    // Delete a message pair from a session (not supported for SSH remote sessions)
     deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) => Promise<{
       success: boolean;
       error?: string;
@@ -1041,7 +1043,7 @@ interface MaestroAPI {
       content?: string | null;
       error?: string;
     }>;
-    importPlaybook: (playbookId: string, targetFolderName: string, autoRunFolderPath: string, sessionId: string) => Promise<{
+    importPlaybook: (playbookId: string, targetFolderName: string, autoRunFolderPath: string, sessionId: string, sshRemoteId?: string) => Promise<{
       success: boolean;
       playbook?: {
         id: string;

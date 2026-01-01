@@ -94,7 +94,7 @@ describe('agentSessions IPC handlers', () => {
       const handler = handlers.get('agentSessions:list');
       const result = await handler!({} as any, 'claude-code', '/test');
 
-      expect(mockStorage.listSessions).toHaveBeenCalledWith('/test');
+      expect(mockStorage.listSessions).toHaveBeenCalledWith('/test', undefined);
       expect(result).toEqual(mockSessions);
     });
 
@@ -105,6 +105,27 @@ describe('agentSessions IPC handlers', () => {
       const result = await handler!({} as any, 'unknown-agent', '/test');
 
       expect(result).toEqual([]);
+    });
+
+    it('should pass sshRemoteId to storage when provided', async () => {
+      const mockSessions = [{ sessionId: 'session-1', projectPath: '/test' }];
+
+      const mockStorage = {
+        agentId: 'claude-code',
+        listSessions: vi.fn().mockResolvedValue(mockSessions),
+      };
+
+      vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+        mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+      );
+
+      const handler = handlers.get('agentSessions:list');
+      // Note: Without settings store, sshConfig will be undefined even if sshRemoteId is passed
+      const result = await handler!({} as any, 'claude-code', '/test', 'ssh-remote-1');
+
+      // Since no settings store is configured, sshConfig should be undefined
+      expect(mockStorage.listSessions).toHaveBeenCalledWith('/test', undefined);
+      expect(result).toEqual(mockSessions);
     });
   });
 
@@ -129,7 +150,7 @@ describe('agentSessions IPC handlers', () => {
       const handler = handlers.get('agentSessions:listPaginated');
       const result = await handler!({} as any, 'claude-code', '/test', { limit: 10 });
 
-      expect(mockStorage.listSessionsPaginated).toHaveBeenCalledWith('/test', { limit: 10 });
+      expect(mockStorage.listSessionsPaginated).toHaveBeenCalledWith('/test', { limit: 10 }, undefined);
       expect(result).toEqual(mockResult);
     });
 
@@ -145,6 +166,31 @@ describe('agentSessions IPC handlers', () => {
         totalCount: 0,
         nextCursor: null,
       });
+    });
+
+    it('should pass sshRemoteId to storage when provided', async () => {
+      const mockResult = {
+        sessions: [{ sessionId: 'session-1' }],
+        hasMore: false,
+        totalCount: 1,
+        nextCursor: null,
+      };
+
+      const mockStorage = {
+        agentId: 'claude-code',
+        listSessionsPaginated: vi.fn().mockResolvedValue(mockResult),
+      };
+
+      vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+        mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+      );
+
+      const handler = handlers.get('agentSessions:listPaginated');
+      const result = await handler!({} as any, 'claude-code', '/test', { limit: 10 }, 'ssh-remote-1');
+
+      // Since no settings store is configured, sshConfig should be undefined
+      expect(mockStorage.listSessionsPaginated).toHaveBeenCalledWith('/test', { limit: 10 }, undefined);
+      expect(result).toEqual(mockResult);
     });
   });
 
@@ -174,7 +220,7 @@ describe('agentSessions IPC handlers', () => {
       expect(mockStorage.readSessionMessages).toHaveBeenCalledWith('/test', 'session-1', {
         offset: 0,
         limit: 20,
-      });
+      }, undefined);
       expect(result).toEqual(mockResult);
     });
 
@@ -185,6 +231,30 @@ describe('agentSessions IPC handlers', () => {
       const result = await handler!({} as any, 'unknown-agent', '/test', 'session-1', {});
 
       expect(result).toEqual({ messages: [], total: 0, hasMore: false });
+    });
+
+    it('should pass sshRemoteId to storage when provided', async () => {
+      const mockResult = {
+        messages: [{ type: 'user', content: 'Hello' }],
+        total: 1,
+        hasMore: false,
+      };
+
+      const mockStorage = {
+        agentId: 'claude-code',
+        readSessionMessages: vi.fn().mockResolvedValue(mockResult),
+      };
+
+      vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+        mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+      );
+
+      const handler = handlers.get('agentSessions:read');
+      const result = await handler!({} as any, 'claude-code', '/test', 'session-1', { offset: 0, limit: 20 }, 'ssh-remote-1');
+
+      // Since no settings store is configured, sshConfig should be undefined
+      expect(mockStorage.readSessionMessages).toHaveBeenCalledWith('/test', 'session-1', { offset: 0, limit: 20 }, undefined);
+      expect(result).toEqual(mockResult);
     });
   });
 
@@ -206,7 +276,7 @@ describe('agentSessions IPC handlers', () => {
       const handler = handlers.get('agentSessions:search');
       const result = await handler!({} as any, 'claude-code', '/test', 'hello', 'all');
 
-      expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all');
+      expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', undefined);
       expect(result).toEqual(mockResults);
     });
 
@@ -217,6 +287,28 @@ describe('agentSessions IPC handlers', () => {
       const result = await handler!({} as any, 'unknown-agent', '/test', 'hello', 'all');
 
       expect(result).toEqual([]);
+    });
+
+    it('should pass sshRemoteId to storage when provided', async () => {
+      const mockResults = [
+        { sessionId: 'session-1', matchType: 'title' as const, matchPreview: 'Hello...', matchCount: 1 },
+      ];
+
+      const mockStorage = {
+        agentId: 'claude-code',
+        searchSessions: vi.fn().mockResolvedValue(mockResults),
+      };
+
+      vi.mocked(agentSessionStorage.getSessionStorage).mockReturnValue(
+        mockStorage as unknown as agentSessionStorage.AgentSessionStorage
+      );
+
+      const handler = handlers.get('agentSessions:search');
+      const result = await handler!({} as any, 'claude-code', '/test', 'hello', 'all', 'ssh-remote-1');
+
+      // Since no settings store is configured, sshConfig should be undefined
+      expect(mockStorage.searchSessions).toHaveBeenCalledWith('/test', 'hello', 'all', undefined);
+      expect(result).toEqual(mockResults);
     });
   });
 

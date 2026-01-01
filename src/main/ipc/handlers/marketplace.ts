@@ -14,6 +14,7 @@ import { ipcMain, App } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import Store from 'electron-store';
 import { logger } from '../../utils/logger';
 import { createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';
 import type {
@@ -24,6 +25,9 @@ import {
   MarketplaceFetchError,
   MarketplaceImportError,
 } from '../../../shared/marketplace-types';
+import { SshRemoteConfig } from '../../../shared/types';
+import { writeFileRemote, mkdirRemote } from '../../utils/remote-fs';
+import type { MaestroSettings } from './persistence';
 
 // ============================================================================
 // Constants
@@ -40,6 +44,24 @@ const LOG_CONTEXT = '[Marketplace]';
 
 export interface MarketplaceHandlerDependencies {
   app: App;
+  /** Settings store for SSH remote configuration lookup */
+  settingsStore?: Store<MaestroSettings>;
+}
+
+// Module-level reference to settings store (set during registration)
+let marketplaceSettingsStore: Store<MaestroSettings> | undefined;
+
+/**
+ * Get SSH remote configuration by ID from the settings store.
+ * Returns undefined if not found or store not provided.
+ */
+function getSshRemoteById(sshRemoteId: string): SshRemoteConfig | undefined {
+  if (!marketplaceSettingsStore) {
+    logger.warn(`${LOG_CONTEXT} Settings store not available for SSH remote lookup`, LOG_CONTEXT);
+    return undefined;
+  }
+  const sshRemotes = marketplaceSettingsStore.get('sshRemotes', []) as SshRemoteConfig[];
+  return sshRemotes.find((r) => r.id === sshRemoteId && r.enabled);
 }
 
 // ============================================================================
@@ -225,7 +247,10 @@ const handlerOpts = (operation: string, logSuccess = true): CreateHandlerOptions
  * Register all Marketplace-related IPC handlers.
  */
 export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies): void {
-  const { app } = deps;
+  const { app, settingsStore } = deps;
+
+  // Store settings reference for SSH remote lookups
+  marketplaceSettingsStore = settingsStore;
 
   // -------------------------------------------------------------------------
   // marketplace:getManifest - Get manifest (from cache if valid, else fetch)
@@ -304,7 +329,7 @@ export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies
   );
 
   // -------------------------------------------------------------------------
-  // marketplace:importPlaybook - Import a playbook to local Auto Run folder
+  // marketplace:importPlaybook - Import a playbook to Auto Run folder (local or remote via SSH)
   // -------------------------------------------------------------------------
   ipcMain.handle(
     'marketplace:importPlaybook',
@@ -314,9 +339,17 @@ export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies
         playbookId: string,
         targetFolderName: string,
         autoRunFolderPath: string,
-        sessionId: string
+        sessionId: string,
+        sshRemoteId?: string
       ) => {
-        logger.info(`Importing playbook "${playbookId}" to "${targetFolderName}"`, LOG_CONTEXT);
+        // Get SSH config if provided
+        const sshConfig = sshRemoteId ? getSshRemoteById(sshRemoteId) : undefined;
+        const isRemote = !!sshConfig;
+
+        logger.info(
+          `Importing playbook "${playbookId}" to "${targetFolderName}"${isRemote ? ' (remote via SSH)' : ''}`,
+          LOG_CONTEXT
+        );
 
         // Get the manifest to find the playbook
         const cache = await readCache(app);
@@ -335,19 +368,41 @@ export function registerMarketplaceHandlers(deps: MarketplaceHandlerDependencies
           throw new MarketplaceImportError(`Playbook not found: ${playbookId}`);
         }
 
-        // Create target folder
-        const targetPath = path.join(autoRunFolderPath, targetFolderName);
-        await fs.mkdir(targetPath, { recursive: true });
+        // Create target folder path (use POSIX paths for remote, native for local)
+        const targetPath = isRemote
+          ? (autoRunFolderPath.endsWith('/') ? `${autoRunFolderPath}${targetFolderName}` : `${autoRunFolderPath}/${targetFolderName}`)
+          : path.join(autoRunFolderPath, targetFolderName);
 
-        // Fetch and write all documents
+        // Create target directory (SSH-aware)
+        if (isRemote) {
+          const mkdirResult = await mkdirRemote(targetPath, sshConfig!, true);
+          if (!mkdirResult.success) {
+            throw new MarketplaceImportError(`Failed to create remote directory: ${mkdirResult.error}`);
+          }
+        } else {
+          await fs.mkdir(targetPath, { recursive: true });
+        }
+
+        // Fetch and write all documents (SSH-aware)
         const importedDocs: string[] = [];
         for (const doc of marketplacePlaybook.documents) {
           try {
             const content = await fetchDocument(marketplacePlaybook.path, doc.filename);
-            const docPath = path.join(targetPath, `${doc.filename}.md`);
-            await fs.writeFile(docPath, content, 'utf-8');
+            const docPath = isRemote
+              ? `${targetPath}/${doc.filename}.md`
+              : path.join(targetPath, `${doc.filename}.md`);
+
+            if (isRemote) {
+              const writeResult = await writeFileRemote(docPath, content, sshConfig!);
+              if (!writeResult.success) {
+                throw new Error(writeResult.error || 'Failed to write remote file');
+              }
+            } else {
+              await fs.writeFile(docPath, content, 'utf-8');
+            }
+
             importedDocs.push(doc.filename);
-            logger.debug(`Imported document: ${doc.filename}`, LOG_CONTEXT);
+            logger.debug(`Imported document: ${doc.filename}${isRemote ? ' (remote)' : ''}`, LOG_CONTEXT);
           } catch (error) {
             logger.warn(`Failed to import document ${doc.filename}`, LOG_CONTEXT, { error });
             // Continue importing other documents

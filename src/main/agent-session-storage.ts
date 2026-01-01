@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { ToolType } from '../shared/types';
+import type { ToolType, SshRemoteConfig } from '../shared/types';
 import { logger } from './utils/logger';
 
 const LOG_CONTEXT = '[AgentSessionStorage]';
@@ -131,6 +131,10 @@ export interface SessionOriginInfo {
  * Provides an abstraction for accessing agent session data.
  * Each agent (Claude Code, OpenCode, etc.) implements this interface
  * to expose their session storage in a consistent way.
+ *
+ * All methods accept an optional sshConfig parameter for SSH remote execution.
+ * When sshConfig is provided, the storage implementation should read session
+ * data from the remote host via SSH instead of the local filesystem.
  */
 export interface AgentSessionStorage {
   /**
@@ -141,19 +145,22 @@ export interface AgentSessionStorage {
   /**
    * List all sessions for a project
    * @param projectPath - The project directory path
+   * @param sshConfig - Optional SSH config for remote access
    * @returns Array of session metadata sorted by modified date (newest first)
    */
-  listSessions(projectPath: string): Promise<AgentSessionInfo[]>;
+  listSessions(projectPath: string, sshConfig?: SshRemoteConfig): Promise<AgentSessionInfo[]>;
 
   /**
    * List sessions with pagination support
    * @param projectPath - The project directory path
    * @param options - Pagination options
+   * @param sshConfig - Optional SSH config for remote access
    * @returns Paginated session results
    */
   listSessionsPaginated(
     projectPath: string,
-    options?: SessionListOptions
+    options?: SessionListOptions,
+    sshConfig?: SshRemoteConfig
   ): Promise<PaginatedSessionsResult>;
 
   /**
@@ -161,12 +168,14 @@ export interface AgentSessionStorage {
    * @param projectPath - The project directory path
    * @param sessionId - The session identifier
    * @param options - Read options including pagination
+   * @param sshConfig - Optional SSH config for remote access
    * @returns Session messages with pagination info
    */
   readSessionMessages(
     projectPath: string,
     sessionId: string,
-    options?: SessionReadOptions
+    options?: SessionReadOptions,
+    sshConfig?: SshRemoteConfig
   ): Promise<SessionMessagesResult>;
 
   /**
@@ -174,12 +183,14 @@ export interface AgentSessionStorage {
    * @param projectPath - The project directory path
    * @param query - The search query
    * @param searchMode - Where to search (title, user messages, assistant, or all)
+   * @param sshConfig - Optional SSH config for remote access
    * @returns Array of matching sessions with match info
    */
   searchSessions(
     projectPath: string,
     query: string,
-    searchMode: SessionSearchMode
+    searchMode: SessionSearchMode,
+    sshConfig?: SshRemoteConfig
   ): Promise<SessionSearchResult[]>;
 
   /**
@@ -187,9 +198,10 @@ export interface AgentSessionStorage {
    * Some agents store sessions as files, others may not
    * @param projectPath - The project directory path
    * @param sessionId - The session identifier
+   * @param sshConfig - Optional SSH config for remote access
    * @returns The file path or null if not applicable
    */
-  getSessionPath(projectPath: string, sessionId: string): string | null;
+  getSessionPath(projectPath: string, sessionId: string, sshConfig?: SshRemoteConfig): string | null;
 
   /**
    * Delete a message pair from a session
@@ -197,13 +209,15 @@ export interface AgentSessionStorage {
    * @param sessionId - The session identifier
    * @param userMessageUuid - UUID of the user message to delete
    * @param fallbackContent - Optional content to match if UUID not found
+   * @param sshConfig - Optional SSH config for remote access
    * @returns Success status and number of lines removed
    */
   deleteMessagePair(
     projectPath: string,
     sessionId: string,
     userMessageUuid: string,
-    fallbackContent?: string
+    fallbackContent?: string,
+    sshConfig?: SshRemoteConfig
   ): Promise<{ success: boolean; error?: string; linesRemoved?: number }>;
 }
 

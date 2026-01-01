@@ -535,6 +535,7 @@ function generateMessageId(): string {
  * WizardProvider - Provides wizard state management to the component tree
  */
 export function WizardProvider({ children }: WizardProviderProps) {
+  console.error('[WizardProvider] render start');
   const [state, dispatch] = useReducer(wizardReducer, initialState);
 
   // Wizard lifecycle

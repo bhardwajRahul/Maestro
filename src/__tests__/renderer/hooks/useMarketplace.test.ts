@@ -532,7 +532,8 @@ describe('useMarketplace', () => {
         'test-id',
         'my-folder',
         '/path/to/autorun',
-        'session-1'
+        'session-1',
+        undefined  // sshRemoteId - not provided in this test
       );
     });
 

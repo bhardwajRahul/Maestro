@@ -127,13 +127,19 @@ export function SessionProvider({ children }: SessionProviderProps) {
   // Batched updater for performance during AI streaming
   const batchedUpdater = useBatchedSessionUpdates(setSessions);
 
+  // Ref to access batchedUpdater without creating callback dependencies
+  // This prevents re-creating setActiveSessionId when batchedUpdater changes
+  const batchedUpdaterRef = useRef(batchedUpdater);
+  batchedUpdaterRef.current = batchedUpdater;
+
   // Wrapper that resets cycle position when session is changed via click (not cycling)
   // Also flushes batched updates to ensure previous session's state is fully updated
+  // Uses ref to avoid dependency on batchedUpdater, preventing render cascades
   const setActiveSessionId = useCallback((id: string) => {
-    batchedUpdater.flushNow(); // Flush pending updates before switching sessions
+    batchedUpdaterRef.current.flushNow(); // Flush pending updates before switching sessions
     cyclePositionRef.current = -1; // Reset so next cycle finds first occurrence
     setActiveSessionIdInternal(id);
-  }, [batchedUpdater]);
+  }, []);
 
   // Refs for accessing current state in callbacks (avoids stale closures)
   const groupsRef = useRef(groups);
@@ -207,9 +213,10 @@ export function SessionProvider({ children }: SessionProviderProps) {
     sessions,
     groups,
     activeSessionId,
-    setActiveSessionId,
+    // setActiveSessionId is now stable (uses ref for batchedUpdater) so no need to include
     sessionsLoaded,
-    batchedUpdater,
+    // batchedUpdater is provided for API access but doesn't need to trigger re-renders
+    // Consumers use it for imperative calls, not reactive subscriptions
     activeSession,
     removedWorktreePaths,
     // Note: setState functions from useState are stable and don't need to be deps

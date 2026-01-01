@@ -873,23 +873,24 @@ contextBridge.exposeInMainWorld('maestro', {
 
   // Agent Sessions API (generic multi-agent session storage)
   // This is the preferred API for new code. The claude.* API is deprecated.
+  // All methods accept optional sshRemoteId for SSH remote session storage access.
   agentSessions: {
     // List all sessions for an agent
-    list: (agentId: string, projectPath: string) =>
-      ipcRenderer.invoke('agentSessions:list', agentId, projectPath),
+    list: (agentId: string, projectPath: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('agentSessions:list', agentId, projectPath, sshRemoteId),
     // List sessions with pagination
-    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }) =>
-      ipcRenderer.invoke('agentSessions:listPaginated', agentId, projectPath, options),
+    listPaginated: (agentId: string, projectPath: string, options?: { cursor?: string; limit?: number }, sshRemoteId?: string) =>
+      ipcRenderer.invoke('agentSessions:listPaginated', agentId, projectPath, options, sshRemoteId),
     // Read session messages
-    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }) =>
-      ipcRenderer.invoke('agentSessions:read', agentId, projectPath, sessionId, options),
+    read: (agentId: string, projectPath: string, sessionId: string, options?: { offset?: number; limit?: number }, sshRemoteId?: string) =>
+      ipcRenderer.invoke('agentSessions:read', agentId, projectPath, sessionId, options, sshRemoteId),
     // Search sessions
-    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all') =>
-      ipcRenderer.invoke('agentSessions:search', agentId, projectPath, query, searchMode),
+    search: (agentId: string, projectPath: string, query: string, searchMode: 'title' | 'user' | 'assistant' | 'all', sshRemoteId?: string) =>
+      ipcRenderer.invoke('agentSessions:search', agentId, projectPath, query, searchMode, sshRemoteId),
     // Get session file path
-    getPath: (agentId: string, projectPath: string, sessionId: string) =>
-      ipcRenderer.invoke('agentSessions:getPath', agentId, projectPath, sessionId),
-    // Delete a message pair from a session
+    getPath: (agentId: string, projectPath: string, sessionId: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('agentSessions:getPath', agentId, projectPath, sessionId, sshRemoteId),
+    // Delete a message pair from a session (not supported for SSH remote sessions)
     deleteMessagePair: (agentId: string, projectPath: string, sessionId: string, userMessageUuid: string, fallbackContent?: string) =>
       ipcRenderer.invoke('agentSessions:deleteMessagePair', agentId, projectPath, sessionId, userMessageUuid, fallbackContent),
     // Check if an agent has session storage support
@@ -1305,8 +1306,8 @@ contextBridge.exposeInMainWorld('maestro', {
       ipcRenderer.invoke('marketplace:getDocument', playbookPath, filename),
     getReadme: (playbookPath: string) =>
       ipcRenderer.invoke('marketplace:getReadme', playbookPath),
-    importPlaybook: (playbookId: string, targetFolderName: string, autoRunFolderPath: string, sessionId: string) =>
-      ipcRenderer.invoke('marketplace:importPlaybook', playbookId, targetFolderName, autoRunFolderPath, sessionId),
+    importPlaybook: (playbookId: string, targetFolderName: string, autoRunFolderPath: string, sessionId: string, sshRemoteId?: string) =>
+      ipcRenderer.invoke('marketplace:importPlaybook', playbookId, targetFolderName, autoRunFolderPath, sessionId, sshRemoteId),
   },
 
   // Debug Package API (generate support bundles for bug reporting)

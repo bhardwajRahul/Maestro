@@ -66,12 +66,13 @@ export interface UseMarketplaceReturn {
   setSearchQuery: (query: string) => void;
   /** Force refresh manifest from GitHub (bypasses cache) */
   refresh: () => Promise<void>;
-  /** Import a playbook to the Auto Run folder */
+  /** Import a playbook to the Auto Run folder (supports SSH remote via sshRemoteId) */
   importPlaybook: (
     playbook: MarketplacePlaybook,
     targetFolderName: string,
     autoRunFolderPath: string,
-    sessionId: string
+    sessionId: string,
+    sshRemoteId?: string
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Document preview
@@ -208,13 +209,14 @@ export function useMarketplace(): UseMarketplaceReturn {
     setIsRefreshing(false);
   }, []);
 
-  // Import a playbook to the Auto Run folder
+  // Import a playbook to the Auto Run folder (supports SSH remote via sshRemoteId)
   const importPlaybook = useCallback(
     async (
       playbook: MarketplacePlaybook,
       targetFolderName: string,
       autoRunFolderPath: string,
-      sessionId: string
+      sessionId: string,
+      sshRemoteId?: string
     ): Promise<{ success: boolean; error?: string }> => {
       setIsImporting(true);
       try {
@@ -222,7 +224,8 @@ export function useMarketplace(): UseMarketplaceReturn {
           playbook.id,
           targetFolderName,
           autoRunFolderPath,
-          sessionId
+          sessionId,
+          sshRemoteId
         );
         setIsImporting(false);
         return result;

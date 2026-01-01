@@ -40,6 +40,8 @@ export interface MarketplaceModalProps {
   onClose: () => void;
   autoRunFolderPath: string;
   sessionId: string;
+  /** SSH remote ID for importing to remote hosts */
+  sshRemoteId?: string;
   onImportComplete: (folderName: string) => void;
 }
 
@@ -237,6 +239,47 @@ function PlaybookDetailView({
 }: PlaybookDetailViewProps) {
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcuts for scrolling the document preview
+  // OPT+Up/Down: page up/down, CMD+Up/Down: home/end
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const scrollContainer = previewScrollRef.current;
+      if (!scrollContainer) return;
+
+      // Don't handle if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const pageHeight = scrollContainer.clientHeight * 0.9; // 90% of visible height
+
+      // CMD+Up/Down: Home/End
+      if (e.metaKey && !e.altKey && !e.shiftKey) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+        }
+      }
+      // OPT+Up/Down: Page up/down
+      else if (e.altKey && !e.metaKey && !e.shiftKey) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          scrollContainer.scrollBy({ top: -pageHeight, behavior: 'smooth' });
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          scrollContainer.scrollBy({ top: pageHeight, behavior: 'smooth' });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Generate prose styles scoped to marketplace panel
   const proseStyles = useMemo(
@@ -539,6 +582,7 @@ function PlaybookDetailView({
 
           {/* Markdown preview - scrollable container with prose styles */}
           <div
+            ref={previewScrollRef}
             className="marketplace-preview flex-1 min-h-0 overflow-y-auto p-4"
             style={{ backgroundColor: theme.colors.bgMain }}
           >
@@ -633,6 +677,7 @@ export function MarketplaceModal({
   onClose,
   autoRunFolderPath,
   sessionId,
+  sshRemoteId,
   onImportComplete,
 }: MarketplaceModalProps) {
   // Layer stack for escape handling
@@ -666,6 +711,9 @@ export function MarketplaceModal({
 
   // Search input ref for focus
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Grid container ref for returning focus from search
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
   // Detail view state
   const [selectedPlaybook, setSelectedPlaybook] = useState<MarketplacePlaybook | null>(null);
@@ -785,7 +833,7 @@ export function MarketplaceModal({
     [selectedPlaybook, fetchDocument]
   );
 
-  // Handle import action
+  // Handle import action (SSH-aware - imports to remote host if sshRemoteId provided)
   const handleImport = useCallback(async () => {
     if (!selectedPlaybook || !targetFolderName.trim()) return;
 
@@ -793,7 +841,8 @@ export function MarketplaceModal({
       selectedPlaybook,
       targetFolderName,
       autoRunFolderPath,
-      sessionId
+      sessionId,
+      sshRemoteId
     );
 
     if (result.success) {
@@ -809,6 +858,7 @@ export function MarketplaceModal({
     importPlaybook,
     autoRunFolderPath,
     sessionId,
+    sshRemoteId,
     onImportComplete,
     onClose,
   ]);
@@ -820,6 +870,23 @@ export function MarketplaceModal({
       setTargetFolderName(folder);
     }
   }, []);
+
+  // Cmd+F to focus search input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+F or Ctrl+F to focus search (only in list view)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f' && !showDetailView) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, showDetailView]);
 
   // Keyboard shortcuts for category tabs (list view) or document navigation (detail view): Cmd+Shift+[ and Cmd+Shift+]
   useEffect(() => {
@@ -874,16 +941,30 @@ export function MarketplaceModal({
     }
   }, [isOpen, categories, selectedCategory, setSelectedCategory, showDetailView, selectedPlaybook, selectedDocFilename, handleSelectDocument]);
 
-  // Arrow key navigation for tiles
+  // Arrow key navigation for tiles (list view only)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle in list view, not detail view
+      if (showDetailView) return;
+
       const total = filteredPlaybooks.length;
       if (total === 0) return;
 
-      // Don't interfere with input typing
+      // Handle input elements specially
       if (e.target instanceof HTMLInputElement) {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') {
-          return;
+        const input = e.target as HTMLInputElement;
+        // For left/right arrows, only navigate tiles if the input is empty
+        // (otherwise let user move cursor in the text)
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          if (input.value.length > 0) {
+            return; // Let cursor move in non-empty input
+          }
+          // Empty input: blur and navigate tiles
+          input.blur();
+        }
+        // For up/down, always allow tile navigation (blur input first)
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          input.blur();
         }
       }
 
@@ -917,7 +998,7 @@ export function MarketplaceModal({
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, filteredPlaybooks, selectedTileIndex, gridColumns, handleSelectPlaybook]);
+  }, [isOpen, showDetailView, filteredPlaybooks, selectedTileIndex, gridColumns, handleSelectPlaybook]);
 
   // Don't render if not open
   if (!isOpen) return null;
@@ -1122,6 +1203,14 @@ export function MarketplaceModal({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Return focus to the grid container
+                      gridContainerRef.current?.focus();
+                    }
+                  }}
                   placeholder="Search playbooks..."
                   className="w-full pl-10 pr-4 py-2 rounded border outline-none"
                   style={{
@@ -1135,7 +1224,9 @@ export function MarketplaceModal({
 
             {/* Playbook Grid */}
             <div
-              className="flex-1 overflow-y-auto p-4"
+              ref={gridContainerRef}
+              tabIndex={-1}
+              className="flex-1 overflow-y-auto p-4 outline-none"
               style={{ backgroundColor: theme.colors.bgMain }}
             >
               {isLoading ? (
@@ -1220,11 +1311,19 @@ export function MarketplaceModal({
               <span>
                 Use arrow keys to navigate, Enter to select
               </span>
-              <span>
-                <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-                  {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Shift+[/]
-                </kbd>{' '}
-                to switch tabs
+              <span className="flex items-center gap-3">
+                <span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">
+                    {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+F
+                  </kbd>{' '}
+                  search
+                </span>
+                <span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">
+                    {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Shift+[/]
+                  </kbd>{' '}
+                  to switch tabs
+                </span>
               </span>
             </div>
           </>

@@ -76,7 +76,8 @@ describe('useSessionPagination', () => {
       expect(mockListPaginated).toHaveBeenCalledWith(
         'claude-code',
         '/path/to/project',
-        { limit: 100 }
+        { limit: 100 },
+        undefined  // sshRemoteId
       );
     });
 
@@ -176,14 +177,89 @@ describe('useSessionPagination', () => {
         1,
         'claude-code',
         '/path/to/project',
-        { limit: 100 }
+        { limit: 100 },
+        undefined  // sshRemoteId
       );
       expect(mockListPaginated).toHaveBeenNthCalledWith(
         2,
         'claude-code',
         '/path/to/project',
-        { cursor: 'cursor-1', limit: 100 }
+        { cursor: 'cursor-1', limit: 100 },
+        undefined  // sshRemoteId
       );
+    });
+  });
+
+  describe('sshRemoteId parameter', () => {
+    it('passes sshRemoteId to listPaginated when provided', async () => {
+      mockListPaginated.mockResolvedValue({
+        sessions: [{ sessionId: 'test-session-1' }],
+        hasMore: false,
+        totalCount: 1,
+        nextCursor: null,
+      });
+
+      const { result } = renderHook(() =>
+        useSessionPagination({
+          projectPath: '/path/to/project',
+          agentId: 'claude-code',
+          sshRemoteId: 'ssh-remote-1',
+        })
+      );
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      expect(mockListPaginated).toHaveBeenCalledWith(
+        'claude-code',
+        '/path/to/project',
+        { limit: 100 },
+        'ssh-remote-1'  // sshRemoteId should be passed
+      );
+    });
+
+    it('reloads sessions when sshRemoteId changes', async () => {
+      mockListPaginated.mockResolvedValue({
+        sessions: [{ sessionId: 'test-session-1' }],
+        hasMore: false,
+        totalCount: 1,
+        nextCursor: null,
+      });
+
+      const { result, rerender } = renderHook(
+        ({ sshRemoteId }) =>
+          useSessionPagination({
+            projectPath: '/path/to/project',
+            agentId: 'claude-code',
+            sshRemoteId,
+          }),
+        { initialProps: { sshRemoteId: undefined as string | undefined } }
+      );
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // First call without sshRemoteId
+      expect(mockListPaginated).toHaveBeenCalledWith(
+        'claude-code',
+        '/path/to/project',
+        { limit: 100 },
+        undefined
+      );
+
+      // Change sshRemoteId
+      rerender({ sshRemoteId: 'ssh-remote-1' });
+
+      await waitFor(() => {
+        expect(mockListPaginated).toHaveBeenCalledWith(
+          'claude-code',
+          '/path/to/project',
+          { limit: 100 },
+          'ssh-remote-1'
+        );
+      });
     });
   });
 
@@ -205,7 +281,8 @@ describe('useSessionPagination', () => {
       expect(mockListPaginated).toHaveBeenCalledWith(
         'opencode',
         '/path/to/project',
-        { limit: 100 }
+        { limit: 100 },
+        undefined  // sshRemoteId
       );
     });
   });

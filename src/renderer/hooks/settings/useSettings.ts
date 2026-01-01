@@ -802,15 +802,23 @@ export function useSettings(): UseSettingsReturn {
     });
   }, []);
 
+  // Ref to read auto run stats synchronously (avoids callback recreation)
+  const autoRunStatsRef = useRef<AutoRunStats>(DEFAULT_AUTO_RUN_STATS);
+  useEffect(() => {
+    autoRunStatsRef.current = autoRunStats;
+  }, [autoRunStats]);
+
   // Get the highest unacknowledged badge level (if any)
+  // Uses ref to read current stats, making this callback stable
   const getUnacknowledgedBadgeLevel = useCallback((): number | null => {
-    const acknowledged = autoRunStats.lastAcknowledgedBadgeLevel ?? 0;
-    const current = autoRunStats.currentBadgeLevel;
+    const stats = autoRunStatsRef.current;
+    const acknowledged = stats.lastAcknowledgedBadgeLevel ?? 0;
+    const current = stats.currentBadgeLevel;
     if (current > acknowledged) {
       return current;
     }
     return null;
-  }, [autoRunStats.lastAcknowledgedBadgeLevel, autoRunStats.currentBadgeLevel]);
+  }, []);
 
   // UI collapse state setters
   const setUngroupedCollapsed = useCallback((value: boolean) => {
@@ -966,29 +974,30 @@ export function useSettings(): UseSettingsReturn {
     });
   }, []);
 
+  // Ref to read onboarding stats synchronously (avoids callback recreation)
+  const onboardingStatsRef = useRef<OnboardingStats>(DEFAULT_ONBOARDING_STATS);
+  useEffect(() => {
+    onboardingStatsRef.current = onboardingStats;
+  }, [onboardingStats]);
+
   // Get computed analytics for display
+  // Uses ref to read current stats, making this callback stable
   const getOnboardingAnalytics = useCallback(() => {
-    const totalWizardAttempts = onboardingStats.wizardStartCount;
-    const totalTourAttempts = onboardingStats.tourStartCount;
+    const stats = onboardingStatsRef.current;
+    const totalWizardAttempts = stats.wizardStartCount;
+    const totalTourAttempts = stats.tourStartCount;
 
     return {
       wizardCompletionRate: totalWizardAttempts > 0
-        ? Math.round((onboardingStats.wizardCompletionCount / totalWizardAttempts) * 100)
+        ? Math.round((stats.wizardCompletionCount / totalWizardAttempts) * 100)
         : 0,
       tourCompletionRate: totalTourAttempts > 0
-        ? Math.round((onboardingStats.tourCompletionCount / totalTourAttempts) * 100)
+        ? Math.round((stats.tourCompletionCount / totalTourAttempts) * 100)
         : 0,
-      averageConversationExchanges: onboardingStats.averageConversationExchanges,
-      averagePhasesPerWizard: onboardingStats.averagePhasesPerWizard,
+      averageConversationExchanges: stats.averageConversationExchanges,
+      averagePhasesPerWizard: stats.averagePhasesPerWizard,
     };
-  }, [
-    onboardingStats.wizardStartCount,
-    onboardingStats.tourStartCount,
-    onboardingStats.wizardCompletionCount,
-    onboardingStats.tourCompletionCount,
-    onboardingStats.averageConversationExchanges,
-    onboardingStats.averagePhasesPerWizard,
-  ]);
+  }, []);
 
   // Leaderboard Registration setter
   const setLeaderboardRegistration = useCallback((value: LeaderboardRegistration | null) => {
@@ -1087,14 +1096,16 @@ export function useSettings(): UseSettingsReturn {
   }, []);
 
   // Get the highest unacknowledged keyboard mastery level (if any)
+  // Uses ref to read current stats, making this callback stable
   const getUnacknowledgedKeyboardMasteryLevel = useCallback((): number | null => {
-    const acknowledged = keyboardMasteryStats.lastAcknowledgedLevel;
-    const current = keyboardMasteryStats.currentLevel;
+    const stats = keyboardMasteryStatsRef.current;
+    const acknowledged = stats.lastAcknowledgedLevel;
+    const current = stats.currentLevel;
     if (current > acknowledged) {
       return current;
     }
     return null;
-  }, [keyboardMasteryStats.lastAcknowledgedLevel, keyboardMasteryStats.currentLevel]);
+  }, []);
 
   // Colorblind mode toggle
   const setColorBlindMode = useCallback((value: boolean) => {
@@ -1137,12 +1148,9 @@ export function useSettings(): UseSettingsReturn {
 
   // Load settings from electron-store on mount
   useEffect(() => {
-    console.log('[Settings] useEffect triggered, about to call loadSettings');
     const loadSettings = async () => {
-      console.log('[Settings] loadSettings started');
       try {
       const savedEnterToSendAI = await window.maestro.settings.get('enterToSendAI');
-      console.log('[Settings] Got first setting');
       const savedEnterToSendTerminal = await window.maestro.settings.get('enterToSendTerminal');
       const savedDefaultSaveToHistory = await window.maestro.settings.get('defaultSaveToHistory');
       const savedDefaultShowThinking = await window.maestro.settings.get('defaultShowThinking');
@@ -1686,7 +1694,7 @@ export function useSettings(): UseSettingsReturn {
     recordAutoRunComplete,
     updateAutoRunProgress,
     acknowledgeBadge,
-    getUnacknowledgedBadgeLevel,
+    // getUnacknowledgedBadgeLevel is stable (uses ref), no need to include
     setUngroupedCollapsed,
     setTourCompleted,
     setFirstAutoRunCompleted,
@@ -1698,7 +1706,7 @@ export function useSettings(): UseSettingsReturn {
     recordTourStart,
     recordTourComplete,
     recordTourSkip,
-    getOnboardingAnalytics,
+    // getOnboardingAnalytics is stable (uses ref), no need to include
     leaderboardRegistration,
     setLeaderboardRegistration,
     isLeaderboardRegistered,
@@ -1713,7 +1721,7 @@ export function useSettings(): UseSettingsReturn {
     setKeyboardMasteryStats,
     recordShortcutUsage,
     acknowledgeKeyboardMasteryLevel,
-    getUnacknowledgedKeyboardMasteryLevel,
+    // getUnacknowledgedKeyboardMasteryLevel is stable (uses ref), no need to include
     colorBlindMode,
     setColorBlindMode,
     documentGraphShowExternalLinks,

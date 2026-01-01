@@ -46,7 +46,21 @@ export function AgentSessionsBrowser({
   // Get agentId from the active session's toolType
   const agentId = activeSession?.toolType || 'claude-code';
 
+  // Get SSH remote ID from the active session (for SSH remote session storage access)
+  // Per CLAUDE.md: Use both sshRemoteId and sessionSshRemoteConfig?.remoteId as fallback
+  const sshRemoteId = activeSession?.sshRemoteId || activeSession?.sessionSshRemoteConfig?.remoteId || undefined;
+
+  // Determine the correct project path for session storage lookup
+  // For SSH sessions, Claude Code stores sessions based on the REMOTE path, not the local projectRoot.
+  // Use remoteCwd (current remote directory) or sessionSshRemoteConfig.workingDirOverride as the remote path.
+  const isRemoteSession = !!sshRemoteId;
+  const projectPathForSessions = isRemoteSession
+    ? (activeSession?.remoteCwd || activeSession?.sessionSshRemoteConfig?.workingDirOverride || activeSession?.projectRoot)
+    : activeSession?.projectRoot;
+
   // Session viewer hook for detail view state and handlers
+  // Use projectPathForSessions for reading session messages (same path used for listing)
+  // Pass sshRemoteId for SSH remote session message reading
   const {
     viewingSession,
     messages,
@@ -59,13 +73,16 @@ export function AgentSessionsBrowser({
     handleMessagesScroll,
     clearViewingSession,
     setViewingSession,
-  } = useSessionViewer({ cwd: activeSession?.cwd, agentId });
+  } = useSessionViewer({ cwd: projectPathForSessions, agentId, sshRemoteId });
 
   // Starred sessions state (needs to be before pagination hook for callback)
   const [starredSessions, setStarredSessions] = useState<Set<string>>(new Set());
 
   // Session pagination hook for paginated loading
-  // Use projectRoot (not cwd) for consistent session storage access
+  // Use projectPathForSessions which is:
+  //   - For local sessions: projectRoot
+  //   - For SSH sessions: remoteCwd or workingDirOverride (the remote path)
+  // Pass sshRemoteId for SSH remote session storage access
   const {
     sessions,
     loading,
@@ -76,9 +93,10 @@ export function AgentSessionsBrowser({
     sessionsContainerRef,
     updateSession,
   } = useSessionPagination({
-    projectPath: activeSession?.projectRoot,
+    projectPath: projectPathForSessions,
     agentId,
     onStarredSessionsLoaded: setStarredSessions,
+    sshRemoteId,
   });
 
   const [search, setSearch] = useState('');
@@ -180,10 +198,10 @@ export function AgentSessionsBrowser({
     prevViewingSessionRef.current = viewingSession;
   }, [viewingSession]);
 
-  // Reset aggregate stats when cwd or agentId changes (session loading is handled by useSessionPagination)
+  // Reset aggregate stats when project path or agentId changes (session loading is handled by useSessionPagination)
   useEffect(() => {
     setAggregateStats({ totalSessions: 0, totalMessages: 0, totalCostUsd: 0, totalSizeBytes: 0, totalTokens: 0, oldestTimestamp: null, isComplete: false });
-  }, [activeSession?.cwd, agentId]);
+  }, [projectPathForSessions, agentId]);
 
   // Listen for progressive stats updates (Claude-specific)
   useEffect(() => {
@@ -383,7 +401,7 @@ export function AgentSessionsBrowser({
     // For content searches, debounce and call backend
     setIsSearching(true);
     searchTimeoutRef.current = setTimeout(async () => {
-      if (!activeSession?.cwd || !search.trim()) {
+      if (!projectPathForSessions || !search.trim()) {
         setSearchResults([]);
         setIsSearching(false);
         return;
@@ -391,11 +409,14 @@ export function AgentSessionsBrowser({
 
       try {
         // Use generic agentSessions API with agentId parameter
+        // Pass sshRemoteId for SSH remote session search
+        // Use projectPathForSessions (remote path for SSH, local path otherwise)
         const results = await window.maestro.agentSessions.search(
           agentId,
-          activeSession.cwd,
+          projectPathForSessions,
           search,
-          searchMode
+          searchMode,
+          sshRemoteId
         );
         setSearchResults(results);
       } catch (error) {
@@ -411,7 +432,7 @@ export function AgentSessionsBrowser({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [search, searchMode, activeSession?.cwd, agentId]);
+  }, [search, searchMode, projectPathForSessions, agentId, sshRemoteId]);
 
   // Use hook for filtering and sorting sessions
   const {

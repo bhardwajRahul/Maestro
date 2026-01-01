@@ -1124,6 +1124,7 @@ function setupIpcHandlers() {
   // Register Marketplace handlers for fetching and importing playbooks
   registerMarketplaceHandlers({
     app,
+    settingsStore: store,
   });
 
   // Register Stats handlers for usage tracking

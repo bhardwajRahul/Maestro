@@ -379,8 +379,12 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
     const header = headerRef.current;
     if (!header) return;
 
-    // Get initial width immediately
-    setPanelWidth(header.offsetWidth);
+    // Get initial width immediately, but only if it's a reasonable value
+    // (protects against measuring during layout/animation when width might be 0)
+    const initialWidth = header.offsetWidth;
+    if (initialWidth > 100) {
+      setPanelWidth(initialWidth);
+    }
 
     // Throttle resize updates to avoid layout thrashing during animations
     let rafId: number | null = null;
@@ -388,7 +392,10 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        pendingWidth = entry.contentRect.width;
+        // Only accept reasonable width values (protects against mid-animation measurements)
+        if (entry.contentRect.width > 100) {
+          pendingWidth = entry.contentRect.width;
+        }
       }
       // Use requestAnimationFrame to batch updates
       if (rafId === null && pendingWidth !== null) {
@@ -412,16 +419,16 @@ export const MainPanel = React.memo(forwardRef<MainPanelHandle, MainPanelProps>(
 
   // Responsive breakpoints for hiding/simplifying widgets (progressive reduction as space shrinks)
   // At widest: full display with "CONTEXT WINDOW" label and wide gauge (w-24)
-  // Below 800px: "CONTEXT" label + narrow gauge (w-16) together
-  // Below 700px: compact git widget (file count only)
-  // Below 600px: git branch shows icon only (no text)
-  // Below 550px: hide UUID pill
-  // Below 500px: hide cost widget
-  const showCostWidget = panelWidth > 500;
-  const showUuidPill = panelWidth > 550;
-  const useIconOnlyGitBranch = panelWidth < 600;
-  const useCompactGitWidget = panelWidth < 700;
-  const useCompactContext = panelWidth < 800; // Both label and gauge shrink together
+  // Below 700px: "CONTEXT" label + narrow gauge (w-16) together
+  // Below 550px: compact git widget (file count only)
+  // Below 500px: git branch shows icon only (no text)
+  // Below 400px: hide UUID pill
+  // Below 350px: hide cost widget
+  const showCostWidget = panelWidth > 350;
+  const showUuidPill = panelWidth > 400;
+  const useIconOnlyGitBranch = panelWidth < 500;
+  const useCompactGitWidget = panelWidth < 550;
+  const useCompactContext = panelWidth < 700; // Both label and gauge shrink together
 
   // Git status from centralized context (replaces local polling)
   // The context handles polling for all sessions and provides detailed data for the active session

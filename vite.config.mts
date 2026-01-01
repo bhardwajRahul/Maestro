@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   esbuild: {
-    // Strip console.log and console.debug in production builds
+    // Strip console.* and debugger in production builds
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
   build: {

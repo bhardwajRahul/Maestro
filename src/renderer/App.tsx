@@ -147,6 +147,7 @@ function getErrorTitleForType(type: AgentError['type']): string {
 }
 
 function MaestroConsoleInner() {
+  console.error('[MaestroConsoleInner] render start');
   // --- LAYER STACK (for blocking shortcuts when modals are open) ---
   const { hasOpenLayers, hasOpenModal } = useLayerStack();
 
@@ -8922,6 +8923,7 @@ function MaestroConsoleInner() {
           onClose={() => setMarketplaceModalOpen(false)}
           autoRunFolderPath={activeSession.autoRunFolderPath}
           sessionId={activeSession.id}
+          sshRemoteId={activeSession.sshRemoteId || activeSession.sessionSshRemoteConfig?.remoteId || undefined}
           onImportComplete={handleMarketplaceImportComplete}
         />
       )}
