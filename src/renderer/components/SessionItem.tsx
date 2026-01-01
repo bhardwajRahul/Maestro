@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Activity, GitBranch, Bot, Bookmark, AlertCircle } from 'lucide-react';
+import { Activity, GitBranch, Bot, Bookmark, AlertCircle, Server } from 'lucide-react';
 import type { Session, Group, Theme } from '../types';
 import { getStatusColor } from '../utils/theme';
 
@@ -193,32 +193,51 @@ export const SessionItem = memo(function SessionItem({
           </div>
         )}
 
-        {/* Remote Indicator - shown for SSH sessions */}
-        {showGitLocalBadge && session.sessionSshRemoteConfig?.enabled && (
-          <div
-            className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
-            style={{
-              backgroundColor: theme.colors.warning + '30',
-              color: theme.colors.warning
-            }}
-            title="Running on remote host via SSH"
-          >
-            REMOTE
-          </div>
-        )}
-
-        {/* Git vs Local Indicator */}
+        {/* Location Indicator Pills */}
         {showGitLocalBadge && (
-          <div
-            className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
-            style={{
-              backgroundColor: session.isGitRepo ? theme.colors.accent + '30' : theme.colors.textDim + '20',
-              color: session.isGitRepo ? theme.colors.accent : theme.colors.textDim
-            }}
-            title={session.isGitRepo ? 'Git repository' : 'Local directory (not a git repo)'}
-          >
-            {session.isGitRepo ? 'GIT' : 'LOCAL'}
-          </div>
+          session.isGitRepo ? (
+            /* Git repo: Show server icon pill (if remote) + GIT pill */
+            <>
+              {session.sessionSshRemoteConfig?.enabled && (
+                <div
+                  className="px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center"
+                  style={{
+                    backgroundColor: theme.colors.warning + '30',
+                    color: theme.colors.warning
+                  }}
+                  title="Running on remote host via SSH"
+                >
+                  <Server className="w-3 h-3" />
+                </div>
+              )}
+              <div
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+                style={{
+                  backgroundColor: theme.colors.accent + '30',
+                  color: theme.colors.accent
+                }}
+                title="Git repository"
+              >
+                GIT
+              </div>
+            </>
+          ) : (
+            /* Plain directory: Show REMOTE or LOCAL (not both) */
+            <div
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+              style={{
+                backgroundColor: session.sessionSshRemoteConfig?.enabled
+                  ? theme.colors.warning + '30'
+                  : theme.colors.textDim + '20',
+                color: session.sessionSshRemoteConfig?.enabled
+                  ? theme.colors.warning
+                  : theme.colors.textDim
+              }}
+              title={session.sessionSshRemoteConfig?.enabled ? 'Running on remote host via SSH' : 'Local directory (not a git repo)'}
+            >
+              {session.sessionSshRemoteConfig?.enabled ? 'REMOTE' : 'LOCAL'}
+            </div>
+          )
         )}
 
         {/* AUTO Mode Indicator */}
