@@ -342,7 +342,8 @@ export async function statRemote(
   // %Y = modification time as Unix timestamp (seconds)
   // Note: GNU stat vs BSD stat have different format specifiers
   // We try GNU format first (Linux), then BSD format (macOS)
-  const remoteCommand = `stat --printf='%s\\n%F\\n%Y' ${escapedPath} 2>/dev/null || stat -f '%z\\n%HT\\n%m' ${escapedPath}`;
+  // BSD stat requires $'...' ANSI-C quoting to interpret \n as newlines
+  const remoteCommand = `stat --printf='%s\\n%F\\n%Y' ${escapedPath} 2>/dev/null || stat -f $'%z\\n%HT\\n%m' ${escapedPath}`;
 
   const result = await execRemoteCommand(sshRemote, remoteCommand, deps);
 

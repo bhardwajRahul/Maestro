@@ -246,7 +246,7 @@ describe('useAutoRunImageHandling', () => {
         expect(result.current.attachmentPreviews.size).toBe(1);
       });
 
-      expect(window.maestro.fs.readFile).toHaveBeenCalledWith('/test/autorun/images/test.png');
+      expect(window.maestro.fs.readFile).toHaveBeenCalledWith('/test/autorun/images/test.png', undefined);
       expect(result.current.attachmentPreviews.get('images/test.png')).toBe('data:image/png;base64,preview123');
     });
 

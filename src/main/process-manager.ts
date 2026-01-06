@@ -443,23 +443,35 @@ export class ProcessManager extends EventEmitter {
         // For terminal sessions, pass minimal env with base system PATH.
         // Shell startup files (.zprofile, .zshrc) will prepend user paths (homebrew, go, etc.)
         // We need the base system paths or commands like sort, find, head won't work.
+        //
+        // EXCEPTION: On Windows, PowerShell/CMD don't have equivalent startup files that
+        // reliably set up user tools (npm, Python, Cargo, etc.), so we inherit the full
+        // parent environment to ensure user-installed tools are available.
+        // See: https://github.com/pedramamini/Maestro/issues/150
         let ptyEnv: NodeJS.ProcessEnv;
         if (isTerminal) {
-          // Platform-specific base PATH for terminal sessions
-          // On Unix, include detected Node version manager paths (nvm, fnm, volta, etc.)
-          const basePath = process.platform === 'win32'
-            ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32;${process.env.SystemRoot || 'C:\\Windows'};${process.env.ProgramFiles || 'C:\\Program Files'}\\Git\\cmd`
-            : buildUnixBasePath();
+          if (isWindows) {
+            // Windows: Inherit full parent environment since PowerShell/CMD profiles
+            // don't reliably set up user tools. Add terminal-specific overrides.
+            ptyEnv = {
+              ...process.env,
+              TERM: 'xterm-256color',
+            };
+          } else {
+            // Unix: Use minimal env - shell startup files handle PATH setup
+            // Include detected Node version manager paths (nvm, fnm, volta, etc.)
+            const basePath = buildUnixBasePath();
 
-          ptyEnv = {
-            HOME: process.env.HOME || process.env.USERPROFILE,
-            USER: process.env.USER || process.env.USERNAME,
-            SHELL: process.env.SHELL || process.env.COMSPEC,
-            TERM: 'xterm-256color',
-            LANG: process.env.LANG || 'en_US.UTF-8',
-            // Provide base system PATH - shell startup files will prepend user paths
-            PATH: basePath,
-          };
+            ptyEnv = {
+              HOME: process.env.HOME,
+              USER: process.env.USER,
+              SHELL: process.env.SHELL,
+              TERM: 'xterm-256color',
+              LANG: process.env.LANG || 'en_US.UTF-8',
+              // Provide base system PATH - shell startup files will prepend user paths
+              PATH: basePath,
+            };
+          }
 
           // Apply custom shell environment variables from user configuration
           if (shellEnvVars && Object.keys(shellEnvVars).length > 0) {
@@ -1586,30 +1598,32 @@ export class ProcessManager extends EventEmitter {
         wrappedCommand = command;
       }
 
-      // Platform-specific base PATH
-      // On Unix, include detected Node version manager paths (nvm, fnm, volta, etc.)
-      const basePath = isWindows
-        ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32;${process.env.SystemRoot || 'C:\\Windows'};${process.env.ProgramFiles || 'C:\\Program Files'}\\Git\\cmd`
-        : buildUnixBasePath();
+      // Build environment for command execution
+      // On Windows, inherit full parent environment since PowerShell/CMD don't have
+      // reliable startup files for user tools. On Unix, use minimal env since shell
+      // startup files handle PATH setup.
+      // See: https://github.com/pedramamini/Maestro/issues/150
+      let env: NodeJS.ProcessEnv;
 
-      // Pass minimal environment with a base PATH for essential system commands.
-      // Shell startup files will prepend user paths to this.
-      const env: NodeJS.ProcessEnv = {
-        HOME: process.env.HOME || process.env.USERPROFILE,
-        USER: process.env.USER || process.env.USERNAME,
-        SHELL: process.env.SHELL || process.env.COMSPEC,
-        TERM: 'xterm-256color',
-        LANG: process.env.LANG || 'en_US.UTF-8',
-        PATH: basePath,
-      };
-
-      // Windows-specific env vars
       if (isWindows) {
-        env.USERPROFILE = process.env.USERPROFILE;
-        env.APPDATA = process.env.APPDATA;
-        env.LOCALAPPDATA = process.env.LOCALAPPDATA;
-        env.SystemRoot = process.env.SystemRoot;
-        env.COMSPEC = process.env.COMSPEC;
+        // Windows: Inherit full parent environment, add terminal-specific overrides
+        env = {
+          ...process.env,
+          TERM: 'xterm-256color',
+        };
+      } else {
+        // Unix: Use minimal env - shell startup files handle PATH setup
+        // Include detected Node version manager paths (nvm, fnm, volta, etc.)
+        const basePath = buildUnixBasePath();
+
+        env = {
+          HOME: process.env.HOME,
+          USER: process.env.USER,
+          SHELL: process.env.SHELL,
+          TERM: 'xterm-256color',
+          LANG: process.env.LANG || 'en_US.UTF-8',
+          PATH: basePath,
+        };
       }
 
       // Apply custom shell environment variables from user configuration

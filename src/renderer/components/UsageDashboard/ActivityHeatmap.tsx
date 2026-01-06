@@ -419,7 +419,7 @@ function getIntensityColor(intensity: number, theme: Theme, colorBlindMode?: boo
 export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false }: ActivityHeatmapProps) {
   const [metricMode, setMetricMode] = useState<MetricMode>('count');
   const [hoveredCell, setHoveredCell] = useState<HourData | DayCell | TimeBlockCell | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [cellRect, setCellRect] = useState<DOMRect | null>(null);
 
   const useGitHubLayout = shouldUseSingleDayMode(timeRange);
   const use4HourBlockLayout = shouldUse4HourBlockMode(timeRange);
@@ -519,14 +519,11 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
   }, [dayDataMap, metricMode, timeRange, useGitHubLayout]);
 
   // Handle mouse events for tooltip (HourData for day/week, DayCell for month+)
-  // Track mouse position for tooltip placement at cursor
+  // Track cell element position for tooltip placement below the cell
   const handleMouseEnterHour = useCallback(
     (cell: HourData, event: React.MouseEvent<HTMLDivElement>) => {
       setHoveredCell(cell);
-      setTooltipPos({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      setCellRect(event.currentTarget.getBoundingClientRect());
     },
     []
   );
@@ -535,10 +532,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
     (cell: DayCell, event: React.MouseEvent<HTMLDivElement>) => {
       if (cell.isPlaceholder) return;
       setHoveredCell(cell);
-      setTooltipPos({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      setCellRect(event.currentTarget.getBoundingClientRect());
     },
     []
   );
@@ -547,30 +541,14 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
     (cell: TimeBlockCell, event: React.MouseEvent<HTMLDivElement>) => {
       if (cell.isPlaceholder) return;
       setHoveredCell(cell);
-      setTooltipPos({
-        x: event.clientX,
-        y: event.clientY,
-      });
+      setCellRect(event.currentTarget.getBoundingClientRect());
     },
     []
   );
 
-  // Update tooltip position as mouse moves within cells
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (hoveredCell) {
-        setTooltipPos({
-          x: event.clientX,
-          y: event.clientY,
-        });
-      }
-    },
-    [hoveredCell]
-  );
-
   const handleMouseLeave = useCallback(() => {
     setHoveredCell(null);
-    setTooltipPos(null);
+    setCellRect(null);
   }, []);
 
   // Day of week labels for GitHub layout (Sun-Sat)
@@ -645,7 +623,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* GitHub-style heatmap for month/year/all views */}
       {useGitHubLayout && gitHubGrid && (
-        <div className="flex gap-2" onMouseMove={handleMouseMove}>
+        <div className="flex gap-2">
           {/* Day of week labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 32, paddingTop: 20 }}>
             {dayOfWeekLabels.map((label, idx) => (
@@ -724,7 +702,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* 4-hour block heatmap for month view */}
       {use4HourBlockLayout && blockGrid && (
-        <div className="flex gap-2" onMouseMove={handleMouseMove}>
+        <div className="flex gap-2">
           {/* Time block labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 48, paddingTop: 18 }}>
             {TIME_BLOCK_LABELS.map((label, idx) => (
@@ -791,7 +769,7 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
 
       {/* Original hourly heatmap for day/week views */}
       {!useGitHubLayout && !use4HourBlockLayout && (
-        <div className="flex gap-2" onMouseMove={handleMouseMove}>
+        <div className="flex gap-2">
           {/* Hour labels (Y-axis) */}
           <div className="flex flex-col flex-shrink-0" style={{ width: 28, paddingTop: 18 }}>
             {hourLabels.map((label, idx) => (
@@ -890,46 +868,41 @@ export function ActivityHeatmap({ data, timeRange, theme, colorBlindMode = false
         </span>
       </div>
 
-      {/* Tooltip - positioned at mouse cursor with edge detection */}
-      {hoveredCell && tooltipPos && (() => {
+      {/* Tooltip - positioned below cell, centered, with edge detection */}
+      {hoveredCell && cellRect && (() => {
         const tooltipWidth = 220;
         const tooltipHeight = 56;
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const margin = 8; // Safety margin from viewport edges
-        const cursorOffset = 12; // Offset from cursor
+        const gapBelowCell = 4; // Gap between cell and tooltip
 
-        // Start by positioning to top-left of cursor
-        let left = tooltipPos.x - tooltipWidth - cursorOffset;
-        let top = tooltipPos.y - tooltipHeight - cursorOffset;
+        // Calculate cell center
+        const cellCenterX = cellRect.left + cellRect.width / 2;
 
-        // Check horizontal bounds
+        // Default: center tooltip below cell
+        let left = cellCenterX - tooltipWidth / 2;
+        let top = cellRect.bottom + gapBelowCell;
+
+        // Handle horizontal edge cases
         if (left < margin) {
-          // Would go off left edge, try right of cursor instead
-          left = tooltipPos.x + cursorOffset;
-        }
-        // After potentially flipping to right side, ensure we don't exceed right edge
-        if (left + tooltipWidth > viewportWidth - margin) {
-          left = viewportWidth - tooltipWidth - margin;
-        }
-        // Final safety: never go negative
-        if (left < margin) {
-          left = margin;
+          // Cell is near left edge - align tooltip to the right of center
+          left = cellRect.left;
+        } else if (left + tooltipWidth > viewportWidth - margin) {
+          // Cell is near right edge - align tooltip to the left of center
+          left = cellRect.right - tooltipWidth;
         }
 
-        // Check vertical bounds
-        if (top < margin) {
-          // Would go off top edge, try below cursor instead
-          top = tooltipPos.y + cursorOffset;
-        }
-        // After potentially flipping below, ensure we don't exceed bottom edge
+        // Final horizontal safety bounds
+        left = Math.max(margin, Math.min(left, viewportWidth - tooltipWidth - margin));
+
+        // Handle vertical edge case - if tooltip would go below viewport, show above cell
         if (top + tooltipHeight > viewportHeight - margin) {
-          top = viewportHeight - tooltipHeight - margin;
+          top = cellRect.top - tooltipHeight - gapBelowCell;
         }
-        // Final safety: never go negative
-        if (top < margin) {
-          top = margin;
-        }
+
+        // Final vertical safety bounds
+        top = Math.max(margin, Math.min(top, viewportHeight - tooltipHeight - margin));
 
         // Determine cell type for time display
         const isBlockCell = 'blockIndex' in hoveredCell;
