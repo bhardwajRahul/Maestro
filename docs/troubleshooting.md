@@ -138,5 +138,5 @@ For new projects, always clone to the Linux filesystem from the start.
 ## Getting Help
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/pedramamini/Maestro/issues)
-- **Discord**: [Join the community](https://discord.gg/SVSRy593)
+- **Discord**: [Join the community](https://discord.gg/Up2BeZFZxT)
 - **Documentation**: [Docs site](https://docs.runmaestro.ai), [CONTRIBUTING.md](https://github.com/pedramamini/Maestro/blob/main/CONTRIBUTING.md), and [ARCHITECTURE.md](https://github.com/pedramamini/Maestro/blob/main/ARCHITECTURE.md)

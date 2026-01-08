@@ -1,7 +1,7 @@
 # Maestro
 
 [![Made with Maestro](docs/assets/made-with-maestro.svg)](https://github.com/pedramamini/Maestro)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/SVSRy593)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/Up2BeZFZxT)
 [![User Docs](https://img.shields.io/badge/Docs-Usage%20%26%20Documentation-blue?logo=readthedocs&logoColor=white)](https://docs.runmaestro.ai/)
 
 > Maestro hones fractured attention into focused intent.
@@ -163,7 +163,7 @@ Full documentation and usage guide available at **[docs.runmaestro.ai](https://d
 
 ## Community
 
-- **Discord**: [Join Us](https://discord.gg/SVSRy593)
+- **Discord**: [Join Us](https://discord.gg/Up2BeZFZxT)
 - **GitHub Issues**: [Report bugs & request features](https://github.com/pedramamini/Maestro/issues)
 
 ## Contributing

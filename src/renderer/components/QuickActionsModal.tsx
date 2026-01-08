@@ -380,7 +380,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
     { id: 'about', label: 'About Maestro', action: () => { setAboutModalOpen(true); setQuickActionOpen(false); } },
     { id: 'website', label: 'Maestro Website', subtext: 'Open the Maestro website', action: () => { window.maestro.shell.openExternal('https://runmaestro.ai/'); setQuickActionOpen(false); } },
     { id: 'docs', label: 'Documentation and User Guide', subtext: 'Open the Maestro documentation', action: () => { window.maestro.shell.openExternal('https://docs.runmaestro.ai/'); setQuickActionOpen(false); } },
-    { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/SVSRy593'); setQuickActionOpen(false); } },
+    { id: 'discord', label: 'Join Discord', subtext: 'Join the Maestro community', action: () => { window.maestro.shell.openExternal('https://discord.gg/Up2BeZFZxT'); setQuickActionOpen(false); } },
     ...(setUpdateCheckModalOpen ? [{ id: 'updateCheck', label: 'Check for Updates', action: () => { setUpdateCheckModalOpen(true); setQuickActionOpen(false); } }] : []),
     { id: 'createDebugPackage', label: 'Create Debug Package', subtext: 'Generate a support bundle for bug reporting', action: () => {
       setQuickActionOpen(false);
