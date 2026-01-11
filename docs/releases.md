@@ -1,7 +1,6 @@
 ---
 title: Release Notes
 description: Version history and changelog for Maestro releases
-icon: scroll
 ---
 
 # Release Notes
@@ -16,21 +15,11 @@ Maestro can update itself automatically! This feature was introduced in **v0.8.7
 
 ## v0.14.x - Doc Graphs, SSH Agents, Inline Wizard
 
-**Latest: v0.14.3** | Released January 9, 2026
+**Latest: v0.14.5** | Released January 1, 1
 
 Changes in this point release include:
 
-- Added logic to prevent overlapping TTS notifications 💬
-- Bug fixes in history panel rendering 🐜
-- Improved markdown rendering of large tables ✨
-- Addressed #161 where local path was overriding remote path for SSH agents 📁
-- Fixed "Jump to Bottom" shortcut ⌨️
-- Added "Toggle Bookmark" shortcut (CTRL/CMD+SHIFT+B) ⌨️
-- Fixed leaderboard updating issue 🏆
-- Changes in the file tree are now reflected immediately 🌴
-- Fixed Windows auto-update issue 🪟
-- Added unique installation ID generated for better crash tracking 🆔
-- Gist publishing now shows previous URLs with copy button 📋
+-
 
 The major contributions to 0.14.x remain:
 
@@ -50,12 +39,16 @@ The major contributions to 0.14.x remain:
 - The tab menu has options to move the tab to the first or last position 🔀
 - [Maestro-Playbooks](https://github.com/pedramamini/Maestro-Playbooks) can now contain non-markdown assets 📙
 - Improved default shell detection 🐚
-
+- Added logic to prevent overlapping TTS notifications 💬
+- Added "Toggle Bookmark" shortcut (CTRL/CMD+SHIFT+B) ⌨️
+- Gist publishing now shows previous URLs with copy button 📋
 
 Thanks for the contributions: @t1mmen @aejfager @Crumbgrabber @whglaser @b3nw @deandebeer @shadown @breki @charles-dyfis-net
 
 ### Previous Releases in this Series
 
+- **v0.14.4** (January 11, 2026) - Doc Graphs, SSH Agents, Inline Wizard
+- **v0.14.3** (January 9, 2026) - Doc Graphs, SSH Agents, Inline Wizard
 - **v0.14.2** (January 7, 2026) - Doc Graphs, SSH Agents, Inline Wizard
 - **v0.14.1** (January 6, 2026) - Doc Graphs, SSH Agents, Inline Wizard
 - **v0.14.0** (January 2, 2026) - Document Graphs and Agents over SSH
