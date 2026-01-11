@@ -730,17 +730,17 @@ function SessionTooltipContent({
   );
 }
 
+// Pre-compiled emoji regex for better performance (compiled once at module load)
+// Matches common emoji patterns at the start of the string including:
+// - Basic emojis (😀, 🎉, etc.)
+// - Emojis with skin tone modifiers
+// - Flag emojis
+// - ZWJ sequences (👨‍👩‍👧, etc.)
+const LEADING_EMOJI_REGEX = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F?|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)+\s*/u;
+
 // Strip leading emojis from a string for alphabetical sorting
-// Matches common emoji patterns at the start of the string
 const stripLeadingEmojis = (str: string): string => {
-  // Match emojis at the start: emoji characters, variation selectors, ZWJ sequences, etc.
-  // This regex matches most common emoji patterns including:
-  // - Basic emojis (😀, 🎉, etc.)
-  // - Emojis with skin tone modifiers
-  // - Flag emojis
-  // - ZWJ sequences (👨‍👩‍👧, etc.)
-  const emojiRegex = /^(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F?|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)+\s*/gu;
-  return str.replace(emojiRegex, '').trim();
+  return str.replace(LEADING_EMOJI_REGEX, '').trim();
 };
 
 // Compare two session names, ignoring leading emojis for alphabetization
@@ -1335,92 +1335,108 @@ function SessionListInner(props: SessionListProps) {
     );
   };
 
-  // Filter sessions based on search query (searches session name AND AI tab names)
-  // Also filters out worktree children (they're rendered under their parents)
-  const filteredSessions = useMemo(() => {
-    if (!sessionFilter) {
-      return sessions.filter(s => !s.parentSessionId);
+  // Consolidated session categorization and sorting - computed in a single pass
+  // This replaces 12+ chained useMemo calls with one comprehensive computation
+  const sessionCategories = useMemo(() => {
+    // Step 1: Filter sessions based on search query
+    const query = sessionFilter?.toLowerCase() ?? '';
+    const filtered: Session[] = [];
+
+    for (const s of sessions) {
+      // Exclude worktree children from main list (they appear under parent)
+      if (s.parentSessionId) continue;
+
+      if (!query) {
+        filtered.push(s);
+      } else {
+        // Match session name
+        if (s.name.toLowerCase().includes(query)) {
+          filtered.push(s);
+          continue;
+        }
+        // Match any AI tab name
+        if (s.aiTabs?.some(tab => tab.name?.toLowerCase().includes(query))) {
+          filtered.push(s);
+          continue;
+        }
+        // Match worktree children branch names
+        const worktreeChildren = worktreeChildrenByParentId.get(s.id);
+        if (worktreeChildren?.some(child =>
+          child.worktreeBranch?.toLowerCase().includes(query) ||
+          child.name.toLowerCase().includes(query)
+        )) {
+          filtered.push(s);
+        }
+      }
     }
 
-    const query = sessionFilter.toLowerCase();
-    return sessions.filter(s => {
-      // Exclude worktree children from main list (they appear under parent)
-      if (s.parentSessionId) return false;
-      // Match session name
-      if (s.name.toLowerCase().includes(query)) return true;
-      // Match any AI tab name
-      if (s.aiTabs?.some(tab => tab.name?.toLowerCase().includes(query))) return true;
-      // Match worktree children branch names
-      const worktreeChildren = worktreeChildrenByParentId.get(s.id);
-      if (worktreeChildren?.some(child =>
-        child.worktreeBranch?.toLowerCase().includes(query) ||
-        child.name.toLowerCase().includes(query)
-      )) return true;
-      return false;
+    // Step 2: Categorize sessions in a single pass
+    const bookmarked: Session[] = [];
+    const ungrouped: Session[] = [];
+    const groupedMap = new Map<string, Session[]>();
+
+    for (const s of filtered) {
+      if (s.bookmarked) {
+        bookmarked.push(s);
+      }
+      if (s.groupId) {
+        const list = groupedMap.get(s.groupId);
+        if (list) {
+          list.push(s);
+        } else {
+          groupedMap.set(s.groupId, [s]);
+        }
+      } else {
+        ungrouped.push(s);
+      }
+    }
+
+    // Step 3: Sort each category once
+    const sortFn = (a: Session, b: Session) => compareSessionNames(a.name, b.name);
+
+    const sortedFiltered = [...filtered].sort(sortFn);
+    const sortedBookmarked = [...bookmarked].sort(sortFn);
+    const sortedBookmarkedParent = bookmarked.filter(s => !s.parentSessionId).sort(sortFn);
+    const sortedUngrouped = [...ungrouped].sort(sortFn);
+    const sortedUngroupedParent = ungrouped.filter(s => !s.parentSessionId).sort(sortFn);
+
+    // Sort sessions within each group
+    const sortedGrouped = new Map<string, Session[]>();
+    groupedMap.forEach((groupSessions, groupId) => {
+      sortedGrouped.set(groupId, [...groupSessions].sort(sortFn));
     });
+
+    return {
+      filtered,
+      bookmarked,
+      ungrouped,
+      groupedMap,
+      sortedFiltered,
+      sortedBookmarked,
+      sortedBookmarkedParent,
+      sortedUngrouped,
+      sortedUngroupedParent,
+      sortedGrouped,
+    };
   }, [sessionFilter, sessions, worktreeChildrenByParentId]);
 
-  const bookmarkedSessions = useMemo(
-    () => filteredSessions.filter(s => s.bookmarked),
-    [filteredSessions]
-  );
-  const bookmarkedParentSessions = useMemo(
-    () => bookmarkedSessions.filter(s => !s.parentSessionId),
-    [bookmarkedSessions]
-  );
-  const sortedBookmarkedSessions = useMemo(
-    () => [...bookmarkedSessions].sort((a, b) => compareSessionNames(a.name, b.name)),
-    [bookmarkedSessions]
-  );
-  const sortedBookmarkedParentSessions = useMemo(
-    () => [...bookmarkedParentSessions].sort((a, b) => compareSessionNames(a.name, b.name)),
-    [bookmarkedParentSessions]
-  );
-
-  const groupedSessionsById = useMemo(() => {
-    const map = new Map<string, Session[]>();
-    filteredSessions.forEach(session => {
-      if (!session.groupId) return;
-      const list = map.get(session.groupId);
-      if (list) {
-        list.push(session);
-      } else {
-        map.set(session.groupId, [session]);
-      }
-    });
-    return map;
-  }, [filteredSessions]);
-  const sortedGroupSessionsById = useMemo(() => {
-    const map = new Map<string, Session[]>();
-    groupedSessionsById.forEach((groupSessions, groupId) => {
-      map.set(groupId, [...groupSessions].sort((a, b) => compareSessionNames(a.name, b.name)));
-    });
-    return map;
-  }, [groupedSessionsById]);
+  // Destructure for backwards compatibility with existing code
+  const filteredSessions = sessionCategories.filtered;
+  const bookmarkedSessions = sessionCategories.bookmarked;
+  const bookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
+  const sortedBookmarkedSessions = sessionCategories.sortedBookmarked;
+  const sortedBookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
+  const groupedSessionsById = sessionCategories.groupedMap;
+  const sortedGroupSessionsById = sessionCategories.sortedGrouped;
+  const ungroupedSessions = sessionCategories.ungrouped;
+  const ungroupedParentSessions = sessionCategories.sortedUngroupedParent;
+  const sortedUngroupedSessions = sessionCategories.sortedUngrouped;
+  const sortedUngroupedParentSessions = sessionCategories.sortedUngroupedParent;
+  const sortedFilteredSessions = sessionCategories.sortedFiltered;
 
   const sortedGroups = useMemo(
     () => [...groups].sort((a, b) => compareSessionNames(a.name, b.name)),
     [groups]
-  );
-  const ungroupedSessions = useMemo(
-    () => filteredSessions.filter(s => !s.groupId),
-    [filteredSessions]
-  );
-  const ungroupedParentSessions = useMemo(
-    () => ungroupedSessions.filter(s => !s.parentSessionId),
-    [ungroupedSessions]
-  );
-  const sortedUngroupedSessions = useMemo(
-    () => [...ungroupedSessions].sort((a, b) => compareSessionNames(a.name, b.name)),
-    [ungroupedSessions]
-  );
-  const sortedUngroupedParentSessions = useMemo(
-    () => [...ungroupedParentSessions].sort((a, b) => compareSessionNames(a.name, b.name)),
-    [ungroupedParentSessions]
-  );
-  const sortedFilteredSessions = useMemo(
-    () => [...filteredSessions].sort((a, b) => compareSessionNames(a.name, b.name)),
-    [filteredSessions]
   );
 
   // When filter opens, apply filter mode preferences (or defaults on first open)

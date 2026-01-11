@@ -16,7 +16,7 @@ import { useTemplateAutocomplete, useAutoRunUndo, useAutoRunImageHandling, image
 import { TemplateAutocompleteDropdown } from './TemplateAutocompleteDropdown';
 import { generateAutoRunProseStyles, createMarkdownComponents } from '../utils/markdownConfig';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
-import { remarkFileLinks } from '../utils/remarkFileLinks';
+import { remarkFileLinks, buildFileTreeIndices } from '../utils/remarkFileLinks';
 
 interface AutoRunProps {
   theme: Theme;
@@ -1298,15 +1298,23 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
     onSelectDocument(pathWithoutExt);
   }, [onSelectDocument]);
 
+  // Memoize file tree indices to avoid O(n) traversal on every render
+  const fileTreeIndices = useMemo(() => {
+    if (fileTree.length > 0) {
+      return buildFileTreeIndices(fileTree);
+    }
+    return null;
+  }, [fileTree]);
+
   // Memoize remarkPlugins - include remarkFileLinks when we have file tree
   const remarkPlugins = useMemo(() => {
     const plugins: any[] = [remarkGfm];
     if (fileTree.length > 0) {
       // cwd is empty since we're at the root of the Auto Run folder
-      plugins.push([remarkFileLinks, { fileTree, cwd: '' }]);
+      plugins.push([remarkFileLinks, { indices: fileTreeIndices || undefined, cwd: '' }]);
     }
     return plugins;
-  }, [fileTree]);
+  }, [fileTree, fileTreeIndices]);
 
   // Base markdown components - stable unless theme, folderPath, or callbacks change
   // Separated from search highlighting to prevent rebuilds on every search state change

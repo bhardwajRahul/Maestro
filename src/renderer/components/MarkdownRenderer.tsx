@@ -7,7 +7,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Clipboard, Loader2, ImageOff } from 'lucide-react';
 import type { Theme } from '../types';
 import type { FileNode } from '../types/fileTree';
-import { remarkFileLinks } from '../utils/remarkFileLinks';
+import { remarkFileLinks, buildFileTreeIndices } from '../utils/remarkFileLinks';
 import remarkFrontmatter from 'remark-frontmatter';
 import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
 
@@ -244,6 +244,15 @@ interface MarkdownRendererProps {
  * This component assumes those styles are already present in a parent container.
  */
 export const MarkdownRenderer = memo(({ content, theme, onCopy, className = '', fileTree, cwd, projectRoot, onFileClick, allowRawHtml = false, sshRemoteId }: MarkdownRendererProps) => {
+  // Memoize file tree indices to avoid O(n) traversal on every render
+  // Only rebuild when fileTree reference changes
+  const fileTreeIndices = useMemo(() => {
+    if (fileTree && fileTree.length > 0) {
+      return buildFileTreeIndices(fileTree);
+    }
+    return null;
+  }, [fileTree]);
+
   // Memoize remark plugins to avoid recreating on every render
   const remarkPlugins = useMemo(() => {
     const plugins: any[] = [
@@ -254,10 +263,10 @@ export const MarkdownRenderer = memo(({ content, theme, onCopy, className = '', 
     // Add remarkFileLinks if we have file tree for relative paths,
     // OR if we have projectRoot for absolute paths (even with empty file tree)
     if ((fileTree && fileTree.length > 0 && cwd !== undefined) || projectRoot) {
-      plugins.push([remarkFileLinks, { fileTree: fileTree || [], cwd: cwd || '', projectRoot }]);
+      plugins.push([remarkFileLinks, { indices: fileTreeIndices || undefined, cwd: cwd || '', projectRoot }]);
     }
     return plugins;
-  }, [fileTree, cwd, projectRoot]);
+  }, [fileTree, fileTreeIndices, cwd, projectRoot]);
 
   return (
     <div

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, memo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Star, Copy, Edit2, Mail, Pencil, Search, GitMerge, ArrowRightCircle, Minimize2, Download, Clipboard, Share2, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import type { AITab, Theme } from '../types';
@@ -104,6 +104,8 @@ interface TabProps {
  * - Claude UUID: "abc123-def456-ghi789" → "ABC123" (first octet)
  * - OpenCode: "SES_4BCDFE8C5FFE4KC1UV9NSMYEDB" → "SES_4BCD" (prefix + 4 chars)
  * - Codex: "thread_abc123..." → "THR_ABC1" (prefix + 4 chars)
+ *
+ * Memoized per-tab via useMemo in the Tab component to avoid recalculation on every render.
  */
 function getTabDisplayName(tab: AITab): string {
   if (tab.name) {
@@ -139,8 +141,10 @@ function getTabDisplayName(tab: AITab): string {
  * Individual tab component styled like browser tabs (Safari/Chrome).
  * All tabs have visible borders; active tab connects to content area.
  * Includes hover overlay with session info and actions.
+ *
+ * Wrapped with React.memo to prevent unnecessary re-renders when sibling tabs change.
  */
-function Tab({
+const Tab = memo(function Tab({
   tab,
   isActive,
   theme,
@@ -340,7 +344,31 @@ function Tab({
     setOverlayOpen(false);
   };
 
-  const displayName = getTabDisplayName(tab);
+  // Memoize display name to avoid recalculation on every render
+  const displayName = useMemo(() => getTabDisplayName(tab), [tab.name, tab.agentSessionId]);
+
+  // Memoize tab styles to avoid creating new object references on every render
+  const tabStyle = useMemo(() => ({
+    // All tabs have rounded top corners
+    borderTopLeftRadius: '6px',
+    borderTopRightRadius: '6px',
+    // Active tab: bright background matching content area
+    // Inactive tabs: transparent with subtle hover
+    backgroundColor: isActive
+      ? theme.colors.bgMain
+      : (isHovered ? 'rgba(255, 255, 255, 0.08)' : 'transparent'),
+    // Active tab has visible borders, inactive tabs have no borders (cleaner look)
+    borderTop: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
+    borderLeft: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
+    borderRight: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
+    // Active tab has no bottom border (connects to content)
+    borderBottom: isActive ? `1px solid ${theme.colors.bgMain}` : '1px solid transparent',
+    // Active tab sits on top of the tab bar's bottom border
+    marginBottom: isActive ? '-1px' : '0',
+    // Slight z-index for active tab to cover border properly
+    zIndex: isActive ? 1 : 0,
+    '--tw-ring-color': isDragOver ? theme.colors.accent : 'transparent'
+  } as React.CSSProperties), [isActive, isHovered, isDragOver, theme.colors.bgMain, theme.colors.border, theme.colors.accent]);
 
   // Browser-style tab: all tabs have borders, active tab "connects" to content
   // Active tab is bright and obvious, inactive tabs are more muted
@@ -354,27 +382,7 @@ function Tab({
         ${isDragging ? 'opacity-50' : ''}
         ${isDragOver ? 'ring-2 ring-inset' : ''}
       `}
-      style={{
-        // All tabs have rounded top corners
-        borderTopLeftRadius: '6px',
-        borderTopRightRadius: '6px',
-        // Active tab: bright background matching content area
-        // Inactive tabs: transparent with subtle hover
-        backgroundColor: isActive
-          ? theme.colors.bgMain
-          : (isHovered ? 'rgba(255, 255, 255, 0.08)' : 'transparent'),
-        // Active tab has visible borders, inactive tabs have no borders (cleaner look)
-        borderTop: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
-        borderLeft: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
-        borderRight: isActive ? `1px solid ${theme.colors.border}` : '1px solid transparent',
-        // Active tab has no bottom border (connects to content)
-        borderBottom: isActive ? `1px solid ${theme.colors.bgMain}` : '1px solid transparent',
-        // Active tab sits on top of the tab bar's bottom border
-        marginBottom: isActive ? '-1px' : '0',
-        // Slight z-index for active tab to cover border properly
-        zIndex: isActive ? 1 : 0,
-        '--tw-ring-color': isDragOver ? theme.colors.accent : 'transparent'
-      } as React.CSSProperties}
+      style={tabStyle}
       onClick={onSelect}
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
@@ -744,7 +752,7 @@ function Tab({
       )}
     </div>
   );
-}
+});
 
 /**
  * TabBar component for displaying AI session tabs.

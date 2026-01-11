@@ -595,6 +595,94 @@ Each agent declares capabilities that control UI feature availability. See `src/
 
 For detailed agent integration guide, see [AGENT_SUPPORT.md](AGENT_SUPPORT.md).
 
+## Performance Best Practices
+
+### React Component Optimization
+
+**Use `React.memo` for list item components:**
+```typescript
+// Components rendered in arrays (tabs, sessions, list items) should be memoized
+const Tab = memo(function Tab({ tab, isActive, ... }: TabProps) {
+  // Memoize computed values that depend on props
+  const displayName = useMemo(() => getTabDisplayName(tab), [tab.name, tab.agentSessionId]);
+
+  // Memoize style objects to prevent new references on every render
+  const tabStyle = useMemo(() => ({
+    borderRadius: '6px',
+    backgroundColor: isActive ? theme.colors.accent : 'transparent',
+  } as React.CSSProperties), [isActive, theme.colors.accent]);
+
+  return <div style={tabStyle}>{displayName}</div>;
+});
+```
+
+**Consolidate chained `useMemo` calls:**
+```typescript
+// BAD: Multiple dependent useMemo calls create cascade re-computations
+const filtered = useMemo(() => sessions.filter(...), [sessions]);
+const sorted = useMemo(() => filtered.sort(...), [filtered]);
+const grouped = useMemo(() => groupBy(sorted, ...), [sorted]);
+
+// GOOD: Single useMemo with all transformations
+const { filtered, sorted, grouped } = useMemo(() => {
+  const filtered = sessions.filter(...);
+  const sorted = filtered.sort(...);
+  const grouped = groupBy(sorted, ...);
+  return { filtered, sorted, grouped };
+}, [sessions]);
+```
+
+**Pre-compile regex patterns at module level:**
+```typescript
+// BAD: Regex compiled on every render
+const Component = () => {
+  const cleaned = text.replace(/^(\p{Emoji})+\s*/u, '');
+};
+
+// GOOD: Compile once at module load
+const LEADING_EMOJI_REGEX = /^(\p{Emoji})+\s*/u;
+const Component = () => {
+  const cleaned = text.replace(LEADING_EMOJI_REGEX, '');
+};
+```
+
+### Data Structure Pre-computation
+
+**Build indices once, reuse in renders:**
+```typescript
+// BAD: O(n) tree traversal on every markdown render
+const result = remarkFileLinks({ fileTree, cwd });
+
+// GOOD: Build index once when fileTree changes, pass to renders
+const indices = useMemo(() => buildFileTreeIndices(fileTree), [fileTree]);
+const result = remarkFileLinks({ indices, cwd });
+```
+
+### Main Process (Node.js)
+
+**Cache expensive lookups:**
+```typescript
+// BAD: Synchronous file check on every shell spawn
+fs.accessSync(shellPath, fs.constants.X_OK);
+
+// GOOD: Cache resolved paths
+const shellPathCache = new Map<string, string>();
+const cached = shellPathCache.get(shell);
+if (cached) return cached;
+// ... resolve and cache
+shellPathCache.set(shell, resolved);
+```
+
+**Use async file operations:**
+```typescript
+// BAD: Blocking the main process
+fs.unlinkSync(tempFile);
+
+// GOOD: Non-blocking cleanup
+import * as fsPromises from 'fs/promises';
+fsPromises.unlink(tempFile).catch(() => {});
+```
+
 ## Onboarding Wizard
 
 The wizard (`src/renderer/components/Wizard/`) guides new users through first-run setup, creating AI sessions with Auto Run documents.

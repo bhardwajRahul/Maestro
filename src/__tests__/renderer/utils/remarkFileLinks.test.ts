@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkStringify from 'remark-stringify';
-import { remarkFileLinks } from '../../../renderer/utils/remarkFileLinks';
+import { remarkFileLinks, buildFileTreeIndices } from '../../../renderer/utils/remarkFileLinks';
 import type { FileNode } from '../../../renderer/types/fileTree';
 
 // Helper to process markdown and return the result
@@ -566,6 +566,96 @@ describe('remarkFileLinks', () => {
         '/Users/pedram/Project'
       );
       expect(result).toContain('![Pasted image 20250519123910.png]');
+    });
+  });
+
+  describe('buildFileTreeIndices', () => {
+    it('builds allPaths Set containing all file paths', () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      expect(indices.allPaths).toBeInstanceOf(Set);
+      expect(indices.allPaths.has('README.md')).toBe(true);
+      expect(indices.allPaths.has('config.json')).toBe(true);
+      expect(indices.allPaths.has('OPSWAT/README.md')).toBe(true);
+      expect(indices.allPaths.has('OPSWAT/Meetings/OP-0088.md')).toBe(true);
+      expect(indices.allPaths.has('Notes/TODO.md')).toBe(true);
+    });
+
+    it('builds filenameIndex Map for quick filename lookup', () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      expect(indices.filenameIndex).toBeInstanceOf(Map);
+      // README.md exists in multiple locations
+      const readmePaths = indices.filenameIndex.get('README.md');
+      expect(readmePaths).toBeDefined();
+      expect(readmePaths).toContain('README.md');
+      expect(readmePaths).toContain('OPSWAT/README.md');
+    });
+
+    it('handles duplicate filenames correctly', () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      // Meeting Notes.md exists in both Notes and Archive
+      const meetingNotesPaths = indices.filenameIndex.get('Meeting Notes.md');
+      expect(meetingNotesPaths).toBeDefined();
+      expect(meetingNotesPaths?.length).toBe(2);
+      expect(meetingNotesPaths).toContain('Notes/Meeting Notes.md');
+      expect(meetingNotesPaths).toContain('Archive/Meeting Notes.md');
+    });
+
+    it('returns empty indices for empty file tree', () => {
+      const indices = buildFileTreeIndices([]);
+
+      expect(indices.allPaths.size).toBe(0);
+      expect(indices.filenameIndex.size).toBe(0);
+    });
+
+    it('does not include folder paths, only files', () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      // Folders should not be in the paths
+      expect(indices.allPaths.has('OPSWAT')).toBe(false);
+      expect(indices.allPaths.has('Notes')).toBe(false);
+      expect(indices.allPaths.has('attachments')).toBe(false);
+    });
+  });
+
+  describe('remarkFileLinks with pre-built indices', () => {
+    it('uses pre-built indices when provided', async () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      const result = await unified()
+        .use(remarkParse)
+        .use(remarkFileLinks, { indices, cwd: '' })
+        .use(remarkStringify)
+        .process('See [[TODO]] for tasks.');
+
+      expect(String(result)).toContain('[TODO](maestro-file://Notes/TODO.md)');
+    });
+
+    it('works with pre-built indices for path-style references', async () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      const result = await unified()
+        .use(remarkParse)
+        .use(remarkFileLinks, { indices, cwd: '' })
+        .use(remarkStringify)
+        .process('Check OPSWAT/Meetings/OP-0088.md for details.');
+
+      expect(String(result)).toContain('[OPSWAT/Meetings/OP-0088.md](maestro-file://OPSWAT/Meetings/OP-0088.md)');
+    });
+
+    it('handles cwd-based proximity with pre-built indices', async () => {
+      const indices = buildFileTreeIndices(sampleFileTree);
+
+      const result = await unified()
+        .use(remarkParse)
+        .use(remarkFileLinks, { indices, cwd: 'Archive' })
+        .use(remarkStringify)
+        .process('See [[Meeting Notes]] for details.');
+
+      // Should pick Archive/Meeting Notes.md based on cwd proximity
+      expect(String(result)).toContain('[Meeting Notes](<maestro-file://Archive/Meeting Notes.md>)');
     });
   });
 });

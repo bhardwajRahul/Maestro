@@ -18,13 +18,38 @@ import type { Root, Text, Link, Image } from 'mdast';
 import type { FileNode } from '../types/fileTree';
 import { buildFileIndex as buildFileIndexShared, type FilePathEntry } from '../../shared/treeUtils';
 
+/**
+ * Pre-built indices for file tree lookups.
+ * Build these once with buildFileTreeIndices() and reuse across renders.
+ */
+export interface FileTreeIndices {
+  /** Set of all relative paths in the tree */
+  allPaths: Set<string>;
+  /** Map from filename to array of paths containing that filename */
+  filenameIndex: Map<string, string[]>;
+}
+
 export interface RemarkFileLinksOptions {
-  /** The file tree to validate paths against */
-  fileTree: FileNode[];
+  /** The file tree to validate paths against (used if indices not provided) */
+  fileTree?: FileNode[];
+  /** Pre-built indices for O(1) lookups - pass this to avoid rebuilding on every render */
+  indices?: FileTreeIndices;
   /** Current working directory for proximity-based matching (relative path) */
   cwd: string;
   /** Project root absolute path - used to convert absolute paths to relative */
   projectRoot?: string;
+}
+
+/**
+ * Build file tree indices for use with remarkFileLinks.
+ * Call this once when fileTree changes and pass the result to remarkFileLinks.
+ * This avoids O(n) tree traversal on every markdown render.
+ */
+export function buildFileTreeIndices(fileTree: FileNode[]): FileTreeIndices {
+  const fileEntries = buildFileIndex(fileTree);
+  const allPaths = new Set(fileEntries.map(e => e.relativePath));
+  const filenameIndex = buildFilenameIndex(fileEntries);
+  return { allPaths, filenameIndex };
 }
 
 /**
@@ -197,12 +222,26 @@ const ABSOLUTE_PATH_PATTERN = /\/(?:[^/\n]+\/)+[^/\n]+\.(?:md|txt|json|yaml|yml|
  * The remark plugin
  */
 export function remarkFileLinks(options: RemarkFileLinksOptions) {
-  const { fileTree, cwd, projectRoot } = options;
+  const { fileTree, indices, cwd, projectRoot } = options;
 
-  // Build indices
-  const fileEntries = buildFileIndex(fileTree);
-  const allPaths = new Set(fileEntries.map(e => e.relativePath));
-  const filenameIndex = buildFilenameIndex(fileEntries);
+  // Use pre-built indices if provided, otherwise build them (fallback for backwards compatibility)
+  let allPaths: Set<string>;
+  let filenameIndex: Map<string, string[]>;
+
+  if (indices) {
+    // Use pre-built indices - O(1) access
+    allPaths = indices.allPaths;
+    filenameIndex = indices.filenameIndex;
+  } else if (fileTree) {
+    // Fallback: build indices from fileTree - O(n) traversal
+    const fileEntries = buildFileIndex(fileTree);
+    allPaths = new Set(fileEntries.map(e => e.relativePath));
+    filenameIndex = buildFilenameIndex(fileEntries);
+  } else {
+    // No file tree data provided - use empty indices
+    allPaths = new Set();
+    filenameIndex = new Map();
+  }
 
   // Helper to convert absolute path to relative path
   const toRelativePath = (absPath: string): string | null => {

@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as pty from 'node-pty';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { stripControlSequences, stripAllAnsiCodes } from './utils/terminalFilter';
@@ -14,6 +15,9 @@ import { detectNodeVersionManagerBinPaths, expandTilde } from '../shared/pathUti
 import { getAgentCapabilities } from './agent-capabilities';
 import { shellEscapeForDoubleQuotes } from './utils/shell-escape';
 import { getExpandedEnv, resolveSshPath } from './utils/cliDetection';
+
+// Cache for shell path resolution to avoid repeated synchronous file system checks
+const shellPathCache = new Map<string, string>();
 
 // Re-export parser types for consumers
 export type { ParsedEvent, AgentOutputParser } from './parsers';
@@ -290,18 +294,22 @@ function saveImageToTempFile(dataUrl: string, index: number): string | null {
 }
 
 /**
- * Clean up temp image files.
+ * Clean up temp image files asynchronously.
+ * Fire-and-forget to avoid blocking the main thread.
  */
 function cleanupTempFiles(files: string[]): void {
+  // Use async operations to avoid blocking the main thread
   for (const file of files) {
-    try {
-      if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
+    fsPromises.unlink(file)
+      .then(() => {
         logger.debug('[ProcessManager] Cleaned up temp file', 'ProcessManager', { file });
-      }
-    } catch (error) {
-      logger.warn('[ProcessManager] Failed to clean up temp file', 'ProcessManager', { file, error: String(error) });
-    }
+      })
+      .catch((error) => {
+        // ENOENT is fine - file already deleted
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          logger.warn('[ProcessManager] Failed to clean up temp file', 'ProcessManager', { file, error: String(error) });
+        }
+      });
   }
 }
 
@@ -1653,14 +1661,21 @@ export class ProcessManager extends EventEmitter {
         }
       } else if (!shell.includes('/')) {
         // Unix: resolve shell to full path - Electron's internal PATH may not include /bin
-        const commonPaths = ['/bin/', '/usr/bin/', '/usr/local/bin/', '/opt/homebrew/bin/'];
-        for (const prefix of commonPaths) {
-          try {
-            fs.accessSync(prefix + shell, fs.constants.X_OK);
-            shellPath = prefix + shell;
-            break;
-          } catch {
-            // Try next path
+        // Use cache to avoid repeated synchronous file system checks
+        const cachedPath = shellPathCache.get(shell);
+        if (cachedPath) {
+          shellPath = cachedPath;
+        } else {
+          const commonPaths = ['/bin/', '/usr/bin/', '/usr/local/bin/', '/opt/homebrew/bin/'];
+          for (const prefix of commonPaths) {
+            try {
+              fs.accessSync(prefix + shell, fs.constants.X_OK);
+              shellPath = prefix + shell;
+              shellPathCache.set(shell, shellPath); // Cache for future calls
+              break;
+            } catch {
+              // Try next path
+            }
           }
         }
       }

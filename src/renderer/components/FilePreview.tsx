@@ -13,7 +13,7 @@ import { Modal, ModalFooter } from './ui/Modal';
 import { MermaidRenderer } from './MermaidRenderer';
 import { getEncoder, formatTokenCount } from '../utils/tokenCounter';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
-import { remarkFileLinks } from '../utils/remarkFileLinks';
+import { remarkFileLinks, buildFileTreeIndices } from '../utils/remarkFileLinks';
 import remarkFrontmatter from 'remark-frontmatter';
 import { remarkFrontmatterTable } from '../utils/remarkFrontmatterTable';
 import type { FileNode } from '../types/fileTree';
@@ -474,6 +474,14 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
     return counts;
   }, [isMarkdown, file?.content]);
 
+  // Memoize file tree indices to avoid O(n) traversal on every render
+  const fileTreeIndices = useMemo(() => {
+    if (fileTree && fileTree.length > 0) {
+      return buildFileTreeIndices(fileTree);
+    }
+    return null;
+  }, [fileTree]);
+
   // Memoize remarkPlugins to prevent infinite render loops
   // Creating new arrays/objects on each render causes ReactMarkdown to re-render children
   const remarkPlugins = useMemo(() => [
@@ -482,9 +490,9 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
     remarkFrontmatterTable,
     remarkHighlight,
     ...(fileTree && fileTree.length > 0 && cwd !== undefined
-      ? [[remarkFileLinks, { fileTree, cwd }] as any]
+      ? [[remarkFileLinks, { indices: fileTreeIndices || undefined, cwd }] as any]
       : [])
-  ], [fileTree, cwd]);
+  ], [fileTree, fileTreeIndices, cwd]);
 
   // Memoize rehypePlugins array to prevent unnecessary re-renders
   const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSlug], []);
