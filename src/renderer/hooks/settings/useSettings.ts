@@ -300,6 +300,12 @@ export interface UseSettingsReturn {
   // Power management settings
   preventSleepEnabled: boolean;
   setPreventSleepEnabled: (value: boolean) => Promise<void>;
+
+  // Rendering settings
+  disableGpuAcceleration: boolean;
+  setDisableGpuAcceleration: (value: boolean) => void;
+  disableConfetti: boolean;
+  setDisableConfetti: (value: boolean) => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -422,6 +428,10 @@ export function useSettings(): UseSettingsReturn {
 
   // Power management settings
   const [preventSleepEnabled, setPreventSleepEnabledState] = useState(false); // Default: disabled
+
+  // Rendering settings
+  const [disableGpuAcceleration, setDisableGpuAccelerationState] = useState(false); // Default: disabled (GPU enabled)
+  const [disableConfetti, setDisableConfettiState] = useState(false); // Default: disabled (confetti enabled)
 
   // Wrapper functions that persist to electron-store
   // PERF: All wrapped in useCallback to prevent re-renders
@@ -1166,6 +1176,18 @@ export function useSettings(): UseSettingsReturn {
     await window.maestro.power.setEnabled(value);
   }, []);
 
+  // GPU acceleration disabled (requires app restart to take effect)
+  const setDisableGpuAcceleration = useCallback((value: boolean) => {
+    setDisableGpuAccelerationState(value);
+    window.maestro.settings.set('disableGpuAcceleration', value);
+  }, []);
+
+  // Confetti animations disabled
+  const setDisableConfetti = useCallback((value: boolean) => {
+    setDisableConfettiState(value);
+    window.maestro.settings.set('disableConfetti', value);
+  }, []);
+
   // Load settings from electron-store on mount
   // PERF: Use batch loading to reduce IPC calls from ~60 to 3
   useEffect(() => {
@@ -1233,6 +1255,8 @@ export function useSettings(): UseSettingsReturn {
       const savedStatsCollectionEnabled = allSettings['statsCollectionEnabled'];
       const savedDefaultStatsTimeRange = allSettings['defaultStatsTimeRange'];
       const savedPreventSleepEnabled = allSettings['preventSleepEnabled'];
+      const savedDisableGpuAcceleration = allSettings['disableGpuAcceleration'];
+      const savedDisableConfetti = allSettings['disableConfetti'];
 
       if (savedEnterToSendAI !== undefined) setEnterToSendAIState(savedEnterToSendAI as boolean);
       if (savedEnterToSendTerminal !== undefined) setEnterToSendTerminalState(savedEnterToSendTerminal as boolean);
@@ -1490,6 +1514,15 @@ export function useSettings(): UseSettingsReturn {
         setPreventSleepEnabledState(savedPreventSleepEnabled as boolean);
       }
 
+      // Rendering settings
+      // Note: GPU setting is read by the main process before app.ready, so changes require restart.
+      if (savedDisableGpuAcceleration !== undefined) {
+        setDisableGpuAccelerationState(savedDisableGpuAcceleration as boolean);
+      }
+      if (savedDisableConfetti !== undefined) {
+        setDisableConfettiState(savedDisableConfetti as boolean);
+      }
+
       } catch (error) {
         console.error('[Settings] Failed to load settings:', error);
       } finally {
@@ -1640,6 +1673,10 @@ export function useSettings(): UseSettingsReturn {
     setDefaultStatsTimeRange,
     preventSleepEnabled,
     setPreventSleepEnabled,
+    disableGpuAcceleration,
+    setDisableGpuAcceleration,
+    disableConfetti,
+    setDisableConfetti,
   }), [
     // State values
     settingsLoaded,
@@ -1771,5 +1808,9 @@ export function useSettings(): UseSettingsReturn {
     setDefaultStatsTimeRange,
     preventSleepEnabled,
     setPreventSleepEnabled,
+    disableGpuAcceleration,
+    setDisableGpuAcceleration,
+    disableConfetti,
+    setDisableConfetti,
   ]);
 }

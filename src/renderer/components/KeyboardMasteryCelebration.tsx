@@ -20,6 +20,8 @@ interface KeyboardMasteryCelebrationProps {
   level: number; // 0-4 (Beginner, Student, Performer, Virtuoso, Maestro)
   onClose: () => void;
   shortcuts?: Record<string, Shortcut>;
+  /** Whether confetti animations are disabled by user preference */
+  disableConfetti?: boolean;
 }
 
 // Music-themed colors
@@ -61,6 +63,7 @@ export function KeyboardMasteryCelebration({
   level,
   onClose,
   shortcuts,
+  disableConfetti = false,
 }: KeyboardMasteryCelebrationProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -89,6 +92,9 @@ export function KeyboardMasteryCelebration({
 
   // Fire confetti burst - returns timeout ID for cleanup
   const fireConfetti = useCallback(() => {
+    // Skip if disabled by user preference
+    if (disableConfetti) return;
+
     // Check for reduced motion preference
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return;
@@ -127,7 +133,7 @@ export function KeyboardMasteryCelebration({
       }, 300);
       timeoutsRef.current.push(burstTimeout);
     }
-  }, [level, isMaestro]);
+  }, [level, isMaestro, disableConfetti]);
 
   // Fire confetti on mount with cleanup
   useEffect(() => {

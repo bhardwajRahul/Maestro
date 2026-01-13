@@ -119,6 +119,14 @@ describe('useSettings', () => {
       expect(result.current.logViewerSelectedLevels).toEqual(['debug', 'info', 'warn', 'error', 'toast']);
     });
 
+    it('should have correct default values for rendering settings', async () => {
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      expect(result.current.disableGpuAcceleration).toBe(false);
+      expect(result.current.disableConfetti).toBe(false);
+    });
+
     it('should have default shortcuts', async () => {
       const { result } = renderHook(() => useSettings());
       await waitForSettingsLoaded(result);
@@ -348,6 +356,19 @@ describe('useSettings', () => {
 
       expect(result.current.logLevel).toBe('debug');
       expect(result.current.maxLogBuffer).toBe(10000);
+    });
+
+    it('should load rendering settings from saved values', async () => {
+      vi.mocked(window.maestro.settings.getAll).mockResolvedValue({
+        disableGpuAcceleration: true,
+        disableConfetti: true,
+      });
+
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      expect(result.current.disableGpuAcceleration).toBe(true);
+      expect(result.current.disableConfetti).toBe(true);
     });
   });
 
@@ -678,6 +699,32 @@ describe('useSettings', () => {
 
       expect(result.current.customAICommands).toEqual(newCommands);
       expect(window.maestro.settings.set).toHaveBeenCalledWith('customAICommands', newCommands);
+    });
+  });
+
+  describe('setter functions - rendering settings', () => {
+    it('should update disableGpuAcceleration and persist to settings', async () => {
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      act(() => {
+        result.current.setDisableGpuAcceleration(true);
+      });
+
+      expect(result.current.disableGpuAcceleration).toBe(true);
+      expect(window.maestro.settings.set).toHaveBeenCalledWith('disableGpuAcceleration', true);
+    });
+
+    it('should update disableConfetti and persist to settings', async () => {
+      const { result } = renderHook(() => useSettings());
+      await waitForSettingsLoaded(result);
+
+      act(() => {
+        result.current.setDisableConfetti(true);
+      });
+
+      expect(result.current.disableConfetti).toBe(true);
+      expect(window.maestro.settings.set).toHaveBeenCalledWith('disableConfetti', true);
     });
   });
 

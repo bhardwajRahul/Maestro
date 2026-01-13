@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database, Server, Battery } from 'lucide-react';
+import { X, Key, Moon, Sun, Keyboard, Check, Terminal, Bell, Cpu, Settings, Palette, Sparkles, History, Download, Bug, Cloud, FolderSync, RotateCcw, Folder, ChevronDown, Plus, Trash2, Brain, AlertTriangle, FlaskConical, Database, Server, Battery, Monitor, PartyPopper } from 'lucide-react';
 import { useSettings } from '../hooks';
 import type { Theme, ThemeColors, ThemeId, Shortcut, ShellInfo, CustomAICommand, LLMProvider } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
@@ -246,6 +246,11 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
     // Power management settings
     preventSleepEnabled,
     setPreventSleepEnabled,
+    // Rendering settings
+    disableGpuAcceleration,
+    setDisableGpuAcceleration,
+    disableConfetti,
+    setDisableConfetti,
   } = useSettings();
 
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'shortcuts' | 'theme' | 'notifications' | 'aicommands' | 'ssh'>('general');
@@ -1234,6 +1239,102 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
                       Note: May have limited support on some Linux desktop environments.
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Rendering Options */}
+              <div>
+                <label className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
+                  <Monitor className="w-3 h-3" />
+                  Rendering Options
+                </label>
+                <div
+                  className="p-3 rounded border space-y-3"
+                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
+                >
+                  {/* GPU Acceleration Toggle */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setDisableGpuAcceleration(!disableGpuAcceleration)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setDisableGpuAcceleration(!disableGpuAcceleration);
+                      }
+                    }}
+                  >
+                    <div className="flex-1 pr-3">
+                      <div className="font-medium" style={{ color: theme.colors.textMain }}>
+                        Disable GPU acceleration
+                      </div>
+                      <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                        Use software rendering instead of GPU. Requires restart to take effect.
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDisableGpuAcceleration(!disableGpuAcceleration);
+                      }}
+                      className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                      style={{
+                        backgroundColor: disableGpuAcceleration ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={disableGpuAcceleration}
+                    >
+                      <span
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          disableGpuAcceleration ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Confetti Toggle */}
+                  <div
+                    className="flex items-center justify-between cursor-pointer pt-3 border-t"
+                    style={{ borderColor: theme.colors.border }}
+                    onClick={() => setDisableConfetti(!disableConfetti)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setDisableConfetti(!disableConfetti);
+                      }
+                    }}
+                  >
+                    <div className="flex-1 pr-3">
+                      <div className="font-medium flex items-center gap-2" style={{ color: theme.colors.textMain }}>
+                        <PartyPopper className="w-4 h-4" />
+                        Disable confetti animations
+                      </div>
+                      <div className="text-xs opacity-50 mt-0.5" style={{ color: theme.colors.textDim }}>
+                        Skip celebratory confetti effects on achievements and milestones
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDisableConfetti(!disableConfetti);
+                      }}
+                      className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                      style={{
+                        backgroundColor: disableConfetti ? theme.colors.accent : theme.colors.bgActivity,
+                      }}
+                      role="switch"
+                      aria-checked={disableConfetti}
+                    >
+                      <span
+                        className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          disableConfetti ? 'translate-x-5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
 

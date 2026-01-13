@@ -112,11 +112,19 @@ console.log(`[STARTUP] productionDataPath (agent configs): ${productionDataPath}
 // Initialize Sentry for crash reporting
 // Only enable in production - skip during development to avoid noise from hot-reload artifacts
 // Check if crash reporting is enabled (default: true for opt-out behavior)
-const crashReportingStore = new Store<{ crashReportingEnabled: boolean }>({
+const earlySettingsStore = new Store<{ crashReportingEnabled: boolean; disableGpuAcceleration: boolean }>({
   name: 'maestro-settings',
   cwd: syncPath, // Use same path as main settings store
 });
-const crashReportingEnabled = crashReportingStore.get('crashReportingEnabled', true);
+const crashReportingEnabled = earlySettingsStore.get('crashReportingEnabled', true);
+
+// Disable GPU hardware acceleration if user has opted out
+// Must be called before app.ready event
+const disableGpuAcceleration = earlySettingsStore.get('disableGpuAcceleration', false);
+if (disableGpuAcceleration) {
+  app.disableHardwareAcceleration();
+  console.log('[STARTUP] GPU hardware acceleration disabled by user preference');
+}
 
 if (crashReportingEnabled && !isDevelopment) {
   Sentry.init({

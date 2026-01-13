@@ -24,6 +24,8 @@ export interface ConfettiOptions {
   multiBurst?: boolean;
   /** Disable for users with reduced motion preference (default: true) */
   respectReducedMotion?: boolean;
+  /** Skip confetti animation entirely (user preference from settings) */
+  disabled?: boolean;
 }
 
 /**
@@ -80,7 +82,13 @@ export function triggerConfetti(options: ConfettiOptions = {}): void {
     colors = DEFAULT_COLORS,
     multiBurst = true,
     respectReducedMotion = true,
+    disabled = false,
   } = options;
+
+  // Skip if disabled by user setting
+  if (disabled) {
+    return;
+  }
 
   // Respect reduced motion preference
   if (respectReducedMotion) {
@@ -139,11 +147,18 @@ export function triggerConfetti(options: ConfettiOptions = {}): void {
  * Triggers an intense celebratory confetti burst with more particles
  * and additional star shapes. Great for major achievements.
  *
+ * @param disabled - Skip confetti animation entirely (user preference from settings)
+ *
  * @example
  * // For wizard completion or major milestones
  * triggerCelebration();
  */
-export function triggerCelebration(): void {
+export function triggerCelebration(disabled = false): void {
+  // Skip if disabled by user setting
+  if (disabled) {
+    return;
+  }
+
   triggerConfetti({
     particleCount: 300,
     spread: 100,

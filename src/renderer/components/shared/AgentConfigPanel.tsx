@@ -346,40 +346,29 @@ export function AgentConfigPanel({
 
   return (
     <div className={spacing}>
-      {/* Show detected path if available */}
-      {agent.path && (
-        <div
-          className="text-xs font-mono px-3 py-2 rounded flex items-center justify-between"
-          style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
-        >
-          <div>
-            <span className="opacity-60">Detected:</span> {agent.path}
-          </div>
-          {onRefreshAgent && (
-            <button
-              onClick={onRefreshAgent}
-              className="p-1 rounded hover:bg-white/10 transition-colors ml-2"
-              title="Refresh detection"
-              style={{ color: theme.colors.textDim }}
-            >
-              <RefreshCw className={`w-3 h-3 ${refreshingAgent ? 'animate-spin' : ''}`} />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Custom path input */}
+      {/* Path input - pre-filled with detected path, editable to override */}
       <div
         className={`${padding} rounded border`}
         style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgMain }}
       >
-        <label className="block text-xs font-medium mb-2" style={{ color: theme.colors.textDim }}>
-          Custom Path (optional)
+        <label className="block text-xs font-medium mb-2 flex items-center justify-between" style={{ color: theme.colors.textDim }}>
+          <span>Path</span>
+          {onRefreshAgent && (
+            <button
+              onClick={onRefreshAgent}
+              className="p-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1"
+              title="Re-detect agent path"
+              style={{ color: theme.colors.textDim }}
+            >
+              <RefreshCw className={`w-3 h-3 ${refreshingAgent ? 'animate-spin' : ''}`} />
+              <span className="text-xs">Detect</span>
+            </button>
+          )}
         </label>
         <div className="flex gap-2">
           <input
             type="text"
-            value={customPath}
+            value={customPath || agent.path || ''}
             onChange={(e) => onCustomPathChange(e.target.value)}
             onBlur={onCustomPathBlur}
             onClick={(e) => e.stopPropagation()}
@@ -387,7 +376,7 @@ export function AgentConfigPanel({
             className="flex-1 p-2 rounded border bg-transparent outline-none text-xs font-mono"
             style={{ borderColor: theme.colors.border, color: theme.colors.textMain }}
           />
-          {customPath && (
+          {customPath && customPath !== agent.path && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -395,13 +384,14 @@ export function AgentConfigPanel({
               }}
               className="px-2 py-1.5 rounded text-xs"
               style={{ backgroundColor: theme.colors.bgActivity, color: theme.colors.textDim }}
+              title="Reset to detected path"
             >
-              Clear
+              Reset
             </button>
           )}
         </div>
         <p className="text-xs opacity-50 mt-2">
-          Specify a custom path if the agent is not in your PATH
+          Path to the {agent.binaryName} binary. Edit to override the auto-detected path.
         </p>
       </div>
 

@@ -205,8 +205,9 @@ describe('NewInstanceModal', () => {
       });
       fireEvent.click(screen.getByText('Claude Code'));
 
+      // Path is now pre-filled in the input field, not displayed as separate text
       await waitFor(() => {
-        expect(screen.getByText('/usr/bin/claude')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('/usr/bin/claude')).toBeInTheDocument();
       });
     });
 
@@ -1211,7 +1212,7 @@ describe('NewInstanceModal', () => {
   });
 
   describe('Custom agent paths', () => {
-    it('should display custom path input for Claude Code agent', async () => {
+    it('should display path input for Claude Code agent', async () => {
       vi.mocked(window.maestro.agents.detect).mockResolvedValue([
         createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
       ]);
@@ -1232,9 +1233,10 @@ describe('NewInstanceModal', () => {
       });
       fireEvent.click(screen.getByText('Claude Code'));
 
+      // Path section now shows "Path" label (not "Custom Path (optional)")
       await waitFor(() => {
         expect(screen.getByPlaceholderText('/path/to/claude')).toBeInTheDocument();
-        expect(screen.getByText('Custom Path (optional)')).toBeInTheDocument();
+        expect(screen.getByText('Path')).toBeInTheDocument();
       });
     });
 
@@ -1382,8 +1384,9 @@ describe('NewInstanceModal', () => {
     });
 
     it('should call onCreate with custom path for previously unavailable agent', async () => {
+      // Agent is unavailable and has no detected path
       vi.mocked(window.maestro.agents.detect).mockResolvedValue([
-        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: false }),
+        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: false, path: null }),
       ]);
 
       render(
@@ -1410,7 +1413,7 @@ describe('NewInstanceModal', () => {
 
       // Set custom path - this makes the Create button enabled
       const customPathInput = screen.getByPlaceholderText('/path/to/claude');
-      fireEvent.change(customPathInput, { target: { value: '/usr/local/bin/claude' } });
+      fireEvent.change(customPathInput, { target: { value: '/custom/bin/claude' } });
 
       // Fill in required fields
       const nameInput = screen.getByLabelText('Agent Name');
@@ -1431,7 +1434,7 @@ describe('NewInstanceModal', () => {
         '/my/project',
         'Custom Path Agent',
         undefined,
-        '/usr/local/bin/claude',
+        '/custom/bin/claude',
         undefined,
         undefined,
         undefined,
@@ -1441,9 +1444,9 @@ describe('NewInstanceModal', () => {
       );
     });
 
-    it('should clear custom path in local state when clear button is clicked', async () => {
+    it('should reset custom path to detected path when Reset button is clicked', async () => {
       vi.mocked(window.maestro.agents.detect).mockResolvedValue([
-        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true }),
+        createAgentConfig({ id: 'claude-code', name: 'Claude Code', available: true, path: '/detected/bin/claude' }),
       ]);
 
       render(
@@ -1462,29 +1465,30 @@ describe('NewInstanceModal', () => {
       });
       fireEvent.click(screen.getByText('Claude Code'));
 
+      // Path input should be pre-filled with detected path
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('/path/to/claude')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('/detected/bin/claude')).toBeInTheDocument();
       });
 
-      // Set custom path first
-      const customPathInput = screen.getByPlaceholderText('/path/to/claude');
+      // Set a different custom path
+      const customPathInput = screen.getByDisplayValue('/detected/bin/claude');
       fireEvent.change(customPathInput, { target: { value: '/custom/path' } });
 
       await waitFor(() => {
         expect(customPathInput).toHaveValue('/custom/path');
       });
 
-      // Clear button should appear when there's a value
+      // Reset button should appear when custom path differs from detected path
       await waitFor(() => {
-        expect(screen.getByText('Clear')).toBeInTheDocument();
+        expect(screen.getByText('Reset')).toBeInTheDocument();
       });
 
       await act(async () => {
-        fireEvent.click(screen.getByText('Clear'));
+        fireEvent.click(screen.getByText('Reset'));
       });
 
-      // Custom path should be cleared in local state
-      expect(customPathInput).toHaveValue('');
+      // Path should be reset to detected path
+      expect(customPathInput).toHaveValue('/detected/bin/claude');
     });
   });
 

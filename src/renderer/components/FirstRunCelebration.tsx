@@ -44,6 +44,8 @@ interface FirstRunCelebrationProps {
   onOpenLeaderboardRegistration?: () => void;
   /** Whether the user is already registered for the leaderboard */
   isLeaderboardRegistered?: boolean;
+  /** Whether confetti animations are disabled by user preference */
+  disableConfetti?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export function FirstRunCelebration({
   onClose,
   onOpenLeaderboardRegistration,
   isLeaderboardRegistered,
+  disableConfetti = false,
 }: FirstRunCelebrationProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
@@ -105,6 +108,9 @@ export function FirstRunCelebration({
 
   // Fire confetti burst
   const fireConfetti = useCallback(() => {
+    // Skip if disabled by user preference
+    if (disableConfetti) return;
+
     // Check for reduced motion preference
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return;
@@ -160,7 +166,7 @@ export function FirstRunCelebration({
         });
       }, 500);
     }
-  }, [isStandingOvation, goldColor]);
+  }, [isStandingOvation, goldColor, disableConfetti]);
 
   // Fire confetti on mount
   useEffect(() => {

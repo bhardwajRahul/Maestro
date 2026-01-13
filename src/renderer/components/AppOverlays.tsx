@@ -57,6 +57,9 @@ export interface AppOverlaysProps {
   pendingKeyboardMasteryLevel: number | null;
   onCloseKeyboardMastery: () => void;
   shortcuts: Record<string, Shortcut>;
+
+  // Rendering settings
+  disableConfetti?: boolean;
 }
 
 /**
@@ -78,6 +81,7 @@ export function AppOverlays({
   pendingKeyboardMasteryLevel,
   onCloseKeyboardMastery,
   shortcuts,
+  disableConfetti = false,
 }: AppOverlaysProps): JSX.Element {
   return (
     <>
@@ -91,6 +95,7 @@ export function AppOverlays({
           onClose={onCloseFirstRun}
           onOpenLeaderboardRegistration={onOpenLeaderboardRegistration}
           isLeaderboardRegistered={isLeaderboardRegistered}
+          disableConfetti={disableConfetti}
         />
       )}
 
@@ -101,6 +106,7 @@ export function AppOverlays({
           level={pendingKeyboardMasteryLevel}
           onClose={onCloseKeyboardMastery}
           shortcuts={shortcuts}
+          disableConfetti={disableConfetti}
         />
       )}
 
@@ -116,6 +122,7 @@ export function AppOverlays({
           onClose={onCloseStandingOvation}
           onOpenLeaderboardRegistration={onOpenLeaderboardRegistration}
           isLeaderboardRegistered={isLeaderboardRegistered}
+          disableConfetti={disableConfetti}
         />
       )}
     </>

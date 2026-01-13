@@ -1003,13 +1003,22 @@ function FileExplorerPanelInner(props: FileExplorerPanelProps) {
         </div>
       ) : (
         <>
-          {/* Show loading progress when file tree is loading */}
-          {(session.fileTreeLoading || (!session.fileTree || session.fileTree.length === 0)) && (
+          {/* Show loading progress when file tree is actively loading */}
+          {session.fileTreeLoading && (
             <FileTreeLoadingProgress
               theme={theme}
               progress={session.fileTreeLoadingProgress}
               isRemote={!!(session.sshRemoteId || session.sessionSshRemoteConfig?.enabled)}
             />
+          )}
+          {/* Show empty state when loading is complete but no files found */}
+          {!session.fileTreeLoading && (!session.fileTree || session.fileTree.length === 0) && !fileTreeFilter && (
+            <div className="flex flex-col items-center justify-center gap-2 py-8">
+              <Folder className="w-8 h-8 opacity-30" style={{ color: theme.colors.textDim }} />
+              <div className="text-xs opacity-50 text-center" style={{ color: theme.colors.textDim }}>
+                No files found
+              </div>
+            </div>
           )}
           {flattenedTree.length > 0 && (
             <div

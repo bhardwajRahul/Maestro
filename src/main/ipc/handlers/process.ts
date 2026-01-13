@@ -223,11 +223,23 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
       const contextWindow = getContextWindowValue(agent, agentConfigValues, config.sessionCustomContextWindow);
 
       // ========================================================================
+      // Command Resolution: Apply session-level custom path override if set
+      // This allows users to override the detected agent path per-session
+      // ========================================================================
+      let commandToSpawn = config.sessionCustomPath || config.command;
+      let argsToSpawn = finalArgs;
+
+      if (config.sessionCustomPath) {
+        logger.debug(`Using session-level custom path for ${config.toolType}`, LOG_CONTEXT, {
+          customPath: config.sessionCustomPath,
+          originalCommand: config.command,
+        });
+      }
+
+      // ========================================================================
       // SSH Remote Execution: Detect and wrap command for remote execution
       // Terminal sessions are always local (they need PTY for shell interaction)
       // ========================================================================
-      let commandToSpawn = config.command;
-      let argsToSpawn = finalArgs;
       let sshRemoteUsed: SshRemoteConfig | null = null;
 
       // Only consider SSH remote for non-terminal AI agent sessions

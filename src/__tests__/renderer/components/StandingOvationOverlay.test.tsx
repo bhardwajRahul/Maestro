@@ -892,6 +892,23 @@ describe('StandingOvationOverlay', () => {
         })
       );
     });
+
+    it('does not fire confetti when disableConfetti is true', () => {
+      mockConfetti.mockClear();
+      render(
+        <StandingOvationOverlay
+          theme={createTheme()}
+          themeMode="dark"
+          badge={createBadge()}
+          cumulativeTimeMs={3600000}
+          onClose={mockOnClose}
+          disableConfetti={true}
+        />
+      );
+
+      // Confetti should not be called
+      expect(mockConfetti).not.toHaveBeenCalled();
+    });
   });
 
   describe('Theme Styling', () => {

@@ -18,6 +18,8 @@ interface StandingOvationOverlayProps {
   onClose: () => void;
   onOpenLeaderboardRegistration?: () => void;
   isLeaderboardRegistered?: boolean;
+  /** Whether confetti animations are disabled by user preference */
+  disableConfetti?: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export function StandingOvationOverlay({
   onClose,
   onOpenLeaderboardRegistration,
   isLeaderboardRegistered,
+  disableConfetti = false,
 }: StandingOvationOverlayProps) {
   const { registerLayer, unregisterLayer, updateLayerHandler } = useLayerStack();
   const layerIdRef = useRef<string>();
@@ -73,6 +76,9 @@ export function StandingOvationOverlay({
 
   // Fire confetti from multiple origins with playground settings
   const fireConfetti = useCallback(() => {
+    // Skip if disabled by user preference
+    if (disableConfetti) return;
+
     const defaults = {
       particleCount: 500,
       angle: 90,
@@ -107,7 +113,7 @@ export function StandingOvationOverlay({
       ...defaults,
       origin: { x: 1, y: 1 },
     });
-  }, [confettiColors]);
+  }, [confettiColors, disableConfetti]);
 
   // Fire confetti on mount only - empty deps to run once
   useEffect(() => {

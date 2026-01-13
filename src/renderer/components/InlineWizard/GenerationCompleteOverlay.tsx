@@ -20,6 +20,8 @@ export interface GenerationCompleteOverlayProps {
   taskCount: number;
   /** Called when user clicks Done - triggers confetti and completes wizard */
   onDone: () => void;
+  /** Whether confetti animations are disabled by user preference */
+  disableConfetti?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export function GenerationCompleteOverlay({
   theme,
   taskCount,
   onDone,
+  disableConfetti = false,
 }: GenerationCompleteOverlayProps): JSX.Element {
   const [isClosing, setIsClosing] = useState(false);
 
@@ -43,14 +46,14 @@ export function GenerationCompleteOverlay({
     if (isClosing) return; // Prevent double-clicks
     setIsClosing(true);
 
-    // Trigger celebratory confetti burst
-    triggerCelebration();
+    // Trigger celebratory confetti burst (if not disabled)
+    triggerCelebration(disableConfetti);
 
     // Wait 500ms for confetti to be visible, then call completion callback
     setTimeout(() => {
       onDone();
     }, 500);
-  }, [isClosing, onDone]);
+  }, [isClosing, onDone, disableConfetti]);
 
   return (
     <div

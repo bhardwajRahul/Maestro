@@ -1010,8 +1010,8 @@ describe('FileExplorerPanel', () => {
   });
 
   describe('Empty State', () => {
-    it('shows loading message when fileTree is empty and no error', () => {
-      const session = createMockSession({ fileTree: [] });
+    it('shows loading message when fileTreeLoading is true', () => {
+      const session = createMockSession({ fileTree: [], fileTreeLoading: true });
       render(
         <FileExplorerPanel
           {...defaultProps}
@@ -1023,8 +1023,21 @@ describe('FileExplorerPanel', () => {
       expect(screen.getByText('Loading files...')).toBeInTheDocument();
     });
 
-    it('shows loading message when fileTree is null', () => {
-      const session = createMockSession({ fileTree: undefined as any });
+    it('shows no files found when fileTree is empty and not loading', () => {
+      const session = createMockSession({ fileTree: [], fileTreeLoading: false });
+      render(
+        <FileExplorerPanel
+          {...defaultProps}
+          session={session}
+          filteredFileTree={[]}
+        />
+      );
+
+      expect(screen.getByText('No files found')).toBeInTheDocument();
+    });
+
+    it('shows no files found when fileTree is null and not loading', () => {
+      const session = createMockSession({ fileTree: undefined as any, fileTreeLoading: false });
       render(
         <FileExplorerPanel
           {...defaultProps}
@@ -1033,7 +1046,7 @@ describe('FileExplorerPanel', () => {
         />
       );
 
-      expect(screen.getByText('Loading files...')).toBeInTheDocument();
+      expect(screen.getByText('No files found')).toBeInTheDocument();
     });
   });
 
@@ -1212,8 +1225,9 @@ describe('FileExplorerPanel', () => {
     });
 
     it('handles empty filteredFileTree', () => {
-      render(<FileExplorerPanel {...defaultProps} filteredFileTree={[]} />);
-      expect(screen.getByText('Loading files...')).toBeInTheDocument();
+      const session = createMockSession({ fileTree: [], fileTreeLoading: false });
+      render(<FileExplorerPanel {...defaultProps} session={session} filteredFileTree={[]} />);
+      expect(screen.getByText('No files found')).toBeInTheDocument();
     });
 
     it('handles null previewFile', () => {

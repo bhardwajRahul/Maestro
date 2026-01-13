@@ -174,17 +174,39 @@ describe('AgentConfigPanel', () => {
   });
 
   describe('Agent configuration sections', () => {
-    it('should render detected path when agent.path is provided', () => {
+    it('should render path input pre-filled with detected path', () => {
       render(<AgentConfigPanel {...createDefaultProps()} />);
 
-      expect(screen.getByText(/Detected:/)).toBeInTheDocument();
-      expect(screen.getByText('/usr/local/bin/claude')).toBeInTheDocument();
+      expect(screen.getByText('Path')).toBeInTheDocument();
+      // The input should be pre-filled with the detected path
+      const pathInput = screen.getByDisplayValue('/usr/local/bin/claude');
+      expect(pathInput).toBeInTheDocument();
     });
 
-    it('should render custom path input section', () => {
-      render(<AgentConfigPanel {...createDefaultProps()} />);
+    it('should show custom path when provided, not detected path', () => {
+      render(<AgentConfigPanel {...createDefaultProps({ customPath: '/custom/path/to/claude' })} />);
 
-      expect(screen.getByText('Custom Path (optional)')).toBeInTheDocument();
+      // The input should show the custom path
+      const pathInput = screen.getByDisplayValue('/custom/path/to/claude');
+      expect(pathInput).toBeInTheDocument();
+    });
+
+    it('should show Reset button when custom path differs from detected path', () => {
+      render(<AgentConfigPanel {...createDefaultProps({ customPath: '/custom/path/to/claude' })} />);
+
+      expect(screen.getByText('Reset')).toBeInTheDocument();
+    });
+
+    it('should NOT show Reset button when custom path matches detected path', () => {
+      render(<AgentConfigPanel {...createDefaultProps({ customPath: '/usr/local/bin/claude' })} />);
+
+      expect(screen.queryByText('Reset')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show Reset button when no custom path is set', () => {
+      render(<AgentConfigPanel {...createDefaultProps({ customPath: '' })} />);
+
+      expect(screen.queryByText('Reset')).not.toBeInTheDocument();
     });
 
     it('should render custom arguments input section', () => {

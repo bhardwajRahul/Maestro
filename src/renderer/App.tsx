@@ -335,6 +335,8 @@ function MaestroConsoleInner() {
     documentGraphMaxNodes,
     documentGraphPreviewCharLimit,
 
+    // Rendering settings
+    disableConfetti,
   } = settings;
 
   // --- KEYBOARD SHORTCUT HELPERS ---
@@ -9843,6 +9845,7 @@ You are taking over this conversation. Based on the context above, provide a bri
         pendingKeyboardMasteryLevel={pendingKeyboardMasteryLevel}
         onCloseKeyboardMastery={handleKeyboardMasteryCelebrationClose}
         shortcuts={shortcuts}
+        disableConfetti={disableConfetti}
       />
 
       {/* --- DEVELOPER PLAYGROUND --- */}

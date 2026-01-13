@@ -321,6 +321,68 @@ describe('process IPC handlers', () => {
       expect(mockProcessManager.spawn).toHaveBeenCalled();
     });
 
+    it('should use sessionCustomPath for local execution when provided', async () => {
+      // When user sets a custom path for a session, it should be used for the command
+      // This allows users to use a different binary (e.g., a wrapper script)
+      const mockAgent = {
+        id: 'claude-code',
+        name: 'Claude Code',
+        binaryName: 'claude',
+        path: '/usr/local/bin/claude', // Detected path
+        requiresPty: true,
+      };
+
+      mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
+      mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+
+      const handler = handlers.get('process:spawn');
+      await handler!({} as any, {
+        sessionId: 'session-custom-path',
+        toolType: 'claude-code',
+        cwd: '/test/project',
+        command: '/usr/local/bin/claude', // Original detected command
+        args: ['--print', '--verbose'],
+        sessionCustomPath: '/home/user/my-claude-wrapper', // User's custom path
+      });
+
+      // Should use the custom path, not the original command
+      expect(mockProcessManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: '/home/user/my-claude-wrapper',
+        })
+      );
+    });
+
+    it('should use original command when sessionCustomPath is not provided', async () => {
+      const mockAgent = {
+        id: 'claude-code',
+        name: 'Claude Code',
+        binaryName: 'claude',
+        path: '/usr/local/bin/claude',
+        requiresPty: true,
+      };
+
+      mockAgentDetector.getAgent.mockResolvedValue(mockAgent);
+      mockProcessManager.spawn.mockReturnValue({ pid: 12345, success: true });
+
+      const handler = handlers.get('process:spawn');
+      await handler!({} as any, {
+        sessionId: 'session-no-custom-path',
+        toolType: 'claude-code',
+        cwd: '/test/project',
+        command: '/usr/local/bin/claude',
+        args: ['--print', '--verbose'],
+        // No sessionCustomPath provided
+      });
+
+      // Should use the original command
+      expect(mockProcessManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: '/usr/local/bin/claude',
+        })
+      );
+    });
+
     it('should use default shell for terminal sessions', async () => {
       const mockAgent = { id: 'terminal', requiresPty: true };
 
