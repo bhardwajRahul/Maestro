@@ -60,7 +60,9 @@ describe('process-manager.ts', () => {
         });
       });
 
-      it('should aggregate tokens from multiple models', () => {
+      it('should use MAX (not SUM) across multiple models', () => {
+        // When multiple models are used in one turn, each reads the same context
+        // from cache. Using MAX gives actual context size, SUM would double-count.
         const modelUsage: Record<string, ModelStats> = {
           'claude-3-sonnet': {
             inputTokens: 1000,
@@ -80,11 +82,12 @@ describe('process-manager.ts', () => {
 
         const result = aggregateModelUsage(modelUsage, {}, 0.10);
 
+        // MAX values: max(1000,500)=1000, max(500,250)=500, etc.
         expect(result).toEqual({
-          inputTokens: 1500,
-          outputTokens: 750,
-          cacheReadInputTokens: 300,
-          cacheCreationInputTokens: 150,
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheReadInputTokens: 200,
+          cacheCreationInputTokens: 100,
           totalCostUsd: 0.10,
           contextWindow: 200000, // Should use the highest context window
         });
@@ -125,8 +128,9 @@ describe('process-manager.ts', () => {
 
         const result = aggregateModelUsage(modelUsage);
 
+        // MAX values: max(1000,500)=1000, max(500,0)=500, max(0,100)=100
         expect(result).toEqual({
-          inputTokens: 1500,
+          inputTokens: 1000,
           outputTokens: 500,
           cacheReadInputTokens: 100,
           cacheCreationInputTokens: 0,
@@ -318,7 +322,8 @@ describe('process-manager.ts', () => {
         expect(result.outputTokens).toBe(500);
       });
 
-      it('should handle multi-model response (e.g., main + tool use)', () => {
+      it('should use MAX across multi-model response (e.g., main + tool use)', () => {
+        // When multiple models are used, each reads the same context. MAX avoids double-counting.
         const modelUsage: Record<string, ModelStats> = {
           'claude-3-opus': {
             inputTokens: 20000,
@@ -328,7 +333,7 @@ describe('process-manager.ts', () => {
             contextWindow: 200000,
           },
           'claude-3-haiku': {
-            // Used for tool use
+            // Used for tool use - smaller context read
             inputTokens: 500,
             outputTokens: 100,
             contextWindow: 200000,
@@ -337,8 +342,9 @@ describe('process-manager.ts', () => {
 
         const result = aggregateModelUsage(modelUsage, {}, 0.25);
 
-        expect(result.inputTokens).toBe(20500);
-        expect(result.outputTokens).toBe(3100);
+        // MAX values: max(20000, 500)=20000, max(3000, 100)=3000
+        expect(result.inputTokens).toBe(20000);
+        expect(result.outputTokens).toBe(3000);
         expect(result.cacheReadInputTokens).toBe(15000);
         expect(result.cacheCreationInputTokens).toBe(2000);
         expect(result.totalCostUsd).toBe(0.25);

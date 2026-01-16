@@ -472,8 +472,8 @@ describe('HistoryDetailModal', () => {
             usageStats: {
               inputTokens: 5000,
               outputTokens: 1000,
-              cacheReadInputTokens: 2000,
-              cacheCreationInputTokens: 3000,
+              cacheReadInputTokens: 2000,  // Excluded from calculation (cumulative)
+              cacheCreationInputTokens: 5000,
               contextWindow: 100000,
               totalCostUsd: 0.10,
             },
@@ -482,8 +482,8 @@ describe('HistoryDetailModal', () => {
         />
       );
 
-      // Context = (inputTokens + cacheCreationInputTokens + cacheReadInputTokens) / contextWindow
-      // (5000 + 3000 + 2000) / 100000 = 10%
+      // Context = (inputTokens + cacheCreationInputTokens) / contextWindow (cacheRead excluded)
+      // (5000 + 5000) / 100000 = 10%
       expect(screen.getByText('10%')).toBeInTheDocument();
     });
 
@@ -642,8 +642,8 @@ describe('HistoryDetailModal', () => {
             usageStats: {
               inputTokens: 74000,
               outputTokens: 1000,
-              cacheReadInputTokens: 1000,
-              cacheCreationInputTokens: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 1000,  // Included in calculation
               contextWindow: 100000,
               totalCostUsd: 0,
             },
@@ -652,7 +652,7 @@ describe('HistoryDetailModal', () => {
         />
       );
 
-      // (74000 + 1000 cache read) / 100000 = 75%
+      // (74000 + 1000 cacheCreation) / 100000 = 75% (cacheRead excluded - cumulative)
       expect(screen.getByText('75%')).toBeInTheDocument();
     });
 

@@ -728,6 +728,13 @@ function createWindow() {
 
   // Load the app
   if (process.env.NODE_ENV === 'development') {
+    // Install React DevTools extension in development mode
+    import('electron-devtools-installer').then(({ default: installExtension, REACT_DEVELOPER_TOOLS }) => {
+      installExtension(REACT_DEVELOPER_TOOLS)
+        .then(() => logger.info('React DevTools extension installed', 'Window'))
+        .catch((err: Error) => logger.warn(`Failed to install React DevTools: ${err.message}`, 'Window'));
+    }).catch((err: Error) => logger.warn(`Failed to load electron-devtools-installer: ${err.message}`, 'Window'));
+
     mainWindow.loadURL('http://localhost:5173');
     // DevTools can be opened via Command-K menu instead of automatically on startup
     logger.info('Loading development server', 'Window');

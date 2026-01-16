@@ -162,6 +162,12 @@ const formatFileSize = (bytes: number): string => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
+// Large file thresholds to prevent UI freezes
+// Files larger than this will skip token counting (expensive operation)
+const LARGE_FILE_TOKEN_SKIP_THRESHOLD = 1024 * 1024; // 1MB
+// Files larger than this will have content truncated for syntax highlighting
+const LARGE_FILE_PREVIEW_LIMIT = 100 * 1024; // 100KB for syntax highlighting
+
 // Format date/time for display
 const formatDateTime = (isoString: string): string => {
   const date = new Date(isoString);
@@ -465,6 +471,25 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
   // Any non-binary, non-image file can be edited as text
   const isEditableText = !isImage && !isBinary;
 
+  // Check if file is large (for performance optimizations)
+  // Use content length as primary check since fileStats may not be loaded yet
+  const isLargeFile = useMemo(() => {
+    if (!file?.content) return false;
+    return file.content.length > LARGE_FILE_TOKEN_SKIP_THRESHOLD;
+  }, [file?.content]);
+
+  // For very large files, truncate content for syntax highlighting to prevent freezes
+  const displayContent = useMemo(() => {
+    if (!file?.content) return '';
+    if (!isMarkdown && !isImage && !isBinary && file.content.length > LARGE_FILE_PREVIEW_LIMIT) {
+      return file.content.substring(0, LARGE_FILE_PREVIEW_LIMIT);
+    }
+    return file.content;
+  }, [file?.content, isMarkdown, isImage, isBinary]);
+
+  // Track if content is truncated for display
+  const isContentTruncated = file?.content && displayContent.length < file.content.length;
+
   // Calculate task counts for markdown files
   const taskCounts = useMemo(() => {
     if (!isMarkdown || !file?.content) return null;
@@ -627,9 +652,10 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
     }
   }, [file?.path, sshRemoteId]);
 
-  // Count tokens when file content changes (skip for images and binary files)
+  // Count tokens when file content changes (skip for images, binary files, and large files)
+  // Large files would freeze the UI during token encoding
   useEffect(() => {
-    if (!file?.content || isImage || isBinary) {
+    if (!file?.content || isImage || isBinary || isLargeFile) {
       setTokenCount(null);
       return;
     }
@@ -643,7 +669,7 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
         console.error('Failed to count tokens:', err);
         setTokenCount(null);
       });
-  }, [file?.content, isImage, isBinary]);
+  }, [file?.content, isImage, isBinary, isLargeFile]);
 
   // Sync edit content when file changes or when entering edit mode
   useEffect(() => {
@@ -1727,6 +1753,23 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
           </div>
         ) : (
           <div ref={codeContainerRef}>
+            {/* Large file truncation banner */}
+            {isContentTruncated && (
+              <div
+                className="px-4 py-2 flex items-center gap-2 text-sm"
+                style={{
+                  backgroundColor: theme.colors.warning + '20',
+                  borderBottom: `1px solid ${theme.colors.warning}40`,
+                  color: theme.colors.warning
+                }}
+              >
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  Large file preview truncated. Showing first {formatFileSize(LARGE_FILE_PREVIEW_LIMIT)} of {formatFileSize(file.content.length)}.
+                  Use an external editor for the full file.
+                </span>
+              </div>
+            )}
             <SyntaxHighlighter
               language={language}
               style={vscDarkPlus}
@@ -1739,7 +1782,7 @@ export const FilePreview = forwardRef<FilePreviewHandle, FilePreviewProps>(funct
               showLineNumbers
               PreTag="div"
             >
-              {file.content}
+              {displayContent}
             </SyntaxHighlighter>
           </div>
         )}

@@ -12,6 +12,20 @@ beforeAll(() => {
     createPackage: vi.fn().mockResolvedValue({ success: true, path: '/tmp/test.zip' }),
     previewPackage: vi.fn().mockResolvedValue({ categories: [] }),
   };
+
+  // Mock localStorage for the test environment
+  const localStorageMock = {
+    getItem: vi.fn().mockReturnValue(null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+    length: 0,
+    key: vi.fn(),
+  };
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
+    writable: true,
+  });
 });
 
 // Mock dependencies

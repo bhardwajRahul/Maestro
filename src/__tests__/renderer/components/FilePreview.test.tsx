@@ -302,4 +302,80 @@ describe('FilePreview', () => {
       expect(container.firstChild).toBeNull();
     });
   });
+
+  describe('large file handling', () => {
+    it('shows truncation banner for files larger than 100KB', () => {
+      // Create content larger than LARGE_FILE_PREVIEW_LIMIT (100KB)
+      const largeContent = 'x'.repeat(150 * 1024); // 150KB
+      render(
+        <FilePreview
+          {...defaultProps}
+          file={{ name: 'large.json', content: largeContent, path: '/test/large.json' }}
+        />
+      );
+
+      expect(screen.getByText(/Large file preview truncated/)).toBeInTheDocument();
+      expect(screen.getByText(/Use an external editor for the full file/)).toBeInTheDocument();
+    });
+
+    it('does not show truncation banner for small files', () => {
+      const smallContent = 'x'.repeat(50 * 1024); // 50KB - under threshold
+      render(
+        <FilePreview
+          {...defaultProps}
+          file={{ name: 'small.json', content: smallContent, path: '/test/small.json' }}
+        />
+      );
+
+      expect(screen.queryByText(/Large file preview truncated/)).not.toBeInTheDocument();
+    });
+
+    it('does not show truncation banner for markdown files (they are not truncated)', () => {
+      // Markdown files are rendered with ReactMarkdown, not SyntaxHighlighter
+      // They should not be truncated as ReactMarkdown handles large content differently
+      const largeMarkdown = '# Header\n'.repeat(20 * 1024); // Large markdown
+      render(
+        <FilePreview
+          {...defaultProps}
+          file={{ name: 'large.md', content: largeMarkdown, path: '/test/large.md' }}
+        />
+      );
+
+      expect(screen.queryByText(/Large file preview truncated/)).not.toBeInTheDocument();
+    });
+
+    it('truncates displayed content to 100KB for syntax highlighting', () => {
+      const largeContent = 'y'.repeat(200 * 1024); // 200KB
+      render(
+        <FilePreview
+          {...defaultProps}
+          file={{ name: 'large.ts', content: largeContent, path: '/test/large.ts' }}
+        />
+      );
+
+      // The syntax highlighter should receive truncated content
+      const highlighter = screen.getByTestId('syntax-highlighter');
+      // Content should be truncated to 100KB (LARGE_FILE_PREVIEW_LIMIT)
+      expect(highlighter.textContent?.length).toBe(100 * 1024);
+    });
+
+    it('skips token counting for files larger than 1MB', async () => {
+      const { getEncoder } = await import('../../../renderer/utils/tokenCounter');
+
+      // Create content larger than LARGE_FILE_TOKEN_SKIP_THRESHOLD (1MB)
+      const hugeContent = 'z'.repeat(1.5 * 1024 * 1024); // 1.5MB
+      render(
+        <FilePreview
+          {...defaultProps}
+          file={{ name: 'huge.json', content: hugeContent, path: '/test/huge.json' }}
+        />
+      );
+
+      // Token counting should be skipped for large files
+      // getEncoder should not have been called for this file
+      // (it may have been called from previous tests, but not with this content)
+      // The token count state should remain null for large files
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => ({
   base: './',
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    // Explicitly define NODE_ENV for React and related packages
+    'process.env.NODE_ENV': JSON.stringify(mode),
   },
   resolve: {
     alias: {

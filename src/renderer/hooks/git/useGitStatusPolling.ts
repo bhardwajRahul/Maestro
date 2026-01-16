@@ -91,6 +91,52 @@ const DEFAULT_POLL_INTERVAL = 30000; // 30 seconds
 const DEFAULT_INACTIVITY_TIMEOUT = 60000; // 60 seconds
 
 /**
+ * PERF: Compare two GitStatusData objects for meaningful changes.
+ * Ignores lastUpdated since that always changes and would cause unnecessary re-renders.
+ */
+function gitStatusDataEqual(a: GitStatusData, b: GitStatusData): boolean {
+  return (
+    a.fileCount === b.fileCount &&
+    a.branch === b.branch &&
+    a.remote === b.remote &&
+    a.behind === b.behind &&
+    a.ahead === b.ahead &&
+    a.totalAdditions === b.totalAdditions &&
+    a.totalDeletions === b.totalDeletions &&
+    a.modifiedCount === b.modifiedCount &&
+    // Compare fileChanges arrays (only present for active session)
+    (a.fileChanges?.length ?? 0) === (b.fileChanges?.length ?? 0) &&
+    (a.fileChanges?.every((f, i) => {
+      const other = b.fileChanges?.[i];
+      return other &&
+        f.path === other.path &&
+        f.status === other.status &&
+        f.additions === other.additions &&
+        f.deletions === other.deletions;
+    }) ?? true)
+  );
+}
+
+/**
+ * PERF: Compare two git status maps for meaningful changes.
+ * Returns true if maps are equivalent (same sessions with same data).
+ */
+function gitStatusMapsEqual(
+  oldMap: Map<string, GitStatusData>,
+  newMap: Map<string, GitStatusData>
+): boolean {
+  if (oldMap.size !== newMap.size) return false;
+
+  for (const [sessionId, newData] of newMap) {
+    const oldData = oldMap.get(sessionId);
+    if (!oldData || !gitStatusDataEqual(oldData, newData)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Hook that polls git status for all git repository sessions.
  *
  * Features:
@@ -263,7 +309,8 @@ export function useGitStatusPolling(
         }
       }
 
-      setGitStatusMap(newStatusMap);
+      // PERF: Only update state if data actually changed to prevent cascade re-renders
+      setGitStatusMap(prev => gitStatusMapsEqual(prev, newStatusMap) ? prev : newStatusMap);
     } finally {
       setIsLoading(false);
     }

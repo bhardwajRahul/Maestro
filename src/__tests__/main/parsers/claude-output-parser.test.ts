@@ -249,7 +249,9 @@ describe('ClaudeOutputParser', () => {
       expect(parser.extractUsage(event!)).toBeNull();
     });
 
-    it('should aggregate usage from multiple models', () => {
+    it('should use MAX (not SUM) across multiple models for usage', () => {
+      // When multiple models are used in one turn, each reads the same conversation
+      // context from cache. Using MAX gives actual context size, SUM would double-count.
       const event = parser.parseJsonLine(
         JSON.stringify({
           type: 'result',
@@ -268,8 +270,9 @@ describe('ClaudeOutputParser', () => {
       );
 
       const usage = parser.extractUsage(event!);
-      expect(usage?.inputTokens).toBe(300);
-      expect(usage?.outputTokens).toBe(150);
+      // MAX values: max(100, 200)=200, max(50, 100)=100
+      expect(usage?.inputTokens).toBe(200);
+      expect(usage?.outputTokens).toBe(100);
     });
   });
 

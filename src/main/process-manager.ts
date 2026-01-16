@@ -807,7 +807,12 @@ export class ProcessManager extends EventEmitter {
             logger.error('[ProcessManager] stdout error', 'ProcessManager', { sessionId, error: String(err) });
           });
           childProcess.stdout.on('data', (data: Buffer | string) => {
-          const output = data.toString();
+          // Filter shell integration sequences that may appear in SSH sessions
+          // SSH interactive shells can emit bare OSC sequences (without ESC prefix)
+          // when .zshrc/.bashrc loads shell integration (iTerm2, VSCode, etc.)
+          // Format: ]1337;Key=Value]1337;Key=Value...actual content
+          let output = data.toString();
+          output = stripControlSequences(output);
 
           // Debug: Log all stdout data for group chat sessions
           if (sessionId.includes('group-chat-')) {

@@ -557,8 +557,8 @@ describe('TabSwitcherModal', () => {
           usageStats: {
             inputTokens: 150000,
             outputTokens: 0,
-            cacheReadInputTokens: 100000,
-            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 100000,  // Excluded from calculation (cumulative)
+            cacheCreationInputTokens: 100000,
             totalCostUsd: 5.00,
             contextWindow: 200000,
           },
@@ -576,7 +576,7 @@ describe('TabSwitcherModal', () => {
           />
         );
 
-        // (150000 + 100000) / 200000 = 125% -> capped at 100%
+        // (150000 + 100000) / 200000 = 125% -> capped at 100% (cacheRead excluded)
         expect(screen.getByText('100%')).toBeInTheDocument();
       });
     });

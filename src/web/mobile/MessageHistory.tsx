@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowDown } from 'lucide-react';
 import { useThemeColors } from '../components/ThemeProvider';
 import { stripAnsiCodes } from '../../shared/stringUtils';
+import { MobileMarkdownRenderer } from './MobileMarkdownRenderer';
 
 /** Threshold for character-based truncation */
 const CHAR_TRUNCATE_THRESHOLD = 500;
@@ -301,19 +302,30 @@ export function MessageHistory({
             {/* Message content */}
             <div
               style={{
-                fontSize: '13px',
-                lineHeight: 1.5,
                 color: isError ? colors.error : colors.textMain,
-                fontFamily: inputMode === 'terminal' || isUser ? 'ui-monospace, monospace' : 'inherit',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
                 textAlign: 'left',
               }}
             >
-              {displayText}
+              {inputMode === 'terminal' || isUser ? (
+                // Terminal output and user input: render as plain monospace text
+                <div
+                  style={{
+                    fontSize: '13px',
+                    lineHeight: 1.5,
+                    fontFamily: 'ui-monospace, monospace',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {displayText}
+                </div>
+              ) : (
+                // AI responses: render as formatted markdown
+                <MobileMarkdownRenderer content={displayText} />
+              )}
               {/* Show truncation indicator at end of text */}
               {isTruncatable && !isExpanded && (
-                <span style={{ color: colors.textDim, fontStyle: 'italic' }}>
+                <span style={{ color: colors.textDim, fontStyle: 'italic', fontSize: '13px' }}>
                   {'\n'}... (tap to expand)
                 </span>
               )}

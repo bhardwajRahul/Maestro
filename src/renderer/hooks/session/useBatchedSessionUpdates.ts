@@ -56,10 +56,8 @@ interface SessionAccumulator {
   tabStatuses?: Map<string, 'idle' | 'busy'>;
   // Usage stats (accumulated)
   usageDeltas?: Map<string | null, UsageStats>; // key = tabId or null for session-level
-  // Context percentage (only last one matters, uses high water mark unless reset)
+  // Context percentage (always uses latest value)
   contextUsage?: number;
-  // Force context reset (bypasses high water mark)
-  forceContextReset?: boolean;
   // Tabs to mark as delivered
   deliveredTabs?: Set<string>;
   // Cycle metrics (accumulated)
@@ -354,13 +352,10 @@ export function useBatchedSessionUpdates(
           }
         }
 
-        // Apply context usage (high water mark - never decrease during a session)
-        // Context usage should only go down through explicit reset (e.g., after compaction)
+        // Apply context usage - always use the latest reported value
+        // Context percentage reflects CURRENT context usage from Claude, not historical max
         if (acc.contextUsage !== undefined) {
-          const newContextUsage = acc.forceContextReset
-            ? acc.contextUsage  // Force reset bypasses high water mark
-            : Math.max(updatedSession.contextUsage || 0, acc.contextUsage);
-          updatedSession = { ...updatedSession, contextUsage: newContextUsage };
+          updatedSession = { ...updatedSession, contextUsage: acc.contextUsage };
         }
 
         // Apply delivered markers
@@ -529,14 +524,13 @@ export function useBatchedSessionUpdates(
   const updateContextUsage = useCallback((sessionId: string, percentage: number) => {
     const acc = getAccumulator(sessionId);
     acc.contextUsage = percentage;
-    // Don't set forceContextReset - this uses high water mark behavior
     hasPendingRef.current = true;
   }, [getAccumulator]);
 
+  // resetContextUsage now does the same as updateContextUsage since we removed high water mark
   const resetContextUsage = useCallback((sessionId: string, percentage: number) => {
     const acc = getAccumulator(sessionId);
     acc.contextUsage = percentage;
-    acc.forceContextReset = true; // Bypass high water mark
     hasPendingRef.current = true;
   }, [getAccumulator]);
 

@@ -12,7 +12,9 @@ import {
 } from '../../../main/parsers/usage-aggregator';
 
 describe('aggregateModelUsage', () => {
-  it('should aggregate model usage from multiple models', () => {
+  it('should use MAX (not SUM) across models for token counts', () => {
+    // When multiple models are used in one turn, each reads the same conversation
+    // context from cache. Using MAX gives actual context size, SUM would double-count.
     const modelUsage: Record<string, ModelStats> = {
       'claude-3-5-sonnet': {
         inputTokens: 1000,
@@ -32,10 +34,11 @@ describe('aggregateModelUsage', () => {
 
     const result = aggregateModelUsage(modelUsage, {}, 0.05);
 
-    expect(result.inputTokens).toBe(1500);
-    expect(result.outputTokens).toBe(750);
-    expect(result.cacheReadInputTokens).toBe(250);
-    expect(result.cacheCreationInputTokens).toBe(125);
+    // MAX values, not SUM: max(1000, 500)=1000, max(500, 250)=500, etc.
+    expect(result.inputTokens).toBe(1000);
+    expect(result.outputTokens).toBe(500);
+    expect(result.cacheReadInputTokens).toBe(200);
+    expect(result.cacheCreationInputTokens).toBe(100);
     expect(result.totalCostUsd).toBe(0.05);
     expect(result.contextWindow).toBe(200000);
   });

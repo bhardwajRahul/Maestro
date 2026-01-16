@@ -126,4 +126,69 @@ describe('stripAnsiCodes', () => {
     expect(stripAnsiCodes('\x1b[0m\x1b[1m\x1b[32mText')).toBe('Text');
     expect(stripAnsiCodes('\x1b[31m\x1b[32m\x1b[34mBlue')).toBe('Blue');
   });
+
+  // iTerm2/SSH shell integration sequence tests
+  describe('iTerm2 shell integration sequences', () => {
+    it('should strip bare ]1337; sequences chained together (SSH output)', () => {
+      // Real example from SSH connections - sequences without ESC prefix, chained together
+      const input = ']1337;RemoteHost=pedram@PedTome.local]1337;CurrentDir=/Users/pedram]1337;ShellIntegrationVersion=13;shell=zsh/opt/homebrew/bin/codex';
+      expect(stripAnsiCodes(input)).toBe('/opt/homebrew/bin/codex');
+    });
+
+    it('should strip ]1337; sequences with ESC prefix and BEL terminator', () => {
+      const input = '\x1b]1337;RemoteHost=user@host\x07/usr/bin/claude';
+      expect(stripAnsiCodes(input)).toBe('/usr/bin/claude');
+    });
+
+    it('should strip ]1337;CurrentDir sequences with BEL terminator', () => {
+      const input = ']1337;CurrentDir=/home/user\x07/usr/local/bin/codex';
+      expect(stripAnsiCodes(input)).toBe('/usr/local/bin/codex');
+    });
+
+    it('should strip multiple chained sequences with different keys', () => {
+      const input = ']1337;RemoteHost=user@host]1337;CurrentDir=/home/user]1337;ShellIntegrationVersion=13;shell=bash/path/to/binary';
+      expect(stripAnsiCodes(input)).toBe('/path/to/binary');
+    });
+
+    it('should strip sequences mixed with ANSI color codes', () => {
+      const input = '\x1b[32m\x1b]1337;CurrentDir=/home\x07\x1b[0m/usr/bin/test';
+      expect(stripAnsiCodes(input)).toBe('/usr/bin/test');
+    });
+
+    it('should handle standalone iTerm2 sequences', () => {
+      // Sequence followed by nothing
+      const input = ']1337;RemoteHost=user@host';
+      expect(stripAnsiCodes(input)).toBe('');
+    });
+
+    it('should strip sequences with only terminators', () => {
+      const input = '\x1b]1337;RemoteHost=user@host\x07\x1b]1337;CurrentDir=/home\x07';
+      expect(stripAnsiCodes(input)).toBe('');
+    });
+
+    it('should handle VSCode shell integration sequences (]133;)', () => {
+      const input = ']133;A\x07prompt\x1b]133;B\x07output';
+      expect(stripAnsiCodes(input)).toBe('promptoutput');
+    });
+
+    it('should handle current directory sequences (]7;)', () => {
+      const input = ']7;file:///home/user/project\x07content';
+      expect(stripAnsiCodes(input)).toBe('content');
+    });
+
+    it('should handle sequences on multiple lines', () => {
+      const input = '\x1b]1337;CurrentDir=/home\x07/usr/bin/codex\n\x1b]1337;CurrentDir=/home\x07/usr/bin/claude';
+      expect(stripAnsiCodes(input)).toBe('/usr/bin/codex\n/usr/bin/claude');
+    });
+
+    it('should strip BEL character alone', () => {
+      expect(stripAnsiCodes('Text\x07More')).toBe('TextMore');
+    });
+
+    it('should handle real SSH session init output', () => {
+      // Simulates what appears when SSH shell integration emits sequences at session start
+      const input = ']1337;RemoteHost=pedram@PedTome.local]1337;CurrentDir=/Users/pedram]1337;ShellIntegrationVersion=13;shell=zsh{"type":"system","subtype":"init"}';
+      expect(stripAnsiCodes(input)).toBe('{"type":"system","subtype":"init"}');
+    });
+  });
 });

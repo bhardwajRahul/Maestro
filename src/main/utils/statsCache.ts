@@ -122,6 +122,11 @@ export interface CachedSessionStats {
   sizeBytes: number;
   /** File modification time to detect external changes */
   fileMtimeMs: number;
+  /**
+   * Whether the source JSONL file has been deleted.
+   * Archived sessions are preserved in cache so lifetime costs survive file cleanup.
+   */
+  archived?: boolean;
 }
 
 /**
@@ -140,7 +145,7 @@ export interface GlobalStatsCache {
 }
 
 /** Current global stats cache version. Bump to force cache invalidation. */
-export const GLOBAL_STATS_CACHE_VERSION = 2;
+export const GLOBAL_STATS_CACHE_VERSION = 3;
 
 /**
  * Get the cache file path for global stats.

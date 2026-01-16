@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo, useCallback } from 'react';
 import {
   Wand2, Plus, Settings, ChevronRight, ChevronDown, ChevronUp, X, Keyboard,
   Radio, Copy, ExternalLink, PanelLeftClose, PanelLeftOpen, Folder, FolderPlus, Info, GitBranch, Bot, Clock,
@@ -959,25 +959,25 @@ function SessionListInner(props: SessionListProps) {
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Toggle bookmark for a session
-  const toggleBookmark = (sessionId: string) => {
+  // Toggle bookmark for a session - memoized to prevent SessionItem re-renders
+  const toggleBookmark = useCallback((sessionId: string) => {
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, bookmarked: !s.bookmarked } : s
     ));
-  };
+  }, [setSessions]);
 
-  // Context menu handlers
-  const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
+  // Context menu handlers - memoized to prevent SessionItem re-renders
+  const handleContextMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
-  };
+  }, []);
 
-  const handleMoveToGroup = (sessionId: string, groupId: string) => {
+  const handleMoveToGroup = useCallback((sessionId: string, groupId: string) => {
     setSessions(prev => prev.map(s =>
       s.id === sessionId ? { ...s, groupId: groupId || undefined } : s
     ));
-  };
+  }, [setSessions]);
 
   const handleDeleteSession = (sessionId: string) => {
     // Use the parent's delete handler if provided (includes proper cleanup)
@@ -1182,6 +1182,49 @@ function SessionListInner(props: SessionListProps) {
     );
   };
 
+  // PERF: Cached callback maps to prevent SessionItem re-renders
+  // These Maps store stable function references keyed by session/editing ID
+  // The callbacks themselves are memoized, so the Map values remain stable
+  const selectHandlers = useMemo(() => {
+    const map = new Map<string, () => void>();
+    sessions.forEach(s => {
+      map.set(s.id, () => setActiveSessionId(s.id));
+    });
+    return map;
+  }, [sessions, setActiveSessionId]);
+
+  const dragStartHandlers = useMemo(() => {
+    const map = new Map<string, () => void>();
+    sessions.forEach(s => {
+      map.set(s.id, () => handleDragStart(s.id));
+    });
+    return map;
+  }, [sessions, handleDragStart]);
+
+  const contextMenuHandlers = useMemo(() => {
+    const map = new Map<string, (e: React.MouseEvent) => void>();
+    sessions.forEach(s => {
+      map.set(s.id, (e: React.MouseEvent) => handleContextMenu(e, s.id));
+    });
+    return map;
+  }, [sessions, handleContextMenu]);
+
+  const finishRenameHandlers = useMemo(() => {
+    const map = new Map<string, (newName: string) => void>();
+    sessions.forEach(s => {
+      map.set(s.id, (newName: string) => finishRenamingSession(s.id, newName));
+    });
+    return map;
+  }, [sessions, finishRenamingSession]);
+
+  const toggleBookmarkHandlers = useMemo(() => {
+    const map = new Map<string, () => void>();
+    sessions.forEach(s => {
+      map.set(s.id, () => toggleBookmark(s.id));
+    });
+    return map;
+  }, [sessions, toggleBookmark]);
+
   // Helper component: Renders a session item with its worktree children (if any)
   const renderSessionWithWorktrees = (
     session: Session,
@@ -1223,14 +1266,14 @@ function SessionListInner(props: SessionListProps) {
           gitFileCount={gitFileCounts.get(session.id)}
           isInBatch={activeBatchSessionIds.includes(session.id)}
           jumpNumber={getSessionJumpNumber(session.id)}
-          onSelect={() => setActiveSessionId(session.id)}
-          onDragStart={() => handleDragStart(session.id)}
+          onSelect={selectHandlers.get(session.id)!}
+          onDragStart={dragStartHandlers.get(session.id)!}
           onDragOver={handleDragOver}
           onDrop={options.onDrop || handleDropOnUngrouped}
-          onContextMenu={(e) => handleContextMenu(e, session.id)}
-          onFinishRename={(newName) => finishRenamingSession(session.id, newName)}
+          onContextMenu={contextMenuHandlers.get(session.id)!}
+          onFinishRename={finishRenameHandlers.get(session.id)!}
           onStartRename={() => startRenamingSession(`${options.keyPrefix}-${session.id}`)}
-          onToggleBookmark={() => toggleBookmark(session.id)}
+          onToggleBookmark={toggleBookmarkHandlers.get(session.id)!}
         />
 
         {/* Thin band below parent when worktrees exist but collapsed - click to expand */}
@@ -1282,12 +1325,12 @@ function SessionListInner(props: SessionListProps) {
                     gitFileCount={gitFileCounts.get(child.id)}
                     isInBatch={activeBatchSessionIds.includes(child.id)}
                     jumpNumber={getSessionJumpNumber(child.id)}
-                    onSelect={() => setActiveSessionId(child.id)}
-                    onDragStart={() => handleDragStart(child.id)}
-                    onContextMenu={(e) => handleContextMenu(e, child.id)}
-                    onFinishRename={(newName) => finishRenamingSession(child.id, newName)}
+                    onSelect={selectHandlers.get(child.id)!}
+                    onDragStart={dragStartHandlers.get(child.id)!}
+                    onContextMenu={contextMenuHandlers.get(child.id)!}
+                    onFinishRename={finishRenameHandlers.get(child.id)!}
                     onStartRename={() => startRenamingSession(`worktree-${session.id}-${child.id}`)}
-                    onToggleBookmark={() => toggleBookmark(child.id)}
+                    onToggleBookmark={toggleBookmarkHandlers.get(child.id)!}
                   />
                 );
               })}

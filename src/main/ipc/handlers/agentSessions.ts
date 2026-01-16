@@ -809,19 +809,29 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
           discoverCodexSessionFiles(),
         ]);
 
-        // Build sets of current session keys for cleanup
+        // Build sets of current session keys for archive detection
         const currentClaudeKeys = new Set(claudeFiles.map((f) => f.sessionKey));
         const currentCodexKeys = new Set(codexFiles.map((f) => f.sessionKey));
 
-        // Remove deleted sessions from cache
+        // Mark deleted sessions as archived (preserve stats for lifetime cost tracking)
         for (const key of Object.keys(cache.providers['claude-code'].sessions)) {
+          const session = cache.providers['claude-code'].sessions[key];
           if (!currentClaudeKeys.has(key)) {
-            delete cache.providers['claude-code'].sessions[key];
+            // Source file deleted - mark as archived to preserve stats
+            session.archived = true;
+          } else if (session.archived) {
+            // Source file reappeared - mark as active (will be re-parsed below)
+            session.archived = false;
           }
         }
         for (const key of Object.keys(cache.providers['codex'].sessions)) {
+          const session = cache.providers['codex'].sessions[key];
           if (!currentCodexKeys.has(key)) {
-            delete cache.providers['codex'].sessions[key];
+            // Source file deleted - mark as archived to preserve stats
+            session.archived = true;
+          } else if (session.archived) {
+            // Source file reappeared - mark as active (will be re-parsed below)
+            session.archived = false;
           }
         }
 
@@ -857,6 +867,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
             cache.providers['claude-code'].sessions[file.sessionKey] = {
               ...stats,
               fileMtimeMs: file.mtimeMs,
+              archived: false,
             };
 
             processedCount++;
@@ -880,6 +891,7 @@ export function registerAgentSessionsHandlers(deps?: AgentSessionsHandlerDepende
             cache.providers['codex'].sessions[file.sessionKey] = {
               ...stats,
               fileMtimeMs: file.mtimeMs,
+              archived: false,
             };
 
             processedCount++;

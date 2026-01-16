@@ -432,7 +432,7 @@ describe('estimateTokenCount', () => {
 
     const tokens = estimateTokenCount(context);
 
-    expect(tokens).toBe(700); // input + cacheCreation + cacheRead
+    expect(tokens).toBe(700); // input + cacheCreation (cacheRead excluded - cumulative)
   });
 
   it('should estimate from log content when no usage stats', () => {
@@ -641,8 +641,8 @@ describe('calculateTotalTokens', () => {
 
     const total = calculateTotalTokens(contexts);
 
-    // input + cacheCreation + cacheRead for each context
-    expect(total).toBe(575); // (100+25+50) + (300+25+75)
+    // input + cacheCreation for each context (cacheRead excluded - cumulative)
+    expect(total).toBe(450); // (100+25) + (300+25)
   });
 });
 
@@ -685,7 +685,8 @@ describe('getContextSummary', () => {
 
     expect(summary.totalSources).toBe(2);
     expect(summary.totalLogs).toBe(5);
-    expect(summary.estimatedTokens).toBe(475);
+    // (100+25) + (200+25) = 350 (cacheRead excluded - cumulative)
+    expect(summary.estimatedTokens).toBe(350);
     expect(summary.byAgent['claude-code']).toBe(1);
     expect(summary.byAgent['opencode']).toBe(1);
   });

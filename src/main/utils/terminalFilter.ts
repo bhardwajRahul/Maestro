@@ -100,6 +100,25 @@ export function stripControlSequences(text: string, lastCommand?: string, isTerm
   cleaned = cleaned.replace(/\x1b\]1337;[^\x07\x1b]*(\x07|\x1b\\)/g, '');
   cleaned = cleaned.replace(/\x1b\]7;[^\x07\x1b]*(\x07|\x1b\\)/g, '');
 
+  // Remove BARE shell integration sequences (without ESC prefix)
+  // SSH interactive shells emit these when .zshrc/.bashrc loads shell integration
+  // Format: ]1337;Key=Value]1337;Key=Value...actual content (no ESC prefix)
+  // Process BEL-terminated sequences first
+  cleaned = cleaned.replace(/\]1337;[^\x07]*\x07/g, '');
+  cleaned = cleaned.replace(/\]133;[^\x07]*\x07/g, '');
+  cleaned = cleaned.replace(/\]7;[^\x07]*\x07/g, '');
+  // Handle chained sequences (followed by another ])
+  cleaned = cleaned.replace(/\]1337;[^\]\x07\x1b]*(?=\])/g, '');
+  cleaned = cleaned.replace(/\]133;[^\]\x07\x1b]*(?=\])/g, '');
+  cleaned = cleaned.replace(/\]7;[^\]\x07\x1b]*(?=\])/g, '');
+  // Handle last sequence in chain (ShellIntegrationVersion followed by content)
+  cleaned = cleaned.replace(/\]1337;ShellIntegrationVersion=[\d;a-zA-Z=]*/g, '');
+  cleaned = cleaned.replace(/\]1337;(?:RemoteHost|CurrentDir|User|HostName)=[^\/\]\x07\{]*/g, '');
+  // Handle sequences at end of string
+  cleaned = cleaned.replace(/^\]1337;[^\]\x07]*$/g, '');
+  cleaned = cleaned.replace(/^\]133;[^\]\x07]*$/g, '');
+  cleaned = cleaned.replace(/^\]7;[^\]\x07]*$/g, '');
+
   // Remove other OSC sequences by number
   cleaned = cleaned.replace(/\x1b\][0-9];[^\x07\x1b]*(\x07|\x1b\\)/g, '');
 

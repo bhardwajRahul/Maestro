@@ -153,6 +153,38 @@ describe('terminalFilter', () => {
         const result = stripControlSequences(input);
         expect(result).toBe('pwd');
       });
+
+      it('should remove bare ]1337; sequences chained together (SSH output)', () => {
+        // Real example from SSH connections - sequences without ESC prefix, chained together
+        const input = ']1337;RemoteHost=pedram@PedTome.local]1337;CurrentDir=/Users/pedram]1337;ShellIntegrationVersion=13;shell=zsh/opt/homebrew/bin/codex';
+        const result = stripControlSequences(input);
+        expect(result).toBe('/opt/homebrew/bin/codex');
+      });
+
+      it('should remove bare ]1337; sequences with BEL terminator', () => {
+        const input = ']1337;CurrentDir=/home/user\x07/usr/local/bin/codex';
+        const result = stripControlSequences(input);
+        expect(result).toBe('/usr/local/bin/codex');
+      });
+
+      it('should handle real SSH session init output', () => {
+        // Simulates what appears when SSH shell integration emits sequences at session start
+        const input = ']1337;RemoteHost=pedram@PedTome.local]1337;CurrentDir=/Users/pedram]1337;ShellIntegrationVersion=13;shell=zsh{"type":"system","subtype":"init"}';
+        const result = stripControlSequences(input);
+        expect(result).toBe('{"type":"system","subtype":"init"}');
+      });
+
+      it('should remove bare ]133; sequences (VSCode)', () => {
+        const input = ']133;A\x07prompt]133;B\x07output';
+        const result = stripControlSequences(input);
+        expect(result).toBe('promptoutput');
+      });
+
+      it('should remove bare ]7; sequences', () => {
+        const input = ']7;file:///home/user/project\x07content';
+        const result = stripControlSequences(input);
+        expect(result).toBe('content');
+      });
     });
 
     describe('other escape sequences', () => {

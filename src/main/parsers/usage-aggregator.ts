@@ -153,18 +153,23 @@ export function aggregateModelUsage(
   } = {},
   totalCostUsd: number = 0
 ): UsageStats {
-  let aggregatedInputTokens = 0;
-  let aggregatedOutputTokens = 0;
-  let aggregatedCacheReadTokens = 0;
-  let aggregatedCacheCreationTokens = 0;
+  // Use MAX across models for context-related tokens, not SUM.
+  // When Claude Code uses multiple models (e.g., Haiku + Sonnet) in one turn,
+  // each model reads approximately the same conversation context from cache.
+  // Summing would double-count: Haiku reads 100k + Sonnet reads 100k = 200k (wrong!)
+  // MAX gives the actual context size: max(100k, 100k) = 100k (correct!)
+  let maxInputTokens = 0;
+  let maxOutputTokens = 0;
+  let maxCacheReadTokens = 0;
+  let maxCacheCreationTokens = 0;
   let contextWindow = 200000; // Default for Claude
 
   if (modelUsage) {
     for (const modelStats of Object.values(modelUsage)) {
-      aggregatedInputTokens += modelStats.inputTokens || 0;
-      aggregatedOutputTokens += modelStats.outputTokens || 0;
-      aggregatedCacheReadTokens += modelStats.cacheReadInputTokens || 0;
-      aggregatedCacheCreationTokens += modelStats.cacheCreationInputTokens || 0;
+      maxInputTokens = Math.max(maxInputTokens, modelStats.inputTokens || 0);
+      maxOutputTokens = Math.max(maxOutputTokens, modelStats.outputTokens || 0);
+      maxCacheReadTokens = Math.max(maxCacheReadTokens, modelStats.cacheReadInputTokens || 0);
+      maxCacheCreationTokens = Math.max(maxCacheCreationTokens, modelStats.cacheCreationInputTokens || 0);
       // Use the highest context window from any model
       if (modelStats.contextWindow && modelStats.contextWindow > contextWindow) {
         contextWindow = modelStats.contextWindow;
@@ -174,18 +179,18 @@ export function aggregateModelUsage(
 
   // Fall back to top-level usage if modelUsage isn't available
   // This handles older CLI versions or different output formats
-  if (aggregatedInputTokens === 0 && aggregatedOutputTokens === 0) {
-    aggregatedInputTokens = usage.input_tokens || 0;
-    aggregatedOutputTokens = usage.output_tokens || 0;
-    aggregatedCacheReadTokens = usage.cache_read_input_tokens || 0;
-    aggregatedCacheCreationTokens = usage.cache_creation_input_tokens || 0;
+  if (maxInputTokens === 0 && maxOutputTokens === 0) {
+    maxInputTokens = usage.input_tokens || 0;
+    maxOutputTokens = usage.output_tokens || 0;
+    maxCacheReadTokens = usage.cache_read_input_tokens || 0;
+    maxCacheCreationTokens = usage.cache_creation_input_tokens || 0;
   }
 
   return {
-    inputTokens: aggregatedInputTokens,
-    outputTokens: aggregatedOutputTokens,
-    cacheReadInputTokens: aggregatedCacheReadTokens,
-    cacheCreationInputTokens: aggregatedCacheCreationTokens,
+    inputTokens: maxInputTokens,
+    outputTokens: maxOutputTokens,
+    cacheReadInputTokens: maxCacheReadTokens,
+    cacheCreationInputTokens: maxCacheCreationTokens,
     totalCostUsd,
     contextWindow,
   };
