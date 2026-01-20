@@ -13,8 +13,19 @@ import { logger } from './utils/logger';
 import { tunnelManager } from './tunnel-manager';
 import { powerManager } from './power-manager';
 import { getThemeById } from './themes';
-import Store from 'electron-store';
 import { getHistoryManager } from './history-manager';
+import {
+	initializeStores,
+	getEarlySettings,
+	getSettingsStore,
+	getSessionsStore,
+	getGroupsStore,
+	getAgentConfigsStore,
+	getWindowStateStore,
+	getClaudeSessionOriginsStore,
+	getAgentSessionOriginsStore,
+	getSshRemoteById,
+} from './stores';
 import {
 	registerGitHandlers,
 	registerAutorunHandlers,
@@ -58,7 +69,6 @@ import { initializeSessionStorages } from './storage';
 import { initializeOutputParsers, getOutputParser } from './parsers';
 import { calculateContextTokens } from './parsers/usage-aggregator';
 import { DEMO_MODE, DEMO_DATA_PATH } from './constants';
-import type { SshRemoteConfig } from '../shared/types';
 import { initAutoUpdater } from './auto-updater';
 import {
 	readDirRemote,
@@ -106,18 +116,9 @@ function debugLog(prefix: string, message: string, ...args: any[]): void {
 }
 
 // ============================================================================
-// Custom Storage Location Configuration
-// ============================================================================
-// This bootstrap store is ALWAYS local - it tells us where to find the main data
-// Users can choose a custom folder (e.g., iCloud Drive, Dropbox, OneDrive) to sync settings
-interface BootstrapSettings {
-	customSyncPath?: string;
-	iCloudSyncEnabled?: boolean; // Legacy - kept for backwards compatibility during migration
-}
-
-// ============================================================================
 // Data Directory Configuration (MUST happen before any Store initialization)
 // ============================================================================
+// Store type definitions are imported from ./stores/types.ts
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 // Capture the production data path before any modification
@@ -144,66 +145,22 @@ if (isDevelopment && !DEMO_MODE && !process.env.USE_PROD_DATA) {
 // ============================================================================
 // Store Initialization (after userData path is configured)
 // ============================================================================
+// All stores are initialized via initializeStores() from ./stores module
 
-const bootstrapStore = new Store<BootstrapSettings>({
-	name: 'maestro-bootstrap',
-	cwd: app.getPath('userData'),
-	defaults: {},
-});
+const { syncPath, bootstrapStore } = initializeStores({ productionDataPath });
 
-/**
- * Get the custom sync path if configured.
- * Returns undefined if using default path.
- */
-function getSyncPath(): string | undefined {
-	const customPath = bootstrapStore.get('customSyncPath');
-
-	if (customPath) {
-		// Ensure the directory exists
-		if (!fsSync.existsSync(customPath)) {
-			try {
-				fsSync.mkdirSync(customPath, { recursive: true });
-			} catch {
-				// If we can't create the directory, fall back to default
-				console.error(`Failed to create custom sync path: ${customPath}, using default`);
-				return undefined;
-			}
-		}
-		return customPath;
-	}
-
-	return undefined; // Use default path
-}
-
-// Get the sync path once at startup
-// If no custom sync path, use the current userData path (dev or prod depending on mode)
-const syncPath = getSyncPath() || app.getPath('userData');
-
-// Log the paths being used for debugging session persistence issues
-console.log(`[STARTUP] userData path: ${app.getPath('userData')}`);
-console.log(`[STARTUP] syncPath (sessions/settings): ${syncPath}`);
-console.log(`[STARTUP] productionDataPath (agent configs): ${productionDataPath}`);
-
-// Initialize Sentry for crash reporting
-// Only enable in production - skip during development to avoid noise from hot-reload artifacts
-// Check if crash reporting is enabled (default: true for opt-out behavior)
-const earlySettingsStore = new Store<{
-	crashReportingEnabled: boolean;
-	disableGpuAcceleration: boolean;
-}>({
-	name: 'maestro-settings',
-	cwd: syncPath, // Use same path as main settings store
-});
-const crashReportingEnabled = earlySettingsStore.get('crashReportingEnabled', true);
+// Get early settings before Sentry init (for crash reporting and GPU acceleration)
+const { crashReportingEnabled, disableGpuAcceleration } = getEarlySettings(syncPath);
 
 // Disable GPU hardware acceleration if user has opted out
 // Must be called before app.ready event
-const disableGpuAcceleration = earlySettingsStore.get('disableGpuAcceleration', false);
 if (disableGpuAcceleration) {
 	app.disableHardwareAcceleration();
 	console.log('[STARTUP] GPU hardware acceleration disabled by user preference');
 }
 
+// Initialize Sentry for crash reporting
+// Only enable in production - skip during development to avoid noise from hot-reload artifacts
 if (crashReportingEnabled && !isDevelopment) {
 	Sentry.init({
 		dsn: 'https://2303c5f787f910863d83ed5d27ce8ed2@o4510554134740992.ingest.us.sentry.io/4510554135789568',
@@ -226,73 +183,9 @@ if (crashReportingEnabled && !isDevelopment) {
 	});
 }
 
-// Type definitions
-interface MaestroSettings {
-	activeThemeId: string;
-	llmProvider: string;
-	modelSlug: string;
-	apiKey: string;
-	shortcuts: Record<string, any>;
-	fontSize: number;
-	fontFamily: string;
-	customFonts: string[];
-	logLevel: 'debug' | 'info' | 'warn' | 'error';
-	defaultShell: string;
-	// Web interface authentication
-	webAuthEnabled: boolean;
-	webAuthToken: string | null;
-	// Web interface custom port
-	webInterfaceUseCustomPort: boolean;
-	webInterfaceCustomPort: number;
-	// SSH remote execution
-	sshRemotes: SshRemoteConfig[];
-	defaultSshRemoteId: string | null;
-	// Unique installation identifier (generated once on first run)
-	installationId: string | null;
-}
-
-const store = new Store<MaestroSettings>({
-	name: 'maestro-settings',
-	cwd: syncPath, // Use iCloud/custom sync path if configured
-	defaults: {
-		activeThemeId: 'dracula',
-		llmProvider: 'openrouter',
-		modelSlug: 'anthropic/claude-3.5-sonnet',
-		apiKey: '',
-		shortcuts: {},
-		fontSize: 14,
-		fontFamily: 'Roboto Mono, Menlo, "Courier New", monospace',
-		customFonts: [],
-		logLevel: 'info',
-		defaultShell: (() => {
-			// Windows: $SHELL doesn't exist; default to PowerShell
-			if (process.platform === 'win32') {
-				return 'powershell';
-			}
-			// Unix: Respect user's configured login shell from $SHELL
-			const shellPath = process.env.SHELL;
-			if (shellPath) {
-				const shellName = path.basename(shellPath);
-				// Valid Unix shell IDs from shellDetector.ts (lines 27-34)
-				if (['bash', 'zsh', 'fish', 'sh', 'tcsh'].includes(shellName)) {
-					return shellName;
-				}
-			}
-			// Fallback to bash (more portable than zsh on older Unix systems)
-			return 'bash';
-		})(),
-		webAuthEnabled: false,
-		webAuthToken: null,
-		webInterfaceUseCustomPort: false,
-		webInterfaceCustomPort: 8080,
-		sshRemotes: [],
-		defaultSshRemoteId: null,
-		installationId: null,
-	},
-});
-
 // Generate installation ID on first run (one-time generation)
 // This creates a unique identifier per Maestro installation for telemetry differentiation
+const store = getSettingsStore();
 let installationId = store.get('installationId');
 if (!installationId) {
 	installationId = crypto.randomUUID();
@@ -305,122 +198,18 @@ if (crashReportingEnabled && !isDevelopment) {
 	Sentry.setTag('installationId', installationId);
 }
 
-// Sessions store
-interface SessionsData {
-	sessions: any[];
-}
-
-const sessionsStore = new Store<SessionsData>({
-	name: 'maestro-sessions',
-	cwd: syncPath, // Use iCloud/custom sync path if configured
-	defaults: {
-		sessions: [],
-	},
-});
-
-// Groups store
-interface GroupsData {
-	groups: any[];
-}
-
-const groupsStore = new Store<GroupsData>({
-	name: 'maestro-groups',
-	cwd: syncPath, // Use iCloud/custom sync path if configured
-	defaults: {
-		groups: [],
-	},
-});
-
-interface AgentConfigsData {
-	configs: Record<string, Record<string, any>>; // agentId -> config key-value pairs
-}
-
-// Agent configs are ALWAYS stored in the production path, even in dev mode
-// This ensures agent paths, custom args, and env vars are shared between dev and prod
-// (They represent machine-level configuration, not session/project data)
-const agentConfigsStore = new Store<AgentConfigsData>({
-	name: 'maestro-agent-configs',
-	cwd: productionDataPath,
-	defaults: {
-		configs: {},
-	},
-});
-
-// Window state store (for remembering window size/position)
-// NOTE: This is intentionally NOT synced - window state is per-device
-interface WindowState {
-	x?: number;
-	y?: number;
-	width: number;
-	height: number;
-	isMaximized: boolean;
-	isFullScreen: boolean;
-}
-
-const windowStateStore = new Store<WindowState>({
-	name: 'maestro-window-state',
-	// No cwd - always local, not synced (window position is device-specific)
-	defaults: {
-		width: 1400,
-		height: 900,
-		isMaximized: false,
-		isFullScreen: false,
-	},
-});
+// Create local references to stores for use throughout this module
+// These are convenience variables - the actual stores are managed by ./stores module
+const sessionsStore = getSessionsStore();
+const groupsStore = getGroupsStore();
+const agentConfigsStore = getAgentConfigsStore();
+const windowStateStore = getWindowStateStore();
+const claudeSessionOriginsStore = getClaudeSessionOriginsStore();
+const agentSessionOriginsStore = getAgentSessionOriginsStore();
 
 // Note: History storage is now handled by HistoryManager which uses per-session files
 // in the history/ directory. The legacy maestro-history.json file is migrated automatically.
 // See src/main/history-manager.ts for details.
-
-// Claude session origins store - tracks which Claude sessions were created by Maestro
-// and their origin type (user-initiated vs auto/batch)
-type ClaudeSessionOrigin = 'user' | 'auto';
-interface ClaudeSessionOriginInfo {
-	origin: ClaudeSessionOrigin;
-	sessionName?: string; // User-defined session name from Maestro
-	starred?: boolean; // Whether the session is starred
-	contextUsage?: number; // Last known context window usage percentage (0-100)
-}
-interface ClaudeSessionOriginsData {
-	// Map of projectPath -> { agentSessionId -> origin info }
-	origins: Record<string, Record<string, ClaudeSessionOrigin | ClaudeSessionOriginInfo>>;
-}
-
-const claudeSessionOriginsStore = new Store<ClaudeSessionOriginsData>({
-	name: 'maestro-claude-session-origins',
-	cwd: syncPath, // Use iCloud/custom sync path if configured
-	defaults: {
-		origins: {},
-	},
-});
-
-// Generic agent session origins store - supports all agents (Codex, OpenCode, etc.)
-// Structure: { [agentId]: { [projectPath]: { [sessionId]: { origin, sessionName, starred } } } }
-interface AgentSessionOriginsData {
-	origins: Record<
-		string,
-		Record<
-			string,
-			Record<string, { origin?: 'user' | 'auto'; sessionName?: string; starred?: boolean }>
-		>
-	>;
-}
-const agentSessionOriginsStore = new Store<AgentSessionOriginsData>({
-	name: 'maestro-agent-session-origins',
-	cwd: syncPath, // Use iCloud/custom sync path if configured
-	defaults: {
-		origins: {},
-	},
-});
-
-/**
- * Get SSH remote configuration by ID.
- * Returns undefined if not found.
- */
-function getSshRemoteById(sshRemoteId: string): SshRemoteConfig | undefined {
-	const sshRemotes = store.get('sshRemotes', []) as SshRemoteConfig[];
-	return sshRemotes.find((r) => r.id === sshRemoteId);
-}
 
 let mainWindow: BrowserWindow | null = null;
 let processManager: ProcessManager | null = null;
