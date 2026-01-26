@@ -67,14 +67,8 @@ export interface ProcessHandlerDependencies {
  * - runCommand: Execute a single command and capture output
  */
 export function registerProcessHandlers(deps: ProcessHandlerDependencies): void {
-	const {
-		getProcessManager,
-		getAgentDetector,
-		agentConfigsStore,
-		settingsStore,
-		getMainWindow,
-		sessionsStore,
-	} = deps;
+	const { getProcessManager, getAgentDetector, agentConfigsStore, settingsStore, getMainWindow } =
+		deps;
 
 	// Spawn a new process for a session
 	// Supports agent-specific argument builders for batch mode, JSON output, resume, read-only mode, YOLO mode
@@ -114,33 +108,6 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 			}) => {
 				const processManager = requireProcessManager(getProcessManager);
 				const agentDetector = requireDependency(getAgentDetector, 'Agent detector');
-
-				// Synopsis SSH Fix: If this is a synopsis session and it's missing SSH config,
-				// try to inherit it from the parent session. This is a backend workaround for
-				// a suspected frontend state issue where the remote config isn't passed.
-				const synopsisMatch = config.sessionId.match(/^(.+)-synopsis-\d+$/);
-				if (
-					synopsisMatch &&
-					(!config.sessionSshRemoteConfig || !config.sessionSshRemoteConfig.enabled)
-				) {
-					const originalSessionId = synopsisMatch[1];
-					const sessions = sessionsStore.get('sessions', []);
-					const originalSession = sessions.find((s) => s.id === originalSessionId);
-
-					if (originalSession && originalSession.sessionSshRemoteConfig?.enabled) {
-						const sshConfig = originalSession.sessionSshRemoteConfig;
-						config.sessionSshRemoteConfig = sshConfig;
-						logger.info(
-							`Inferred SSH config for synopsis session from parent session`,
-							LOG_CONTEXT,
-							{
-								sessionId: config.sessionId,
-								originalSessionId: originalSessionId,
-								sshRemoteId: sshConfig.remoteId,
-							}
-						);
-					}
-				}
 
 				// Get agent definition to access config options and argument builders
 				const agent = await agentDetector.getAgent(config.toolType);
