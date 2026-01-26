@@ -4,19 +4,13 @@
  */
 
 import type { ProcessManager } from '../process-manager';
-import type { ProcessListenerDependencies } from './types';
+import { GROUP_CHAT_PREFIX, type ProcessListenerDependencies } from './types';
 
 /**
  * Maximum buffer size per session (10MB).
  * Prevents unbounded memory growth from long-running or misbehaving processes.
  */
 const MAX_BUFFER_SIZE = 10 * 1024 * 1024;
-
-/**
- * Prefix for group chat session IDs.
- * Used for fast string check before expensive regex matching.
- */
-const GROUP_CHAT_PREFIX = 'group-chat-';
 
 /**
  * Length of random suffix in message IDs (9 characters of base36).

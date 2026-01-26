@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
 // Sentry is imported dynamically below to avoid module-load-time access to electron.app
@@ -571,43 +571,7 @@ function setupIpcHandlers() {
 
 	// Claude Code sessions - extracted to src/main/ipc/handlers/claude.ts
 
-	// ==========================================================================
-	// Agent Error Handling API
-	// ==========================================================================
-
-	// Clear an error state for a session (called after recovery action)
-	ipcMain.handle('agent:clearError', async (_event, sessionId: string) => {
-		logger.debug('Clearing agent error for session', 'AgentError', { sessionId });
-		// Note: The actual error state is managed in the renderer.
-		// This handler is used to log the clear action and potentially
-		// perform any main process cleanup needed.
-		return { success: true };
-	});
-
-	// Retry the last operation after an error (optionally with modified parameters)
-	ipcMain.handle(
-		'agent:retryAfterError',
-		async (
-			_event,
-			sessionId: string,
-			options?: {
-				prompt?: string;
-				newSession?: boolean;
-			}
-		) => {
-			logger.info('Retrying after agent error', 'AgentError', {
-				sessionId,
-				hasPrompt: !!options?.prompt,
-				newSession: options?.newSession || false,
-			});
-			// Note: The actual retry logic is handled in the renderer, which will:
-			// 1. Clear the error state
-			// 2. Optionally start a new session
-			// 3. Re-send the last command or the provided prompt
-			// This handler exists for logging and potential future main process coordination.
-			return { success: true };
-		}
-	);
+	// Agent Error Handling API - extracted to src/main/ipc/handlers/agent-error.ts
 
 	// Register notification handlers (extracted to handlers/notifications.ts)
 	registerNotificationsHandlers();

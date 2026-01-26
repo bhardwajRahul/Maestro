@@ -4,6 +4,17 @@
  */
 
 import type { ProcessManager } from '../process-manager';
+
+// ==========================================================================
+// Constants
+// ==========================================================================
+
+/**
+ * Prefix for group chat session IDs.
+ * Used for fast string check before expensive regex matching.
+ * Session IDs starting with this prefix belong to group chat sessions.
+ */
+export const GROUP_CHAT_PREFIX = 'group-chat-';
 import type { WebServer } from '../web-server';
 import type { AgentDetector } from '../agent-detector';
 import type { SafeSendFn } from '../utils/safe-send';

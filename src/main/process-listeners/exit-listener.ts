@@ -5,13 +5,7 @@
  */
 
 import type { ProcessManager } from '../process-manager';
-import type { ProcessListenerDependencies } from './types';
-
-/**
- * Prefix for group chat session IDs.
- * Used for fast string check before expensive regex matching.
- */
-const GROUP_CHAT_PREFIX = 'group-chat-';
+import { GROUP_CHAT_PREFIX, type ProcessListenerDependencies } from './types';
 
 /**
  * Sets up the exit listener for process termination.

@@ -49,6 +49,7 @@ import { registerWebHandlers, WebHandlerDependencies } from './web';
 import { registerLeaderboardHandlers, LeaderboardHandlerDependencies } from './leaderboard';
 import { registerNotificationsHandlers } from './notifications';
 import { registerSymphonyHandlers, SymphonyHandlerDependencies } from './symphony';
+import { registerAgentErrorHandlers } from './agent-error';
 import { AgentDetector } from '../../agent-detector';
 import { ProcessManager } from '../../process-manager';
 import { WebServer } from '../../web-server';
@@ -87,6 +88,7 @@ export { registerLeaderboardHandlers };
 export type { LeaderboardHandlerDependencies };
 export { registerNotificationsHandlers };
 export { registerSymphonyHandlers };
+export { registerAgentErrorHandlers };
 export type { AgentsHandlerDependencies };
 export type { ProcessHandlerDependencies };
 export type { PersistenceHandlerDependencies };
@@ -255,6 +257,8 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 		app: deps.app,
 		getMainWindow: deps.getMainWindow,
 	});
+	// Register agent error handlers (error state management)
+	registerAgentErrorHandlers();
 	// Setup logger event forwarding to renderer
 	setupLoggerEventForwarding(deps.getMainWindow);
 }
