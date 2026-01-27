@@ -501,20 +501,44 @@ class ConversationManager {
 									detectedError,
 								});
 							} else {
-								// No specific error detected, create generic message
-								const errorMessage = createGenericErrorMessage(rawOutput, code);
-								wizardDebugLogger.log('exit', `Agent exited with error (code ${code})`, {
-									sessionId,
-									exitCode: code,
-									errorMessage,
-									rawOutputLength: rawOutput.length,
-									rawOutputPreview: rawOutput.slice(-500),
-								});
-								resolve({
-									success: false,
-									error: errorMessage,
-									rawOutput,
-								});
+								// Try to parse the output as a structured response
+								const parsedResponse = this.parseAgentOutput();
+								if (
+									parsedResponse.parseSuccess &&
+									(parsedResponse.structured || parsedResponse.rawText)
+								) {
+									wizardDebugLogger.log(
+										'exit',
+										`Agent exited nonzero but output parsed as valid response`,
+										{
+											sessionId,
+											exitCode: code,
+											parseSuccess: parsedResponse.parseSuccess,
+											hasStructured: !!parsedResponse.structured,
+											rawTextLength: parsedResponse.rawText?.length,
+										}
+									);
+									resolve({
+										success: true,
+										response: parsedResponse,
+										rawOutput,
+									});
+								} else {
+									// No specific error detected, create generic message
+									const errorMessage = createGenericErrorMessage(rawOutput, code);
+									wizardDebugLogger.log('exit', `Agent exited with error (code ${code})`, {
+										sessionId,
+										exitCode: code,
+										errorMessage,
+										rawOutputLength: rawOutput.length,
+										rawOutputPreview: rawOutput.slice(-500),
+									});
+									resolve({
+										success: false,
+										error: errorMessage,
+										rawOutput,
+									});
+								}
 							}
 						}
 					} else {
