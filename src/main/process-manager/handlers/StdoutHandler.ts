@@ -15,10 +15,21 @@ interface StdoutHandlerDependencies {
 }
 
 /**
- * Normalize Codex usage stats to handle cumulative vs delta usage reporting.
- * Codex reports cumulative usage, so we need to track the last totals and compute deltas.
+ * Normalize usage stats to handle cumulative vs per-turn usage reporting.
+ *
+ * Claude Code and Codex both report CUMULATIVE session totals rather than per-turn values.
+ * For context window display, we need per-turn values because:
+ * - Anthropic API formula: total_context = input + cacheRead + cacheCreation
+ * - If we use cumulative values, context exceeds 100% after a few turns
+ *
+ * This function detects cumulative reporting (values only increase) and converts to deltas.
+ * On the first usage report, it returns the values as-is.
+ * On subsequent reports, it computes the delta from the previous totals.
+ *
+ * @see https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+ * @see https://codelynx.dev/posts/calculate-claude-code-context
  */
-function normalizeCodexUsage(
+function normalizeUsageToDelta(
 	managedProcess: ManagedProcess,
 	usageStats: {
 		inputTokens: number;
@@ -227,10 +238,12 @@ export class StdoutHandler {
 		const usage = outputParser.extractUsage(event);
 		if (usage) {
 			const usageStats = this.buildUsageStats(managedProcess, usage);
-			// Normalize Codex usage (cumulative -> delta)
+			// Codex reports cumulative session totals, not per-turn values - normalize to deltas.
+			// Claude Code reports per-turn context values (each turn shows actual context window usage).
+			// Terminal has no usage reporting.
 			const normalizedUsageStats =
 				managedProcess.toolType === 'codex'
-					? normalizeCodexUsage(managedProcess, usageStats)
+					? normalizeUsageToDelta(managedProcess, usageStats)
 					: usageStats;
 			this.emitter.emit('usage', sessionId, normalizedUsageStats);
 		}

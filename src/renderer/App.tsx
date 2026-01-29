@@ -2451,11 +2451,27 @@ function MaestroConsoleInner() {
 						.then((result) => {
 							const duration = Date.now() - startTime;
 							if (result.success && result.response && addHistoryEntryRef.current) {
+								// Parse the synopsis response to check for NOTHING_TO_REPORT
+								const parsed = parseSynopsis(result.response);
+
+								// Skip history entry and toast if nothing meaningful to report
+								if (parsed.nothingToReport) {
+									console.log(
+										'[onProcessExit] Synopsis returned NOTHING_TO_REPORT - skipping history entry',
+										{
+											sessionId: synopsisData!.sessionId,
+											agentSessionId: synopsisData!.agentSessionId,
+										}
+									);
+									return;
+								}
+
 								// IMPORTANT: Pass explicit sessionId and projectPath to prevent cross-agent bleed
 								// when user switches agents while synopsis is running in background
 								addHistoryEntryRef.current({
 									type: 'USER',
-									summary: result.response,
+									summary: parsed.shortSummary,
+									fullResponse: parsed.fullSynopsis,
 									agentSessionId: synopsisData!.agentSessionId,
 									usageStats: result.usageStats,
 									sessionId: synopsisData!.sessionId,
@@ -2481,7 +2497,7 @@ function MaestroConsoleInner() {
 								addToastRef.current({
 									type: 'info',
 									title: 'Synopsis',
-									message: result.response,
+									message: parsed.shortSummary,
 									group: synopsisData!.groupName,
 									project: synopsisData!.projectName,
 									taskDuration: duration,
@@ -2718,17 +2734,20 @@ function MaestroConsoleInner() {
 				actualSessionId = sessionId;
 			}
 
-			// Calculate context window usage percentage from CURRENT reported tokens.
-			// For Claude: context = inputTokens + cacheCreationInputTokens + cacheReadInputTokens
-			//   All tokens in the context window (cached tokens still occupy space)
+			// Calculate context window usage percentage from CURRENT (per-turn) reported tokens.
+			// Usage data is normalized in StdoutHandler to convert cumulative totals to per-turn deltas.
+			//
+			// Per Anthropic docs: total_context = input + cacheRead + cacheCreation
 			// For Codex: context = inputTokens + outputTokens (combined limit)
+			//
+			// @see https://platform.claude.com/docs/en/build-with-claude/prompt-caching
 			const sessionForUsage = sessionsRef.current.find((s) => s.id === actualSessionId);
 			const agentToolType = sessionForUsage?.toolType;
 			const isClaudeUsage = agentToolType === 'claude-code' || agentToolType === 'claude';
 			const currentContextTokens = isClaudeUsage
 				? usageStats.inputTokens +
-					usageStats.cacheCreationInputTokens +
-					usageStats.cacheReadInputTokens
+					usageStats.cacheReadInputTokens +
+					usageStats.cacheCreationInputTokens
 				: usageStats.inputTokens + usageStats.outputTokens;
 
 			// Calculate context percentage, falling back to agent-specific defaults if contextWindow not provided

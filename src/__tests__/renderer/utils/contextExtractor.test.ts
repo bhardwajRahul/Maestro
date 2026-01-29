@@ -650,8 +650,9 @@ describe('calculateTotalTokens', () => {
 
 		const total = calculateTotalTokens(contexts);
 
-		// input + cacheCreation + cacheRead for each context
-		expect(total).toBe(575); // (100+25+50) + (300+25+75)
+		// Per Anthropic docs: input + cacheRead + cacheCreation for each context
+		// (100+50+25) + (300+75+25) = 575
+		expect(total).toBe(575);
 	});
 });
 
@@ -694,7 +695,7 @@ describe('getContextSummary', () => {
 
 		expect(summary.totalSources).toBe(2);
 		expect(summary.totalLogs).toBe(5);
-		// (100+25+50) + (200+25+75) = 475 (cacheRead now included)
+		// Per Anthropic docs: (100+50+25) + (200+75+25) = 475
 		expect(summary.estimatedTokens).toBe(475);
 		expect(summary.byAgent['claude-code']).toBe(1);
 		expect(summary.byAgent['opencode']).toBe(1);
