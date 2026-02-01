@@ -63,11 +63,17 @@ export class ChildProcessSpawner {
 			contextWindow,
 			customEnvVars,
 			noPromptSeparator,
+			sendPromptViaStdin,
+			sendPromptViaStdinRaw,
 		} = config;
 
 		const isWindows = process.platform === 'win32';
 		const hasImages = images && images.length > 0;
 		const capabilities = getAgentCapabilities(toolType);
+
+		// Check if prompt will be sent via stdin instead of command line
+		// This is critical for SSH remote execution to avoid shell escaping issues
+		const promptViaStdin = sendPromptViaStdin || sendPromptViaStdinRaw;
 
 		// Build final args based on batch mode and images
 		let finalArgs: string[];
@@ -75,7 +81,8 @@ export class ChildProcessSpawner {
 
 		if (hasImages && prompt && capabilities.supportsStreamJsonInput) {
 			// For agents that support stream-json input (like Claude Code)
-			finalArgs = [...args, '--input-format', 'stream-json'];
+			// When using stdin, --input-format stream-json should already be in args from the caller
+			finalArgs = promptViaStdin ? [...args] : [...args, '--input-format', 'stream-json'];
 		} else if (hasImages && prompt && imageArgs) {
 			// For agents that use file-based image args (like Codex, OpenCode)
 			finalArgs = [...args];
@@ -88,20 +95,25 @@ export class ChildProcessSpawner {
 				}
 			}
 			// Add the prompt using promptArgs if available, otherwise as positional arg
-			if (promptArgs) {
-				finalArgs = [...finalArgs, ...promptArgs(prompt)];
-			} else if (noPromptSeparator) {
-				finalArgs = [...finalArgs, prompt];
-			} else {
-				finalArgs = [...finalArgs, '--', prompt];
+			// SKIP this when prompt is sent via stdin to avoid shell escaping issues
+			if (!promptViaStdin) {
+				if (promptArgs) {
+					finalArgs = [...finalArgs, ...promptArgs(prompt)];
+				} else if (noPromptSeparator) {
+					finalArgs = [...finalArgs, prompt];
+				} else {
+					finalArgs = [...finalArgs, '--', prompt];
+				}
 			}
 			logger.debug('[ProcessManager] Using file-based image args', 'ProcessManager', {
 				sessionId,
 				imageCount: images.length,
 				tempFiles: tempImageFiles,
+				promptViaStdin,
 			});
-		} else if (prompt) {
+		} else if (prompt && !promptViaStdin) {
 			// Regular batch mode - prompt as CLI arg
+			// SKIP this when prompt is sent via stdin to avoid shell escaping issues
 			if (promptArgs) {
 				finalArgs = [...args, ...promptArgs(prompt)];
 			} else if (noPromptSeparator) {
