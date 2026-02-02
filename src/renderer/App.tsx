@@ -1,4 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
+import React, {
+	useState,
+	useEffect,
+	useRef,
+	useMemo,
+	useCallback,
+	useDeferredValue,
+	lazy,
+	Suspense,
+} from 'react';
 import { SettingsModal } from './components/SettingsModal';
 import { SessionList } from './components/SessionList';
 import { RightPanel, RightPanelHandle } from './components/RightPanel';
@@ -13,7 +22,6 @@ import {
 import { DEFAULT_BATCH_PROMPT } from './components/BatchRunnerModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MainPanel, type MainPanelHandle } from './components/MainPanel';
-import { LogViewer } from './components/LogViewer';
 import { AppOverlays } from './components/AppOverlays';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
 import { DebugWizardModal } from './components/DebugWizardModal';
@@ -28,10 +36,27 @@ import {
 import { TourOverlay } from './components/Wizard/tour';
 import { CONDUCTOR_BADGES, getBadgeForTime } from './constants/conductorBadges';
 import { EmptyStateView } from './components/EmptyStateView';
-import { MarketplaceModal } from './components/MarketplaceModal';
-import { SymphonyModal, type SymphonyContributionData } from './components/SymphonyModal';
-import { DocumentGraphView } from './components/DocumentGraph/DocumentGraphView';
 import { DeleteAgentConfirmModal } from './components/DeleteAgentConfirmModal';
+
+// Lazy-loaded components for performance (rarely-used heavy modals)
+// These are loaded on-demand when the user first opens them
+const LogViewer = lazy(() =>
+	import('./components/LogViewer').then((m) => ({ default: m.LogViewer }))
+);
+const MarketplaceModal = lazy(() =>
+	import('./components/MarketplaceModal').then((m) => ({ default: m.MarketplaceModal }))
+);
+const SymphonyModal = lazy(() =>
+	import('./components/SymphonyModal').then((m) => ({ default: m.SymphonyModal }))
+);
+const DocumentGraphView = lazy(() =>
+	import('./components/DocumentGraph/DocumentGraphView').then((m) => ({
+		default: m.DocumentGraphView,
+	}))
+);
+
+// Re-import the type for SymphonyContributionData (types don't need lazy loading)
+import type { SymphonyContributionData } from './components/SymphonyModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
@@ -155,6 +180,12 @@ import { substituteTemplateVariables } from './utils/templateVariables';
 import { validateNewSession, getProviderDisplayName } from './utils/sessionValidation';
 import { estimateContextUsage, calculateContextTokens } from './utils/contextUsage';
 import { formatLogsForClipboard } from './utils/contextExtractor';
+import {
+	parseSessionId,
+	parseGroupChatSessionId,
+	isSynopsisSession,
+	isBatchSession,
+} from './utils/sessionIdParser';
 import { isLikelyConcatenatedToolNames, getSlashCommandDescription } from './constants/app';
 import { useUILayout } from './contexts/UILayoutContext';
 
@@ -2554,22 +2585,15 @@ function MaestroConsoleInner() {
 			async (sessionId: string, agentSessionId: string) => {
 				// Ignore batch sessions - they have their own isolated session IDs that should NOT
 				// contaminate the interactive session's agentSessionId
-				if (sessionId.includes('-batch-')) {
+				if (isBatchSession(sessionId)) {
 					return;
 				}
 
 				// Parse sessionId to get actual session ID and tab ID
-				// Format: ${sessionId}-ai-${tabId}
-				let actualSessionId: string;
-				let tabId: string | undefined;
-
-				const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
-				if (aiTabMatch) {
-					actualSessionId = aiTabMatch[1];
-					tabId = aiTabMatch[2];
-				} else {
-					actualSessionId = sessionId;
-				}
+				// Uses pre-compiled regex patterns from sessionIdParser
+				const parsed = parseSessionId(sessionId);
+				const actualSessionId = parsed.actualSessionId;
+				const tabId = parsed.tabId ?? undefined;
 
 				// Store Claude session ID in session state
 				// Note: slash commands are now received via onSlashCommands from Claude Code's init message
@@ -2642,8 +2666,7 @@ function MaestroConsoleInner() {
 		const unsubscribeSlashCommands = window.maestro.process.onSlashCommands(
 			(sessionId: string, slashCommands: string[]) => {
 				// Parse sessionId to get actual session ID (ignore tab ID suffix)
-				const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
-				const actualSessionId = aiTabMatch ? aiTabMatch[1] : sessionId;
+				const actualSessionId = parseSessionId(sessionId).baseSessionId;
 
 				// Convert string array to command objects with descriptions
 				// Claude Code returns just command names, we'll need to derive descriptions
@@ -2742,36 +2765,10 @@ function MaestroConsoleInner() {
 
 		// Handle usage statistics from AI responses (BATCHED for performance)
 		const unsubscribeUsage = window.maestro.process.onUsage((sessionId: string, usageStats) => {
-			// Parse sessionId to get actual session ID and tab ID
+			// Parse sessionId using centralized parser (pre-compiled regex patterns)
 			// Handles: -ai-tabId, legacy -ai suffix, -synopsis-timestamp, -batch-timestamp
-			let actualSessionId: string;
-			let tabId: string | null = null;
-			let baseSessionId: string; // For looking up the original session (handles synopsis/batch)
-
-			const aiTabMatch = sessionId.match(/^(.+)-ai-(.+)$/);
-			const synopsisMatch = sessionId.match(/^(.+)-synopsis-\d+$/);
-			const batchMatch = sessionId.match(/^(.+)-batch-\d+$/);
-
-			if (aiTabMatch) {
-				actualSessionId = aiTabMatch[1];
-				tabId = aiTabMatch[2];
-				baseSessionId = actualSessionId;
-			} else if (sessionId.endsWith('-ai')) {
-				actualSessionId = sessionId.slice(0, -3);
-				baseSessionId = actualSessionId;
-			} else if (synopsisMatch) {
-				// Synopsis sessions: {sessionId}-synopsis-{timestamp}
-				// Don't update the session state, just track usage
-				actualSessionId = sessionId;
-				baseSessionId = synopsisMatch[1];
-			} else if (batchMatch) {
-				// Batch sessions: {sessionId}-batch-{timestamp}
-				actualSessionId = sessionId;
-				baseSessionId = batchMatch[1];
-			} else {
-				actualSessionId = sessionId;
-				baseSessionId = sessionId;
-			}
+			const parsed = parseSessionId(sessionId);
+			const { actualSessionId, tabId, baseSessionId } = parsed;
 
 			// Calculate context window usage percentage from CURRENT (per-turn) tokens.
 			// Claude Code usage is normalized to per-turn values in StdoutHandler before reaching here.
@@ -2885,19 +2882,12 @@ function MaestroConsoleInner() {
 				};
 
 				// Check if this is a group chat error (moderator or participant)
-				// Pattern: group-chat-{UUID}-moderator-{timestamp} or group-chat-{UUID}-{participantName}-{timestamp}
-				// UUIDs look like: 533fad24-3915-4fc6-9edb-ba2292a5b903
-				const groupChatModeratorMatch = sessionId.match(
-					/^group-chat-([0-9a-f-]{36})-moderator-(\d+)$/
-				);
-				const groupChatParticipantMatch = sessionId.match(
-					/^group-chat-([0-9a-f-]{36})-(.+?)-(\d+)$/
-				);
-				const groupChatMatch = groupChatModeratorMatch || groupChatParticipantMatch;
-				if (groupChatMatch) {
-					const groupChatId = groupChatMatch[1];
-					const isModeratorError = groupChatModeratorMatch !== null;
-					const participantOrModerator = isModeratorError ? 'moderator' : groupChatMatch[2];
+				// Uses pre-compiled regex patterns from sessionIdParser
+				const groupChatParsed = parseGroupChatSessionId(sessionId);
+				if (groupChatParsed.isGroupChat) {
+					const groupChatId = groupChatParsed.groupChatId!;
+					const isModeratorError = groupChatParsed.isModerator ?? false;
+					const participantOrModerator = isModeratorError ? 'moderator' : groupChatParsed.participantName!;
 
 					console.log('[onAgentError] Group chat error received:', {
 						rawSessionId: sessionId,
@@ -2937,7 +2927,7 @@ function MaestroConsoleInner() {
 
 				// Synopsis processes run in the background - don't show their errors in the main session UI
 				// They have their own error handling in the promise rejection
-				if (sessionId.match(/-synopsis-\d+$/)) {
+				if (isSynopsisSession(sessionId)) {
 					console.log('[onAgentError] Ignoring synopsis process error:', {
 						rawSessionId: sessionId,
 						errorType: error.type,
@@ -2947,18 +2937,10 @@ function MaestroConsoleInner() {
 				}
 
 				// Parse sessionId to get actual session ID (strip suffixes)
-				let actualSessionId: string;
-				let tabIdFromSession: string | undefined;
-				const aiTabMatch = sessionId.match(/^(.+)-ai(?:-(.+))?$/);
-				if (aiTabMatch) {
-					actualSessionId = aiTabMatch[1];
-					tabIdFromSession = aiTabMatch[2];
-				} else if (sessionId.match(/-batch-\d+$/)) {
-					// Batch process errors - strip -batch-{timestamp} suffix
-					actualSessionId = sessionId.replace(/-batch-\d+$/, '');
-				} else {
-					actualSessionId = sessionId;
-				}
+				// Uses pre-compiled regex patterns from sessionIdParser
+				const parsed = parseSessionId(sessionId);
+				const actualSessionId = parsed.baseSessionId;
+				const tabIdFromSession = parsed.tabId ?? undefined;
 
 				console.log('[onAgentError] Agent error received:', {
 					rawSessionId: sessionId,
@@ -12942,28 +12924,32 @@ You are taking over this conversation. Based on the context above, provide a bri
 					onClose={() => setDebugWizardModalOpen(false)}
 				/>
 
-				{/* --- MARKETPLACE MODAL --- */}
-				{activeSession && activeSession.autoRunFolderPath && (
-					<MarketplaceModal
-						theme={theme}
-						isOpen={marketplaceModalOpen}
-						onClose={() => setMarketplaceModalOpen(false)}
-						autoRunFolderPath={activeSession.autoRunFolderPath}
-						sessionId={activeSession.id}
-						sshRemoteId={
-							activeSession.sshRemoteId ||
-							activeSession.sessionSshRemoteConfig?.remoteId ||
-							undefined
-						}
-						onImportComplete={handleMarketplaceImportComplete}
-					/>
+				{/* --- MARKETPLACE MODAL (lazy-loaded) --- */}
+				{activeSession && activeSession.autoRunFolderPath && marketplaceModalOpen && (
+					<Suspense fallback={null}>
+						<MarketplaceModal
+							theme={theme}
+							isOpen={marketplaceModalOpen}
+							onClose={() => setMarketplaceModalOpen(false)}
+							autoRunFolderPath={activeSession.autoRunFolderPath}
+							sessionId={activeSession.id}
+							sshRemoteId={
+								activeSession.sshRemoteId ||
+								activeSession.sessionSshRemoteConfig?.remoteId ||
+								undefined
+							}
+							onImportComplete={handleMarketplaceImportComplete}
+						/>
+					</Suspense>
 				)}
 
-				{/* --- SYMPHONY MODAL --- */}
-				<SymphonyModal
-					theme={theme}
-					isOpen={symphonyModalOpen}
-					onClose={() => setSymphonyModalOpen(false)}
+				{/* --- SYMPHONY MODAL (lazy-loaded) --- */}
+				{symphonyModalOpen && (
+					<Suspense fallback={null}>
+						<SymphonyModal
+							theme={theme}
+							isOpen={symphonyModalOpen}
+							onClose={() => setSymphonyModalOpen(false)}
 					onStartContribution={async (data: SymphonyContributionData) => {
 						console.log('[Symphony] Creating session for contribution:', data);
 
@@ -13128,6 +13114,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 						setActiveRightTab('autorun');
 					}}
 				/>
+					</Suspense>
+				)}
 
 				{/* --- GIST PUBLISH MODAL --- */}
 				{/* Supports both file preview and tab context gist publishing */}
@@ -13169,10 +13157,11 @@ You are taking over this conversation. Based on the context above, provide a bri
 					/>
 				)}
 
-				{/* --- DOCUMENT GRAPH VIEW (Mind Map) --- */}
+				{/* --- DOCUMENT GRAPH VIEW (Mind Map, lazy-loaded) --- */}
 				{/* Only render when a focus file is provided - mind map requires a center document */}
 				{graphFocusFilePath && (
-					<DocumentGraphView
+					<Suspense fallback={null}>
+						<DocumentGraphView
 						isOpen={isGraphViewOpen}
 						onClose={() => {
 							setIsGraphViewOpen(false);
@@ -13223,6 +13212,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 							undefined
 						}
 					/>
+					</Suspense>
 				)}
 
 				{/* NOTE: All modals are now rendered via the unified <AppModals /> component above */}
@@ -13264,20 +13254,22 @@ You are taking over this conversation. Based on the context above, provide a bri
 					</ErrorBoundary>
 				)}
 
-				{/* --- SYSTEM LOG VIEWER (replaces center content when open) --- */}
+				{/* --- SYSTEM LOG VIEWER (replaces center content when open, lazy-loaded) --- */}
 				{logViewerOpen && (
 					<div
 						className="flex-1 flex flex-col min-w-0"
 						style={{ backgroundColor: theme.colors.bgMain }}
 					>
-						<LogViewer
-							theme={theme}
-							onClose={handleCloseLogViewer}
-							logLevel={logLevel}
-							savedSelectedLevels={logViewerSelectedLevels}
-							onSelectedLevelsChange={setLogViewerSelectedLevels}
-							onShortcutUsed={handleLogViewerShortcutUsed}
-						/>
+						<Suspense fallback={null}>
+							<LogViewer
+								theme={theme}
+								onClose={handleCloseLogViewer}
+								logLevel={logLevel}
+								savedSelectedLevels={logViewerSelectedLevels}
+								onSelectedLevelsChange={setLogViewerSelectedLevels}
+								onShortcutUsed={handleLogViewerShortcutUsed}
+							/>
+						</Suspense>
 					</div>
 				)}
 
