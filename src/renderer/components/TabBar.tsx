@@ -1177,10 +1177,11 @@ function TabBarInner({
 	onCloseTabsLeft,
 	onCloseTabsRight,
 	// Unified tab system props (Phase 3)
-	unifiedTabs: _unifiedTabs,
-	activeFileTabId: _activeFileTabId,
-	onFileTabSelect: _onFileTabSelect,
-	onFileTabClose: _onFileTabClose,
+	unifiedTabs,
+	activeFileTabId,
+	onFileTabSelect,
+	onFileTabClose,
+	onUnifiedTabReorder,
 }: TabBarProps) {
 	const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
 	const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
@@ -1223,6 +1224,21 @@ function TabBarInner({
 		? tabs.filter((t) => t.hasUnread || t.id === activeTabId || hasDraft(t))
 		: tabs;
 
+	// When unifiedTabs is provided, filter it similarly for display
+	// File tabs don't have "unread" state, so they only show in filtered mode if active
+	const displayedUnifiedTabs = useMemo(() => {
+		if (!unifiedTabs) return null;
+		if (!showUnreadOnly) return unifiedTabs;
+		// In filter mode: show AI tabs that are unread/active/have drafts, plus file tabs that are active
+		return unifiedTabs.filter((ut) => {
+			if (ut.type === 'ai') {
+				return ut.data.hasUnread || ut.id === activeTabId || hasDraft(ut.data);
+			}
+			// File tabs: only show if active
+			return ut.id === activeFileTabId;
+		});
+	}, [unifiedTabs, showUnreadOnly, activeTabId, activeFileTabId]);
+
 	const handleDragStart = useCallback((tabId: string, e: React.DragEvent) => {
 		e.dataTransfer.effectAllowed = 'move';
 		e.dataTransfer.setData('text/plain', tabId);
@@ -1250,19 +1266,30 @@ function TabBarInner({
 			e.preventDefault();
 			const sourceTabId = e.dataTransfer.getData('text/plain');
 
-			if (sourceTabId && sourceTabId !== targetTabId && onTabReorder) {
-				const sourceIndex = tabs.findIndex((t) => t.id === sourceTabId);
-				const targetIndex = tabs.findIndex((t) => t.id === targetTabId);
+			if (sourceTabId && sourceTabId !== targetTabId) {
+				// When unified tabs are used, prefer onUnifiedTabReorder
+				if (unifiedTabs && onUnifiedTabReorder) {
+					const sourceIndex = unifiedTabs.findIndex((ut) => ut.id === sourceTabId);
+					const targetIndex = unifiedTabs.findIndex((ut) => ut.id === targetTabId);
 
-				if (sourceIndex !== -1 && targetIndex !== -1) {
-					onTabReorder(sourceIndex, targetIndex);
+					if (sourceIndex !== -1 && targetIndex !== -1) {
+						onUnifiedTabReorder(sourceIndex, targetIndex);
+					}
+				} else if (onTabReorder) {
+					// Fallback to legacy AI-tab-only reorder
+					const sourceIndex = tabs.findIndex((t) => t.id === sourceTabId);
+					const targetIndex = tabs.findIndex((t) => t.id === targetTabId);
+
+					if (sourceIndex !== -1 && targetIndex !== -1) {
+						onTabReorder(sourceIndex, targetIndex);
+					}
 				}
 			}
 
 			setDraggingTabId(null);
 			setDragOverTabId(null);
 		},
-		[tabs, onTabReorder]
+		[tabs, onTabReorder, unifiedTabs, onUnifiedTabReorder]
 	);
 
 	const handleRenameRequest = useCallback(
@@ -1293,28 +1320,44 @@ function TabBarInner({
 			clearTimeout(timeoutId);
 			window.removeEventListener('resize', checkOverflow);
 		};
-	}, [tabs.length, displayedTabs.length]);
+	}, [tabs.length, displayedTabs.length, unifiedTabs?.length, displayedUnifiedTabs?.length]);
 
 	const handleMoveToFirst = useCallback(
 		(tabId: string) => {
-			// Find the current index in the FULL tabs array (not filtered)
-			const currentIndex = tabs.findIndex((t) => t.id === tabId);
-			if (currentIndex > 0 && onTabReorder) {
-				onTabReorder(currentIndex, 0);
+			// When unified tabs are used, prefer onUnifiedTabReorder
+			if (unifiedTabs && onUnifiedTabReorder) {
+				const currentIndex = unifiedTabs.findIndex((ut) => ut.id === tabId);
+				if (currentIndex > 0) {
+					onUnifiedTabReorder(currentIndex, 0);
+				}
+			} else if (onTabReorder) {
+				// Fallback to legacy AI-tab-only reorder
+				const currentIndex = tabs.findIndex((t) => t.id === tabId);
+				if (currentIndex > 0) {
+					onTabReorder(currentIndex, 0);
+				}
 			}
 		},
-		[tabs, onTabReorder]
+		[tabs, onTabReorder, unifiedTabs, onUnifiedTabReorder]
 	);
 
 	const handleMoveToLast = useCallback(
 		(tabId: string) => {
-			// Find the current index in the FULL tabs array (not filtered)
-			const currentIndex = tabs.findIndex((t) => t.id === tabId);
-			if (currentIndex < tabs.length - 1 && onTabReorder) {
-				onTabReorder(currentIndex, tabs.length - 1);
+			// When unified tabs are used, prefer onUnifiedTabReorder
+			if (unifiedTabs && onUnifiedTabReorder) {
+				const currentIndex = unifiedTabs.findIndex((ut) => ut.id === tabId);
+				if (currentIndex < unifiedTabs.length - 1) {
+					onUnifiedTabReorder(currentIndex, unifiedTabs.length - 1);
+				}
+			} else if (onTabReorder) {
+				// Fallback to legacy AI-tab-only reorder
+				const currentIndex = tabs.findIndex((t) => t.id === tabId);
+				if (currentIndex < tabs.length - 1) {
+					onTabReorder(currentIndex, tabs.length - 1);
+				}
 			}
 		},
-		[tabs, onTabReorder]
+		[tabs, onTabReorder, unifiedTabs, onUnifiedTabReorder]
 	);
 
 	// Stable callback wrappers that receive tabId from the Tab component
@@ -1453,88 +1496,213 @@ function TabBarInner({
 			</div>
 
 			{/* Empty state when filter is on but no unread tabs */}
-			{showUnreadOnly && displayedTabs.length === 0 && (
-				<div
-					className="flex items-center px-3 py-1.5 text-xs italic shrink-0 self-center mb-1"
-					style={{ color: theme.colors.textDim }}
-				>
-					No unread tabs
-				</div>
-			)}
+			{showUnreadOnly &&
+				(displayedUnifiedTabs ? displayedUnifiedTabs.length === 0 : displayedTabs.length === 0) && (
+					<div
+						className="flex items-center px-3 py-1.5 text-xs italic shrink-0 self-center mb-1"
+						style={{ color: theme.colors.textDim }}
+					>
+						No unread tabs
+					</div>
+				)}
 
 			{/* Tabs with separators between inactive tabs */}
-			{displayedTabs.map((tab, index) => {
-				const isActive = tab.id === activeTabId;
-				const prevTab = index > 0 ? displayedTabs[index - 1] : null;
-				const isPrevActive = prevTab?.id === activeTabId;
-				// Get original index for shortcut hints (Cmd+1-9)
-				const originalIndex = tabs.findIndex((t) => t.id === tab.id);
+			{/* When unifiedTabs is provided, render both AI and file tabs from unified list */}
+			{displayedUnifiedTabs
+				? displayedUnifiedTabs.map((unifiedTab, index) => {
+						// Determine if this tab is active (based on type)
+						const isActive =
+							unifiedTab.type === 'ai'
+								? unifiedTab.id === activeTabId
+								: unifiedTab.id === activeFileTabId;
 
-				// Show separator between inactive tabs (not adjacent to active tab)
-				const showSeparator = index > 0 && !isActive && !isPrevActive;
+						// Check previous tab's active state for separator logic
+						const prevUnifiedTab = index > 0 ? displayedUnifiedTabs[index - 1] : null;
+						const isPrevActive = prevUnifiedTab
+							? prevUnifiedTab.type === 'ai'
+								? prevUnifiedTab.id === activeTabId
+								: prevUnifiedTab.id === activeFileTabId
+							: false;
 
-				// Calculate position info for move actions (within FULL tabs array, not filtered)
-				const isFirstTab = originalIndex === 0;
-				const isLastTab = originalIndex === tabs.length - 1;
+						// Get original index in the FULL unified list (not filtered)
+						const originalIndex = unifiedTabs!.findIndex((ut) => ut.id === unifiedTab.id);
 
-				return (
-					<React.Fragment key={tab.id}>
-						{showSeparator && (
-							<div
-								className="w-px h-4 self-center shrink-0"
-								style={{ backgroundColor: theme.colors.border }}
-							/>
-						)}
-						<Tab
-							tab={tab}
-							tabId={tab.id}
-							isActive={isActive}
-							theme={theme}
-							canClose={canClose}
-							onSelect={onTabSelect}
-							onClose={onTabClose}
-							onDragStart={handleDragStart}
-							onDragOver={handleDragOver}
-							onDragEnd={handleDragEnd}
-							onDrop={handleDrop}
-							isDragging={draggingTabId === tab.id}
-							isDragOver={dragOverTabId === tab.id}
-							onRename={handleRenameRequest}
-							onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
-							onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
-							onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
-							onSendToAgent={onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined}
-							onSummarizeAndContinue={
-								onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5
-									? handleTabSummarizeAndContinue
-									: undefined
-							}
-							onCopyContext={
-								onCopyContext && (tab.logs?.length ?? 0) >= 1 ? handleTabCopyContext : undefined
-							}
-							onExportHtml={onExportHtml ? handleTabExportHtml : undefined}
-							onPublishGist={
-								onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1
-									? handleTabPublishGist
-									: undefined
-							}
-							onMoveToFirst={!isFirstTab && onTabReorder ? handleMoveToFirst : undefined}
-							onMoveToLast={!isLastTab && onTabReorder ? handleMoveToLast : undefined}
-							isFirstTab={isFirstTab}
-							isLastTab={isLastTab}
-							shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
-							hasDraft={hasDraft(tab)}
-							registerRef={(el) => registerTabRef(tab.id, el)}
-							onCloseAllTabs={onCloseAllTabs}
-							onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
-							onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
-							onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
-							totalTabs={tabs.length}
-							tabIndex={originalIndex}
-						/>
-					</React.Fragment>
-				);
-			})}
+						// Show separator between inactive tabs
+						const showSeparator = index > 0 && !isActive && !isPrevActive;
+
+						// Position info for move actions
+						const isFirstTab = originalIndex === 0;
+						const isLastTab = originalIndex === unifiedTabs!.length - 1;
+
+						if (unifiedTab.type === 'ai') {
+							const tab = unifiedTab.data;
+							return (
+								<React.Fragment key={unifiedTab.id}>
+									{showSeparator && (
+										<div
+											className="w-px h-4 self-center shrink-0"
+											style={{ backgroundColor: theme.colors.border }}
+										/>
+									)}
+									<Tab
+										tab={tab}
+										tabId={tab.id}
+										isActive={isActive}
+										theme={theme}
+										canClose={canClose}
+										onSelect={onTabSelect}
+										onClose={onTabClose}
+										onDragStart={handleDragStart}
+										onDragOver={handleDragOver}
+										onDragEnd={handleDragEnd}
+										onDrop={handleDrop}
+										isDragging={draggingTabId === tab.id}
+										isDragOver={dragOverTabId === tab.id}
+										onRename={handleRenameRequest}
+										onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
+										onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
+										onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
+										onSendToAgent={
+											onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined
+										}
+										onSummarizeAndContinue={
+											onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5
+												? handleTabSummarizeAndContinue
+												: undefined
+										}
+										onCopyContext={
+											onCopyContext && (tab.logs?.length ?? 0) >= 1
+												? handleTabCopyContext
+												: undefined
+										}
+										onExportHtml={onExportHtml ? handleTabExportHtml : undefined}
+										onPublishGist={
+											onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1
+												? handleTabPublishGist
+												: undefined
+										}
+										onMoveToFirst={!isFirstTab && onUnifiedTabReorder ? handleMoveToFirst : undefined}
+										onMoveToLast={!isLastTab && onUnifiedTabReorder ? handleMoveToLast : undefined}
+										isFirstTab={isFirstTab}
+										isLastTab={isLastTab}
+										shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
+										hasDraft={hasDraft(tab)}
+										registerRef={(el) => registerTabRef(tab.id, el)}
+										onCloseAllTabs={onCloseAllTabs}
+										onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
+										onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
+										onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
+										totalTabs={unifiedTabs!.length}
+										tabIndex={originalIndex}
+									/>
+								</React.Fragment>
+							);
+						} else {
+							// File tab
+							const fileTab = unifiedTab.data;
+							return (
+								<React.Fragment key={unifiedTab.id}>
+									{showSeparator && (
+										<div
+											className="w-px h-4 self-center shrink-0"
+											style={{ backgroundColor: theme.colors.border }}
+										/>
+									)}
+									<FileTab
+										tab={fileTab}
+										isActive={isActive}
+										theme={theme}
+										onSelect={onFileTabSelect || (() => {})}
+										onClose={onFileTabClose || (() => {})}
+										onDragStart={handleDragStart}
+										onDragOver={handleDragOver}
+										onDragEnd={handleDragEnd}
+										onDrop={handleDrop}
+										isDragging={draggingTabId === fileTab.id}
+										isDragOver={dragOverTabId === fileTab.id}
+										registerRef={(el) => registerTabRef(fileTab.id, el)}
+									/>
+								</React.Fragment>
+							);
+						}
+					})
+				: // Fallback: render AI tabs only (legacy mode when unifiedTabs not provided)
+					displayedTabs.map((tab, index) => {
+						const isActive = tab.id === activeTabId;
+						const prevTab = index > 0 ? displayedTabs[index - 1] : null;
+						const isPrevActive = prevTab?.id === activeTabId;
+						// Get original index for shortcut hints (Cmd+1-9)
+						const originalIndex = tabs.findIndex((t) => t.id === tab.id);
+
+						// Show separator between inactive tabs (not adjacent to active tab)
+						const showSeparator = index > 0 && !isActive && !isPrevActive;
+
+						// Calculate position info for move actions (within FULL tabs array, not filtered)
+						const isFirstTab = originalIndex === 0;
+						const isLastTab = originalIndex === tabs.length - 1;
+
+						return (
+							<React.Fragment key={tab.id}>
+								{showSeparator && (
+									<div
+										className="w-px h-4 self-center shrink-0"
+										style={{ backgroundColor: theme.colors.border }}
+									/>
+								)}
+								<Tab
+									tab={tab}
+									tabId={tab.id}
+									isActive={isActive}
+									theme={theme}
+									canClose={canClose}
+									onSelect={onTabSelect}
+									onClose={onTabClose}
+									onDragStart={handleDragStart}
+									onDragOver={handleDragOver}
+									onDragEnd={handleDragEnd}
+									onDrop={handleDrop}
+									isDragging={draggingTabId === tab.id}
+									isDragOver={dragOverTabId === tab.id}
+									onRename={handleRenameRequest}
+									onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
+									onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
+									onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
+									onSendToAgent={
+										onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined
+									}
+									onSummarizeAndContinue={
+										onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5
+											? handleTabSummarizeAndContinue
+											: undefined
+									}
+									onCopyContext={
+										onCopyContext && (tab.logs?.length ?? 0) >= 1
+											? handleTabCopyContext
+											: undefined
+									}
+									onExportHtml={onExportHtml ? handleTabExportHtml : undefined}
+									onPublishGist={
+										onPublishGist && ghCliAvailable && (tab.logs?.length ?? 0) >= 1
+											? handleTabPublishGist
+											: undefined
+									}
+									onMoveToFirst={!isFirstTab && onTabReorder ? handleMoveToFirst : undefined}
+									onMoveToLast={!isLastTab && onTabReorder ? handleMoveToLast : undefined}
+									isFirstTab={isFirstTab}
+									isLastTab={isLastTab}
+									shortcutHint={!showUnreadOnly && originalIndex < 9 ? originalIndex + 1 : null}
+									hasDraft={hasDraft(tab)}
+									registerRef={(el) => registerTabRef(tab.id, el)}
+									onCloseAllTabs={onCloseAllTabs}
+									onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
+									onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
+									onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
+									totalTabs={tabs.length}
+									tabIndex={originalIndex}
+								/>
+							</React.Fragment>
+						);
+					})}
 
 			{/* New Tab Button - sticky on right when tabs overflow, with full-height opaque background */}
 			<div
