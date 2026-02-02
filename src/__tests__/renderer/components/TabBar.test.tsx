@@ -2960,6 +2960,323 @@ describe('FileTab overlay menu', () => {
 		vi.useRealTimers();
 	});
 
+	it('shows Close Other Tabs action and calls handler when clicked', async () => {
+		vi.useFakeTimers();
+		const mockCloseOtherTabs = vi.fn();
+
+		// Create multiple tabs to test Close Other Tabs
+		const fileTab2: FilePreviewTab = {
+			id: 'file-tab-2',
+			path: '/path/to/other.ts',
+			name: 'other',
+			extension: '.ts',
+			content: 'const y = 2;',
+			scrollTop: 0,
+			searchQuery: '',
+			editMode: false,
+			editContent: undefined,
+			createdAt: Date.now(),
+			lastModified: Date.now(),
+		};
+
+		const multiFileUnifiedTabs = [
+			{ type: 'ai' as const, id: 'tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+			{ type: 'file' as const, id: 'file-tab-2', data: fileTab2 },
+		];
+
+		render(
+			<TabBar
+				tabs={defaultTabs}
+				activeTabId="tab-1"
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={multiFileUnifiedTabs}
+				activeFileTabId={null}
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseOtherTabs={mockCloseOtherTabs}
+			/>
+		);
+
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Other Tabs option
+		const closeOtherButtons = screen.getAllByText('Close Other Tabs');
+		// Find the one in the file tab overlay (has file-text-icon)
+		const closeOtherButton = closeOtherButtons.find((btn) =>
+			btn.closest('.shadow-xl')?.querySelector('[data-testid="file-text-icon"]')
+		);
+		expect(closeOtherButton).toBeTruthy();
+
+		await act(async () => {
+			fireEvent.click(closeOtherButton!);
+		});
+
+		expect(mockCloseOtherTabs).toHaveBeenCalled();
+
+		vi.useRealTimers();
+	});
+
+	it('disables Close Other Tabs when only one tab exists', async () => {
+		vi.useFakeTimers();
+		const mockCloseOtherTabs = vi.fn();
+
+		// Single tab only
+		const singleTabUnified = [{ type: 'file' as const, id: 'file-tab-1', data: fileTab }];
+
+		render(
+			<TabBar
+				tabs={[]}
+				activeTabId=""
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={singleTabUnified}
+				activeFileTabId="file-tab-1"
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseOtherTabs={mockCloseOtherTabs}
+			/>
+		);
+
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Other Tabs but disabled
+		const closeOtherButton = screen.getByText('Close Other Tabs');
+		expect(closeOtherButton).toBeInTheDocument();
+		expect(closeOtherButton.closest('button')).toHaveAttribute('disabled');
+
+		vi.useRealTimers();
+	});
+
+	it('shows Close Tabs to Left action and calls handler when clicked', async () => {
+		vi.useFakeTimers();
+		const mockCloseTabsLeft = vi.fn();
+
+		// Create multiple tabs - file tab in the middle
+		const fileTab2: FilePreviewTab = {
+			id: 'file-tab-2',
+			path: '/path/to/other.ts',
+			name: 'other',
+			extension: '.ts',
+			content: 'const y = 2;',
+			scrollTop: 0,
+			searchQuery: '',
+			editMode: false,
+			editContent: undefined,
+			createdAt: Date.now(),
+			lastModified: Date.now(),
+		};
+
+		// File tab is at index 1 (has tabs to the left)
+		const multiTabsUnified = [
+			{ type: 'ai' as const, id: 'tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+			{ type: 'file' as const, id: 'file-tab-2', data: fileTab2 },
+		];
+
+		render(
+			<TabBar
+				tabs={defaultTabs}
+				activeTabId="tab-1"
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={multiTabsUnified}
+				activeFileTabId={null}
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseTabsLeft={mockCloseTabsLeft}
+			/>
+		);
+
+		// Hover over the middle tab (file-tab-1 at index 1)
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Tabs to Left option
+		const closeLeftButtons = screen.getAllByText('Close Tabs to Left');
+		const closeLeftButton = closeLeftButtons.find((btn) =>
+			btn.closest('.shadow-xl')?.querySelector('[data-testid="file-text-icon"]')
+		);
+		expect(closeLeftButton).toBeTruthy();
+
+		await act(async () => {
+			fireEvent.click(closeLeftButton!);
+		});
+
+		expect(mockCloseTabsLeft).toHaveBeenCalled();
+
+		vi.useRealTimers();
+	});
+
+	it('disables Close Tabs to Left for first tab', async () => {
+		vi.useFakeTimers();
+		const mockCloseTabsLeft = vi.fn();
+
+		// File tab is first
+		const fileFirstUnified = [
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+			{ type: 'ai' as const, id: 'tab-1', data: aiTab },
+		];
+
+		render(
+			<TabBar
+				tabs={defaultTabs}
+				activeTabId="tab-1"
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={fileFirstUnified}
+				activeFileTabId={null}
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseTabsLeft={mockCloseTabsLeft}
+			/>
+		);
+
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Tabs to Left but disabled (first tab)
+		const closeLeftButton = screen.getByText('Close Tabs to Left');
+		expect(closeLeftButton).toBeInTheDocument();
+		expect(closeLeftButton.closest('button')).toHaveAttribute('disabled');
+
+		vi.useRealTimers();
+	});
+
+	it('shows Close Tabs to Right action and calls handler when clicked', async () => {
+		vi.useFakeTimers();
+		const mockCloseTabsRight = vi.fn();
+
+		// Create multiple tabs - file tab in the middle
+		const fileTab2: FilePreviewTab = {
+			id: 'file-tab-2',
+			path: '/path/to/other.ts',
+			name: 'other',
+			extension: '.ts',
+			content: 'const y = 2;',
+			scrollTop: 0,
+			searchQuery: '',
+			editMode: false,
+			editContent: undefined,
+			createdAt: Date.now(),
+			lastModified: Date.now(),
+		};
+
+		// File tab is at index 1 (has tabs to the right)
+		const multiTabsUnified = [
+			{ type: 'ai' as const, id: 'tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+			{ type: 'file' as const, id: 'file-tab-2', data: fileTab2 },
+		];
+
+		render(
+			<TabBar
+				tabs={defaultTabs}
+				activeTabId="tab-1"
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={multiTabsUnified}
+				activeFileTabId={null}
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseTabsRight={mockCloseTabsRight}
+			/>
+		);
+
+		// Hover over the middle tab (file-tab-1 at index 1)
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Tabs to Right option
+		const closeRightButtons = screen.getAllByText('Close Tabs to Right');
+		const closeRightButton = closeRightButtons.find((btn) =>
+			btn.closest('.shadow-xl')?.querySelector('[data-testid="file-text-icon"]')
+		);
+		expect(closeRightButton).toBeTruthy();
+
+		await act(async () => {
+			fireEvent.click(closeRightButton!);
+		});
+
+		expect(mockCloseTabsRight).toHaveBeenCalled();
+
+		vi.useRealTimers();
+	});
+
+	it('disables Close Tabs to Right for last tab', async () => {
+		vi.useFakeTimers();
+		const mockCloseTabsRight = vi.fn();
+
+		// File tab is last
+		const fileLastUnified = [
+			{ type: 'ai' as const, id: 'tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+		];
+
+		render(
+			<TabBar
+				tabs={defaultTabs}
+				activeTabId="tab-1"
+				theme={mockTheme}
+				onTabSelect={vi.fn()}
+				onTabClose={vi.fn()}
+				onNewTab={vi.fn()}
+				unifiedTabs={fileLastUnified}
+				activeFileTabId={null}
+				onFileTabSelect={vi.fn()}
+				onFileTabClose={vi.fn()}
+				onCloseTabsRight={mockCloseTabsRight}
+			/>
+		);
+
+		const fileTabElement = screen.getByText('document').closest('[data-tab-id="file-tab-1"]');
+
+		await act(async () => {
+			fireEvent.mouseEnter(fileTabElement!);
+			vi.advanceTimersByTime(450);
+		});
+
+		// Should show Close Tabs to Right but disabled (last tab)
+		const closeRightButton = screen.getByText('Close Tabs to Right');
+		expect(closeRightButton).toBeInTheDocument();
+		expect(closeRightButton.closest('button')).toHaveAttribute('disabled');
+
+		vi.useRealTimers();
+	});
+
 	it('shows Move to First Position for non-first file tabs', async () => {
 		vi.useFakeTimers();
 		const mockUnifiedReorder = vi.fn();
