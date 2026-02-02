@@ -5577,6 +5577,112 @@ You are taking over this conversation. Based on the context above, provide a bri
 		);
 	}, []);
 
+	/**
+	 * Close the currently active tab (for Cmd+W).
+	 * Determines which tab is active (checking activeFileTabId first, then activeTabId),
+	 * and calls the appropriate close handler.
+	 *
+	 * For file tabs: closes immediately.
+	 * For AI tabs: prevents closing if it's the last AI tab (keeps at least one AI tab).
+	 *
+	 * Returns an object indicating what action was taken, for the keyboard handler
+	 * to potentially show confirmation modals for wizard tabs.
+	 */
+	const handleCloseCurrentTab = useCallback((): {
+		type: 'file' | 'ai' | 'prevented' | 'none';
+		tabId?: string;
+		isWizardTab?: boolean;
+	} => {
+		const session = sessionsRef.current.find((s) => s.id === activeSessionIdRef.current);
+		if (!session) return { type: 'none' };
+
+		// Check if a file tab is active first
+		if (session.activeFileTabId) {
+			const tabId = session.activeFileTabId;
+			// File tabs can always be closed (no wizard confirmation needed)
+			setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== activeSessionIdRef.current) return s;
+
+					// Find the tab to close
+					const tabToClose = s.filePreviewTabs.find((tab) => tab.id === tabId);
+					if (!tabToClose) return s;
+
+					// Remove from filePreviewTabs
+					const updatedFilePreviewTabs = s.filePreviewTabs.filter(
+						(tab) => tab.id !== tabId
+					);
+
+					// Remove from unifiedTabOrder
+					const closedTabIndex = s.unifiedTabOrder.findIndex(
+						(ref) => ref.type === 'file' && ref.id === tabId
+					);
+					const updatedUnifiedTabOrder = s.unifiedTabOrder.filter(
+						(ref) => !(ref.type === 'file' && ref.id === tabId)
+					);
+
+					// Determine new active tab if we closed the active file tab
+					let newActiveFileTabId: string | null = null;
+					let newActiveTabId = s.activeTabId;
+
+					// This was the active tab - find the next tab in unifiedTabOrder
+					if (updatedUnifiedTabOrder.length > 0 && closedTabIndex !== -1) {
+						// Try to select the tab at the same position (or previous if at end)
+						const newIndex = Math.min(
+							closedTabIndex,
+							updatedUnifiedTabOrder.length - 1
+						);
+						const nextTabRef = updatedUnifiedTabOrder[newIndex];
+
+						if (nextTabRef.type === 'file') {
+							// Next tab is a file tab
+							newActiveFileTabId = nextTabRef.id;
+						} else {
+							// Next tab is an AI tab - switch to it
+							newActiveTabId = nextTabRef.id;
+							newActiveFileTabId = null;
+						}
+					} else if (updatedUnifiedTabOrder.length > 0) {
+						// Fallback: just select the first available tab
+						const firstTabRef = updatedUnifiedTabOrder[0];
+						if (firstTabRef.type === 'file') {
+							newActiveFileTabId = firstTabRef.id;
+						} else {
+							newActiveTabId = firstTabRef.id;
+							newActiveFileTabId = null;
+						}
+					}
+
+					return {
+						...s,
+						filePreviewTabs: updatedFilePreviewTabs,
+						unifiedTabOrder: updatedUnifiedTabOrder,
+						activeFileTabId: newActiveFileTabId,
+						activeTabId: newActiveTabId,
+					};
+				})
+			);
+			return { type: 'file', tabId };
+		}
+
+		// AI tab is active
+		if (session.activeTabId) {
+			// Prevent closing if it's the last AI tab
+			if (session.aiTabs.length <= 1) {
+				return { type: 'prevented' };
+			}
+
+			const tabId = session.activeTabId;
+			const tab = session.aiTabs.find((t) => t.id === tabId);
+			const isWizardTab = tab ? hasActiveWizard(tab) : false;
+
+			// Return info for the keyboard handler to show confirmation modal if needed
+			return { type: 'ai', tabId, isWizardTab };
+		}
+
+		return { type: 'none' };
+	}, []);
+
 	const handleRemoveQueuedItem = useCallback((itemId: string) => {
 		setSessions((prev) =>
 			prev.map((s) => {
@@ -12241,6 +12347,9 @@ You are taking over this conversation. Based on the context above, provide a bri
 		handleCloseOtherTabs,
 		handleCloseTabsLeft,
 		handleCloseTabsRight,
+
+		// Close current tab (Cmd+W) - works with both file and AI tabs
+		handleCloseCurrentTab,
 
 		// Session bookmark toggle
 		toggleBookmark,

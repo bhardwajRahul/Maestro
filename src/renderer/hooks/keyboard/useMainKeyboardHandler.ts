@@ -462,36 +462,41 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				}
 				if (ctx.isTabShortcut(e, 'closeTab')) {
 					e.preventDefault();
-					const activeTab = ctx.activeSession.aiTabs.find(
-						(t: AITab) => t.id === ctx.activeSession.activeTabId
-					);
+					// Use handleCloseCurrentTab to close the active tab (file or AI)
+					// This handles both file preview tabs and AI tabs with unified tab system
+					const closeResult = ctx.handleCloseCurrentTab();
 
-					// Check if this is a wizard tab - show confirmation before closing
-					if (activeTab && ctx.hasActiveWizard && ctx.hasActiveWizard(activeTab)) {
-						ctx.setConfirmModalMessage(
-							'Close this wizard? Your progress will be lost and cannot be restored.'
-						);
-						ctx.setConfirmModalOnConfirm(() => () => {
-							ctx.performTabClose(ctx.activeSession.activeTabId);
-							trackShortcut('closeTab');
-						});
-						ctx.setConfirmModalOpen(true);
-					} else {
-						// Regular tab - use closeTab directly with skipHistory for wizard tabs
-						const isWizardTab = activeTab && ctx.hasActiveWizard && ctx.hasActiveWizard(activeTab);
-						const result = ctx.closeTab(
-							ctx.activeSession,
-							ctx.activeSession.activeTabId,
-							ctx.showUnreadOnly,
-							{ skipHistory: isWizardTab }
-						);
-						if (result) {
-							ctx.setSessions((prev: Session[]) =>
-								prev.map((s: Session) => (s.id === ctx.activeSession!.id ? result.session : s))
+					if (closeResult.type === 'file') {
+						// File tab was already closed by handleCloseCurrentTab
+						trackShortcut('closeTab');
+					} else if (closeResult.type === 'ai' && closeResult.tabId) {
+						// AI tab - need to handle wizard confirmation
+						if (closeResult.isWizardTab) {
+							ctx.setConfirmModalMessage(
+								'Close this wizard? Your progress will be lost and cannot be restored.'
 							);
-							trackShortcut('closeTab');
+							ctx.setConfirmModalOnConfirm(() => () => {
+								ctx.performTabClose(closeResult.tabId);
+								trackShortcut('closeTab');
+							});
+							ctx.setConfirmModalOpen(true);
+						} else {
+							// Regular AI tab - close it
+							const result = ctx.closeTab(
+								ctx.activeSession,
+								closeResult.tabId,
+								ctx.showUnreadOnly,
+								{ skipHistory: false }
+							);
+							if (result) {
+								ctx.setSessions((prev: Session[]) =>
+									prev.map((s: Session) => (s.id === ctx.activeSession!.id ? result.session : s))
+								);
+								trackShortcut('closeTab');
+							}
 						}
 					}
+					// 'prevented' or 'none' - do nothing (can't close last AI tab)
 				}
 				if (ctx.isTabShortcut(e, 'closeAllTabs')) {
 					e.preventDefault();
