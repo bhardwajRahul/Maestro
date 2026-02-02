@@ -3546,3 +3546,155 @@ describe('Unified tabs drag and drop', () => {
 		expect(mockOnFileTabClose).toHaveBeenCalledWith('file-tab-1');
 	});
 });
+
+describe('Unified active tab styling consistency', () => {
+	const mockOnTabSelect = vi.fn();
+	const mockOnTabClose = vi.fn();
+	const mockOnNewTab = vi.fn();
+	const mockOnFileTabSelect = vi.fn();
+	const mockOnFileTabClose = vi.fn();
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('applies same active styling to both AI tabs and file tabs', () => {
+		const aiTab = createTab({ id: 'ai-tab-1', name: 'AI Tab' });
+		const fileTab: FilePreviewTab = {
+			id: 'file-tab-1',
+			path: '/test/example.tsx',
+			name: 'example',
+			extension: '.tsx',
+			openedAt: Date.now(),
+		};
+
+		const unifiedTabs = [
+			{ type: 'ai' as const, id: 'ai-tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+		];
+
+		// Test 1: Active AI tab styling
+		const { rerender } = render(
+			<TabBar
+				tabs={[aiTab]}
+				activeTabId="ai-tab-1"
+				theme={mockTheme}
+				onTabSelect={mockOnTabSelect}
+				onTabClose={mockOnTabClose}
+				onNewTab={mockOnNewTab}
+				unifiedTabs={unifiedTabs}
+				activeFileTabId={null}
+				onFileTabSelect={mockOnFileTabSelect}
+				onFileTabClose={mockOnFileTabClose}
+			/>
+		);
+
+		const activeAiTab = screen.getByText('AI Tab').closest('[data-tab-id]')!;
+		expect(activeAiTab).toHaveStyle({ backgroundColor: mockTheme.colors.bgMain });
+		expect(activeAiTab).toHaveStyle({ borderTopLeftRadius: '6px' });
+		expect(activeAiTab).toHaveStyle({ borderTopRightRadius: '6px' });
+		expect(activeAiTab).toHaveStyle({ marginBottom: '-1px' });
+		expect(activeAiTab).toHaveStyle({ zIndex: '1' });
+
+		// Test 2: Active file tab styling - switch active tab
+		rerender(
+			<TabBar
+				tabs={[aiTab]}
+				activeTabId="ai-tab-1"
+				theme={mockTheme}
+				onTabSelect={mockOnTabSelect}
+				onTabClose={mockOnTabClose}
+				onNewTab={mockOnNewTab}
+				unifiedTabs={unifiedTabs}
+				activeFileTabId="file-tab-1"
+				onFileTabSelect={mockOnFileTabSelect}
+				onFileTabClose={mockOnFileTabClose}
+			/>
+		);
+
+		const activeFileTab = screen.getByText('example').closest('[data-tab-id]')!;
+		// File tabs should have the same active styling as AI tabs
+		expect(activeFileTab).toHaveStyle({ backgroundColor: mockTheme.colors.bgMain });
+		expect(activeFileTab).toHaveStyle({ borderTopLeftRadius: '6px' });
+		expect(activeFileTab).toHaveStyle({ borderTopRightRadius: '6px' });
+		expect(activeFileTab).toHaveStyle({ marginBottom: '-1px' });
+		expect(activeFileTab).toHaveStyle({ zIndex: '1' });
+	});
+
+	it('applies same inactive styling to both AI tabs and file tabs', () => {
+		const aiTab = createTab({ id: 'ai-tab-1', name: 'AI Tab' });
+		const fileTab: FilePreviewTab = {
+			id: 'file-tab-1',
+			path: '/test/example.tsx',
+			name: 'example',
+			extension: '.tsx',
+			openedAt: Date.now(),
+		};
+
+		const unifiedTabs = [
+			{ type: 'ai' as const, id: 'ai-tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+		];
+
+		// Render with AI tab active (file tab inactive)
+		render(
+			<TabBar
+				tabs={[aiTab]}
+				activeTabId="ai-tab-1"
+				theme={mockTheme}
+				onTabSelect={mockOnTabSelect}
+				onTabClose={mockOnTabClose}
+				onNewTab={mockOnNewTab}
+				unifiedTabs={unifiedTabs}
+				activeFileTabId={null}
+				onFileTabSelect={mockOnFileTabSelect}
+				onFileTabClose={mockOnFileTabClose}
+			/>
+		);
+
+		const inactiveFileTab = screen.getByText('example').closest('[data-tab-id]') as HTMLElement;
+		// Inactive file tab should NOT have the active background color (bright background)
+		// It may be transparent or empty depending on how JSDOM handles it
+		const bgColor = inactiveFileTab.style.backgroundColor;
+		expect(bgColor === 'transparent' || bgColor === '').toBe(true);
+		expect(inactiveFileTab).toHaveStyle({ marginBottom: '0' });
+		expect(inactiveFileTab).toHaveStyle({ zIndex: '0' });
+	});
+
+	it('file tab displays extension badge with file extension text', () => {
+		const aiTab = createTab({ id: 'ai-tab-1', name: 'AI Tab' });
+		const fileTab: FilePreviewTab = {
+			id: 'file-tab-1',
+			path: '/test/example.tsx',
+			name: 'example',
+			extension: '.tsx',
+			openedAt: Date.now(),
+		};
+
+		const unifiedTabs = [
+			{ type: 'ai' as const, id: 'ai-tab-1', data: aiTab },
+			{ type: 'file' as const, id: 'file-tab-1', data: fileTab },
+		];
+
+		render(
+			<TabBar
+				tabs={[aiTab]}
+				activeTabId="ai-tab-1"
+				theme={mockTheme}
+				onTabSelect={mockOnTabSelect}
+				onTabClose={mockOnTabClose}
+				onNewTab={mockOnNewTab}
+				unifiedTabs={unifiedTabs}
+				activeFileTabId="file-tab-1"
+				onFileTabSelect={mockOnFileTabSelect}
+				onFileTabClose={mockOnFileTabClose}
+			/>
+		);
+
+		// File tab should show extension badge with the actual extension
+		const extensionBadge = screen.getByText('.tsx');
+		expect(extensionBadge).toBeInTheDocument();
+		// Verify it has the small badge styling (py-0.5 is unique to extension badges, not shortcut hints)
+		expect(extensionBadge.className).toContain('py-0.5');
+	});
+});
