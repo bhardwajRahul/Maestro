@@ -217,7 +217,7 @@ interface MainPanelProps {
 	/** Handler to update file tab editMode when toggled in FilePreview */
 	onFileTabEditModeChange?: (tabId: string, editMode: boolean) => void;
 	/** Handler to update file tab editContent when changed in FilePreview */
-	onFileTabEditContentChange?: (tabId: string, editContent: string | undefined) => void;
+	onFileTabEditContentChange?: (tabId: string, editContent: string | undefined, savedContent?: string) => void;
 	/** Handler to update file tab scrollTop when scrolling in FilePreview */
 	onFileTabScrollPositionChange?: (tabId: string, scrollTop: number) => void;
 	/** Handler to update file tab searchQuery when searching in FilePreview */
@@ -1572,8 +1572,8 @@ export const MainPanel = React.memo(
 									}}
 									onSave={async (path, content) => {
 										await window.maestro.fs.writeFile(path, content);
-										// After save, clear the editContent to indicate no pending changes
-										onFileTabEditContentChange?.(activeFileTabId, undefined);
+										// After save, clear editContent and update base content to saved value
+										onFileTabEditContentChange?.(activeFileTabId, undefined, content);
 									}}
 									shortcuts={shortcuts}
 									fileTree={props.fileTree}

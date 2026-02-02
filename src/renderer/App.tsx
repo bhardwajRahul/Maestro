@@ -5588,21 +5588,29 @@ You are taking over this conversation. Based on the context above, provide a bri
 	 * Update a file tab's editContent state.
 	 * Called when user edits content in FilePreview.
 	 * Pass undefined to indicate no pending changes (content matches saved file).
+	 * Optionally pass savedContent to update the tab's base content after a save.
 	 */
-	const handleFileTabEditContentChange = useCallback((tabId: string, editContent: string | undefined) => {
-		setSessions((prev) =>
-			prev.map((s) => {
-				if (s.id !== activeSessionIdRef.current) return s;
+	const handleFileTabEditContentChange = useCallback(
+		(tabId: string, editContent: string | undefined, savedContent?: string) => {
+			setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== activeSessionIdRef.current) return s;
 
-				const updatedFileTabs = s.filePreviewTabs.map((tab) => {
-					if (tab.id !== tabId) return tab;
-					return { ...tab, editContent };
-				});
+					const updatedFileTabs = s.filePreviewTabs.map((tab) => {
+						if (tab.id !== tabId) return tab;
+						// If savedContent is provided, update the base content as well
+						if (savedContent !== undefined) {
+							return { ...tab, editContent, content: savedContent };
+						}
+						return { ...tab, editContent };
+					});
 
-				return { ...s, filePreviewTabs: updatedFileTabs };
-			})
-		);
-	}, []);
+					return { ...s, filePreviewTabs: updatedFileTabs };
+				})
+			);
+		},
+		[]
+	);
 
 	/**
 	 * Update a file tab's scroll position.

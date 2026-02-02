@@ -227,7 +227,7 @@ export interface UseMainPanelPropsDeps {
 	handleFileTabSelect: (tabId: string) => void;
 	handleFileTabClose: (tabId: string) => void;
 	handleFileTabEditModeChange: (tabId: string, editMode: boolean) => void;
-	handleFileTabEditContentChange: (tabId: string, editContent: string | undefined) => void;
+	handleFileTabEditContentChange: (tabId: string, editContent: string | undefined, savedContent?: string) => void;
 	handleFileTabScrollPositionChange: (tabId: string, scrollTop: number) => void;
 	handleFileTabSearchQueryChange: (tabId: string, searchQuery: string) => void;
 
