@@ -378,8 +378,11 @@ describe('SaveMarkdownModal', () => {
 				fireEvent.click(saveButton);
 			});
 
+			// Wait for both the error to appear AND saving state to reset (from finally block)
 			await waitFor(() => {
 				expect(screen.getByText('Failed to save file')).toBeInTheDocument();
+				// Ensure the save button is back to "Save" (not "Saving...") to confirm finally block completed
+				expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 			});
 		});
 
@@ -395,8 +398,11 @@ describe('SaveMarkdownModal', () => {
 				fireEvent.click(saveButton);
 			});
 
+			// Wait for both the error to appear AND saving state to reset (from finally block)
 			await waitFor(() => {
 				expect(screen.getByText('Permission denied')).toBeInTheDocument();
+				// Ensure the save button is back to "Save" (not "Saving...") to confirm finally block completed
+				expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 			});
 		});
 
@@ -521,8 +527,10 @@ describe('SaveMarkdownModal', () => {
 				fireEvent.click(saveButton);
 			});
 
+			// Wait for both the error to appear AND saving state to reset (from finally block)
 			await waitFor(() => {
 				expect(screen.getByText('Failed to save file')).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 			});
 
 			// Change folder
@@ -544,8 +552,10 @@ describe('SaveMarkdownModal', () => {
 				fireEvent.click(saveButton);
 			});
 
+			// Wait for both the error to appear AND saving state to reset (from finally block)
 			await waitFor(() => {
 				expect(screen.getByText('Failed to save file')).toBeInTheDocument();
+				expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 			});
 
 			// Change filename
