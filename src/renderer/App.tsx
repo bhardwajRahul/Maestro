@@ -2624,60 +2624,6 @@ function MaestroConsoleInner() {
 				const actualSessionId = parsed.actualSessionId;
 				const tabId = parsed.tabId ?? undefined;
 
-				// First, check if we need to trigger automatic tab naming BEFORE updating state
-				// We need the current session state to determine this
-				const currentSessions = sessionsRef.current;
-				const currentSession = currentSessions.find((s) => s.id === actualSessionId);
-
-				// Capture info for tab naming (must be done before state update modifies awaitingSessionId)
-				interface TabNamingInfo {
-					tabId: string;
-					userMessage: string;
-					agentType: string;
-					cwd: string;
-					sessionSshRemoteConfig?: {
-						enabled: boolean;
-						remoteId: string | null;
-						workingDirOverride?: string;
-					};
-				}
-				let tabNamingInfo: TabNamingInfo | null = null;
-
-				if (currentSession) {
-					// Find the target tab (same logic as in setSessions below)
-					let targetTab = tabId
-						? currentSession.aiTabs?.find((tab) => tab.id === tabId)
-						: undefined;
-
-					if (!targetTab) {
-						const awaitingTab = currentSession.aiTabs?.find(
-							(tab) => tab.awaitingSessionId && !tab.agentSessionId
-						);
-						targetTab = awaitingTab || getActiveTab(currentSession);
-					}
-
-					// Check if we should trigger automatic tab naming:
-					// 1. Tab was awaiting session ID (this is a new session, not a resume)
-					// 2. Tab doesn't already have a custom name
-					// 3. Tab has at least one user message in logs
-					if (targetTab?.awaitingSessionId && !targetTab.name) {
-						const userMessages = targetTab.logs.filter((log) => log.source === 'user');
-						if (userMessages.length > 0) {
-							const firstUserMessage = userMessages[0];
-							// Only use text messages for naming (skip image-only messages)
-							if (firstUserMessage.text?.trim()) {
-								tabNamingInfo = {
-									tabId: targetTab.id,
-									userMessage: firstUserMessage.text,
-									agentType: currentSession.toolType,
-									cwd: currentSession.cwd,
-									sessionSshRemoteConfig: currentSession.sessionSshRemoteConfig,
-								};
-							}
-						}
-					}
-				}
-
 				// Store Claude session ID in session state
 				// Note: slash commands are now received via onSlashCommands from Claude Code's init message
 				setSessions((prev) => {
@@ -2741,94 +2687,6 @@ function MaestroConsoleInner() {
 						return { ...s, aiTabs: updatedAiTabs, agentSessionId }; // Also keep session-level for backwards compatibility
 					});
 				});
-
-				// Trigger automatic tab naming if conditions are met
-				// This runs after the state update so it happens in parallel with the main AI processing
-				// Use ref to access the latest setting value (useEffect has [] deps so we'd get stale value otherwise)
-				if (tabNamingInfo && automaticTabNamingEnabledRef.current) {
-
-					// Set isGeneratingName to show spinner in tab
-					setSessions((prev) =>
-						prev.map((s) => {
-							if (s.id !== actualSessionId) return s;
-							return {
-								...s,
-								aiTabs: s.aiTabs.map((t) =>
-									t.id === tabNamingInfo!.tabId ? { ...t, isGeneratingName: true } : t
-								),
-							};
-						})
-					);
-
-					// Call the tab naming API (async, don't await)
-					window.maestro.tabNaming
-						.generateTabName({
-							userMessage: tabNamingInfo.userMessage,
-							agentType: tabNamingInfo.agentType,
-							cwd: tabNamingInfo.cwd,
-							sessionSshRemoteConfig: tabNamingInfo.sessionSshRemoteConfig,
-						})
-						.then((generatedName) => {
-							// Clear the generating indicator
-							setSessions((prev) =>
-								prev.map((s) => {
-									if (s.id !== actualSessionId) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map((t) =>
-											t.id === tabNamingInfo!.tabId ? { ...t, isGeneratingName: false } : t
-										),
-									};
-								})
-							);
-
-							if (!generatedName) {
-								console.log('[onSessionId] Tab naming returned null (timeout or error)');
-								return;
-							}
-
-							console.log('[onSessionId] Tab naming generated:', generatedName);
-
-							// Update the tab name only if it's still null (user hasn't renamed it)
-							setSessions((prev) =>
-								prev.map((s) => {
-									if (s.id !== actualSessionId) return s;
-
-									const tab = s.aiTabs.find((t) => t.id === tabNamingInfo!.tabId);
-									// Only update if tab exists and name is still null (UUID display)
-									if (!tab || tab.name !== null) {
-										console.log('[onSessionId] Skipping tab name update (already named)', {
-											tabExists: !!tab,
-											currentName: tab?.name,
-										});
-										return s;
-									}
-
-									return {
-										...s,
-										aiTabs: s.aiTabs.map((t) =>
-											t.id === tabNamingInfo!.tabId ? { ...t, name: generatedName } : t
-										),
-									};
-								})
-							);
-						})
-						.catch((error) => {
-							console.error('[onSessionId] Tab naming failed:', error);
-							// Clear the generating indicator on error
-							setSessions((prev) =>
-								prev.map((s) => {
-									if (s.id !== actualSessionId) return s;
-									return {
-										...s,
-										aiTabs: s.aiTabs.map((t) =>
-											t.id === tabNamingInfo!.tabId ? { ...t, isGeneratingName: false } : t
-										),
-									};
-								})
-							);
-						});
-				}
 			}
 		);
 
@@ -3582,14 +3440,12 @@ function MaestroConsoleInner() {
 	const customAICommandsRef = useRef(customAICommands);
 	const speckitCommandsRef = useRef(speckitCommands);
 	const openspecCommandsRef = useRef(openspecCommands);
-	const automaticTabNamingEnabledRef = useRef(automaticTabNamingEnabled);
 	const fileTabAutoRefreshEnabledRef = useRef(fileTabAutoRefreshEnabled);
 	addToastRef.current = addToast;
 	updateGlobalStatsRef.current = updateGlobalStats;
 	customAICommandsRef.current = customAICommands;
 	speckitCommandsRef.current = speckitCommands;
 	openspecCommandsRef.current = openspecCommands;
-	automaticTabNamingEnabledRef.current = automaticTabNamingEnabled;
 	fileTabAutoRefreshEnabledRef.current = fileTabAutoRefreshEnabled;
 
 	// Note: spawnBackgroundSynopsisRef and spawnAgentWithPromptRef are now provided by useAgentExecution hook
@@ -7730,6 +7586,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		onWizardSendMessage: sendWizardMessageWithThinking,
 		isWizardActive: isWizardActiveForCurrentTab,
 		onSkillsCommand: handleSkillsCommand,
+		automaticTabNamingEnabled,
 	});
 
 	// Auto-send context when a tab with autoSendOnActivate becomes active

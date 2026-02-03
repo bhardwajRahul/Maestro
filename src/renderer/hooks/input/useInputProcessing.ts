@@ -70,6 +70,8 @@ export interface UseInputProcessingDeps {
 	isWizardActive?: boolean;
 	/** Handler for the /skills built-in command (lists Claude Code skills) */
 	onSkillsCommand?: () => Promise<void>;
+	/** Whether automatic tab naming is enabled */
+	automaticTabNamingEnabled?: boolean;
 }
 
 /**
@@ -125,6 +127,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 		onWizardSendMessage,
 		isWizardActive,
 		onSkillsCommand,
+		automaticTabNamingEnabled,
 	} = deps;
 
 	// Ref for the processInput function so external code can access the latest version
@@ -641,6 +644,84 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 					};
 				})
 			);
+
+			// Trigger automatic tab naming for new AI sessions immediately after sending the first message
+			// This runs in parallel with the agent request (no need to wait for session ID)
+			const activeTabForNaming = getActiveTab(activeSession);
+			const isNewAiSession =
+				currentMode === 'ai' && activeTabForNaming && !activeTabForNaming.agentSessionId;
+			const hasTextMessage = effectiveInputValue.trim().length > 0;
+			const hasNoCustomName = !activeTabForNaming?.name;
+
+			if (automaticTabNamingEnabled && isNewAiSession && hasTextMessage && hasNoCustomName) {
+				// Set isGeneratingName to show spinner in tab
+				setSessions((prev) =>
+					prev.map((s) => {
+						if (s.id !== activeSessionId) return s;
+						return {
+							...s,
+							aiTabs: s.aiTabs.map((t) =>
+								t.id === activeTabForNaming.id ? { ...t, isGeneratingName: true } : t
+							),
+						};
+					})
+				);
+
+				// Call the tab naming API (async, fire and forget)
+				window.maestro.tabNaming
+					.generateTabName({
+						userMessage: effectiveInputValue,
+						agentType: activeSession.toolType,
+						cwd: activeSession.cwd,
+						sessionSshRemoteConfig: activeSession.sessionSshRemoteConfig,
+					})
+					.then((generatedName) => {
+						// Clear the generating indicator
+						setSessions((prev) =>
+							prev.map((s) => {
+								if (s.id !== activeSessionId) return s;
+								return {
+									...s,
+									aiTabs: s.aiTabs.map((t) =>
+										t.id === activeTabForNaming.id ? { ...t, isGeneratingName: false } : t
+									),
+								};
+							})
+						);
+
+						if (!generatedName) return;
+
+						// Update the tab name only if it's still null (user hasn't manually renamed it)
+						setSessions((prev) =>
+							prev.map((s) => {
+								if (s.id !== activeSessionId) return s;
+								const tab = s.aiTabs.find((t) => t.id === activeTabForNaming.id);
+								if (!tab || tab.name !== null) return s;
+								return {
+									...s,
+									aiTabs: s.aiTabs.map((t) =>
+										t.id === activeTabForNaming.id ? { ...t, name: generatedName } : t
+									),
+								};
+							})
+						);
+					})
+					.catch((error) => {
+						console.error('[processInput] Tab naming failed:', error);
+						// Clear the generating indicator on error
+						setSessions((prev) =>
+							prev.map((s) => {
+								if (s.id !== activeSessionId) return s;
+								return {
+									...s,
+									aiTabs: s.aiTabs.map((t) =>
+										t.id === activeTabForNaming.id ? { ...t, isGeneratingName: false } : t
+									),
+								};
+							})
+						);
+					});
+			}
 
 			// If directory changed, check if new directory is a Git repository
 			// For remote sessions, check remoteCwd; for local sessions, check shellCwd
