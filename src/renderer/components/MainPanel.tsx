@@ -937,7 +937,7 @@ export const MainPanel = React.memo(
 											<span className="shrink-0">{activeSession.name}</span>
 										)}
 										<div
-											className="relative"
+											className="relative overflow-visible"
 											onMouseEnter={
 												activeSession.isGitRepo
 													? gitTooltip.triggerHandlers.onMouseEnter

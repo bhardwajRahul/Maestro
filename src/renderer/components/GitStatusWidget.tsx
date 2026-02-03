@@ -69,7 +69,7 @@ export const GitStatusWidget = memo(function GitStatusWidget({
 
 	return (
 		<div
-			className="relative"
+			className="relative overflow-visible"
 			onMouseEnter={() => {
 				// Clear any pending close timeout
 				if (tooltipTimeout.current) {
