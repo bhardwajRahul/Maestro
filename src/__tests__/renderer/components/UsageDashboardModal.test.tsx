@@ -210,10 +210,13 @@ describe('UsageDashboardModal', () => {
 			render(<UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />);
 
 			await waitFor(() => {
-				expect(screen.getByText('Overview')).toBeInTheDocument();
-				expect(screen.getByText('Agents')).toBeInTheDocument();
-				expect(screen.getByText('Activity')).toBeInTheDocument();
-				expect(screen.getByText('Auto Run')).toBeInTheDocument();
+				// Use getAllByRole('tab') to find tabs - there may be multiple elements with text 'Agents'
+				const tabs = screen.getAllByRole('tab');
+				expect(tabs).toHaveLength(4);
+				expect(tabs[0]).toHaveTextContent('Overview');
+				expect(tabs[1]).toHaveTextContent('Agents');
+				expect(tabs[2]).toHaveTextContent('Activity');
+				expect(tabs[3]).toHaveTextContent('Auto Run');
 			});
 		});
 
@@ -383,10 +386,12 @@ describe('UsageDashboardModal', () => {
 			render(<UsageDashboardModal isOpen={true} onClose={onClose} theme={theme} />);
 
 			await waitFor(() => {
-				expect(screen.getByText('Overview')).toBeInTheDocument();
+				expect(screen.getByTestId('usage-dashboard-content')).toBeInTheDocument();
 			});
 
-			const agentsTab = screen.getByText('Agents');
+			// Use getAllByRole('tab') to avoid "multiple elements" error - Agents tab is index 1
+			const tabs = screen.getAllByRole('tab');
+			const agentsTab = tabs[1];
 			fireEvent.click(agentsTab);
 
 			// The tab should now be active (different styling)
@@ -1695,8 +1700,9 @@ describe('UsageDashboardModal', () => {
 				expect(screen.getByTestId('usage-dashboard-content')).toBeInTheDocument();
 			});
 
-			// Click on Agents tab
-			fireEvent.click(screen.getByText('Agents'));
+			// Click on Agents tab - use getAllByRole('tab') to avoid "multiple elements" error
+			const tabs = screen.getAllByRole('tab');
+			fireEvent.click(tabs[1]); // Agents is the 2nd tab (index 1)
 
 			await waitFor(() => {
 				const tabpanel = screen.getByRole('tabpanel');
@@ -1807,8 +1813,9 @@ describe('UsageDashboardModal', () => {
 				expect(screen.getByTestId('usage-dashboard-content')).toBeInTheDocument();
 			});
 
-			// Switch to Agents view
-			fireEvent.click(screen.getByText('Agents'));
+			// Switch to Agents view - use getAllByRole('tab') to avoid "multiple elements" error
+			const tabs = screen.getAllByRole('tab');
+			fireEvent.click(tabs[1]); // Agents is the 2nd tab (index 1)
 
 			await waitFor(() => {
 				expect(screen.getByTestId('section-agent-comparison')).toBeInTheDocument();
@@ -1932,8 +1939,9 @@ describe('UsageDashboardModal', () => {
 				expect(document.activeElement).toBe(screen.getByTestId('section-agent-comparison'));
 			});
 
-			// Switch to Agents view
-			fireEvent.click(screen.getByText('Agents'));
+			// Switch to Agents view - use getAllByRole('tab') to avoid "multiple elements" error
+			const tabs = screen.getAllByRole('tab');
+			fireEvent.click(tabs[1]); // Agents is the 2nd tab (index 1)
 
 			await waitFor(() => {
 				// The section in the new view should not have focus ring initially

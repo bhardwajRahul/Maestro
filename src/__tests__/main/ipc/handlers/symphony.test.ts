@@ -1629,8 +1629,8 @@ describe('Symphony IPC handlers', () => {
 				const handler = getStartHandler();
 				await handler!({} as any, validStartParams);
 
-				// First call should be gh auth status
-				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status']);
+				// First call should be gh auth status (with optional cwd and env args)
+				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status'], undefined, expect.any(Object));
 			});
 
 			it('should fail early if not authenticated', async () => {
@@ -4017,8 +4017,8 @@ describe('Symphony IPC handlers', () => {
 				const handler = getStartContributionHandler();
 				await handler!({} as any, validStartContributionParams);
 
-				// First call should be gh auth status
-				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status']);
+				// First call should be gh auth status (with optional cwd and env args)
+				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status'], undefined, expect.any(Object));
 			});
 
 			it('should fail early if not authenticated', async () => {
@@ -4479,7 +4479,8 @@ describe('Symphony IPC handlers', () => {
 
 				expect(result.success).toBe(false);
 				expect(result.error).toContain('not authenticated');
-				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status']);
+				// execFileNoThrow is called with optional cwd and env args
+				expect(execFileNoThrow).toHaveBeenCalledWith('gh', ['auth', 'status'], undefined, expect.any(Object));
 			});
 		});
 

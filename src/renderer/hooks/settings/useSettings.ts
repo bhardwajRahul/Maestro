@@ -27,7 +27,7 @@ const DEFAULT_CONTEXT_MANAGEMENT_SETTINGS: ContextManagementSettings = {
 	groomingTimeout: 60000, // 1 minute timeout for grooming operations
 	preferredGroomingAgent: 'fastest', // 'fastest' or specific ToolType
 	// Context window warning settings (Phase 6)
-	contextWarningsEnabled: true, // Enable context consumption warnings
+	contextWarningsEnabled: false, // Enable context consumption warnings
 	contextWarningYellowThreshold: 75, // Yellow warning at 75% (min: 30, max: 90)
 	contextWarningRedThreshold: 90, // Red warning at 90% (min: 50, max: 95)
 };

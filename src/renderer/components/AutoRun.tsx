@@ -2095,18 +2095,18 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 			{/* Bottom Panel - shown when folder selected AND (there are tasks, unsaved changes, or content with token count) */}
 			{folderPath &&
 				(taskCounts.total > 0 ||
-					(isDirty && mode === 'edit' && !isLocked) ||
+					(isDirty && !isLocked) ||
 					tokenCount !== null) && (
 					<div
 						ref={bottomPanelRef}
-						className="flex-shrink-0 px-3 py-1.5 text-xs border-t flex items-center justify-between"
+						className="flex-shrink-0 px-3 py-1.5 mt-[5px] text-xs border-t flex items-center justify-between"
 						style={{
 							backgroundColor: theme.colors.bgActivity,
 							borderColor: theme.colors.border,
 						}}
 					>
-						{/* Revert button - left side */}
-						{isDirty && mode === 'edit' && !isLocked ? (
+						{/* Revert button - left side (visible in both edit and preview when dirty) */}
+						{isDirty && !isLocked ? (
 							<button
 								onClick={handleRevert}
 								className={`${isCompact ? 'p-1.5' : 'px-2 py-0.5'} rounded text-xs transition-colors hover:opacity-80 flex items-center gap-1`}
@@ -2162,13 +2162,13 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 									<span style={{ color: theme.colors.accent }}>{formatTokenCount(tokenCount)}</span>
 								</span>
 							)}
-							{taskCounts.total === 0 && tokenCount === null && isDirty && (
+							{taskCounts.total === 0 && tokenCount === null && isDirty && !isLocked && (
 								<span style={{ color: theme.colors.textDim }}>Unsaved changes</span>
 							)}
 						</div>
 
-						{/* Save button - right side */}
-						{isDirty && mode === 'edit' && !isLocked ? (
+						{/* Save button - right side (visible in both edit and preview when dirty) */}
+						{isDirty && !isLocked ? (
 							<button
 								onClick={handleSave}
 								className={`group relative ${isCompact ? 'p-1.5' : 'px-2 py-0.5'} rounded text-xs transition-colors hover:opacity-80 flex items-center gap-1`}

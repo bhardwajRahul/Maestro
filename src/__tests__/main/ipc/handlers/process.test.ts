@@ -54,11 +54,12 @@ vi.mock('node-pty', () => ({
 	spawn: vi.fn(),
 }));
 
-// Mock ssh-command-builder to handle async buildSshCommand
+// Mock ssh-command-builder to handle async buildSshCommandWithStdin
 // This mock dynamically builds the SSH command based on input to support all test cases
+// The production code now uses buildSshCommandWithStdin (stdin-based execution) instead of buildSshCommand
 vi.mock('../../../../main/utils/ssh-command-builder', () => ({
-	buildSshCommand: vi.fn().mockImplementation(async (config, remoteOptions) => {
-		const args: string[] = ['-tt'];
+	buildSshCommandWithStdin: vi.fn().mockImplementation(async (config, remoteOptions) => {
+		const args: string[] = [];
 
 		// Add identity file if provided
 		if (config.privateKeyPath) {
@@ -69,6 +70,7 @@ vi.mock('../../../../main/utils/ssh-command-builder', () => ({
 		args.push('-o', 'BatchMode=yes');
 		args.push('-o', 'StrictHostKeyChecking=accept-new');
 		args.push('-o', 'ConnectTimeout=10');
+		args.push('-o', 'RequestTTY=no');
 
 		// Add port if not default
 		if (config.port !== 22) {
@@ -82,30 +84,72 @@ vi.mock('../../../../main/utils/ssh-command-builder', () => ({
 			args.push(config.host);
 		}
 
-		// Build the remote command parts
-		const commandParts: string[] = [];
+		// For stdin-based execution, the remote command is just /bin/bash
+		args.push('/bin/bash');
 
-		// Add cd if cwd is set
+		// Build the stdin script that would be sent to bash
+		const scriptLines: string[] = [];
+		scriptLines.push('export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"');
+
+		if (remoteOptions.cwd) {
+			scriptLines.push(`cd '${remoteOptions.cwd}' || exit 1`);
+		}
+
+		// Add env vars if present
+		const mergedEnv = { ...(config.remoteEnv || {}), ...(remoteOptions.env || {}) };
+		for (const [key, value] of Object.entries(mergedEnv)) {
+			scriptLines.push(`export ${key}='${value}'`);
+		}
+
+		// Build command with args
+		const cmdWithArgs = `${remoteOptions.command} ${remoteOptions.args.map((a: string) => `'${a}'`).join(' ')}`.trim();
+		scriptLines.push(`exec ${cmdWithArgs}`);
+
+		let stdinScript = scriptLines.join('\n') + '\n';
+		if (remoteOptions.stdinInput) {
+			stdinScript += remoteOptions.stdinInput;
+		}
+
+		return { command: 'ssh', args, stdinScript };
+	}),
+	buildSshCommand: vi.fn().mockImplementation(async (config, remoteOptions) => {
+		// Legacy function - kept for backwards compatibility but tests primarily use buildSshCommandWithStdin
+		const args: string[] = ['-tt'];
+
+		if (config.privateKeyPath) {
+			args.push('-i', config.privateKeyPath.replace('~', '/Users/test'));
+		}
+
+		args.push('-o', 'BatchMode=yes');
+		args.push('-o', 'StrictHostKeyChecking=accept-new');
+		args.push('-o', 'ConnectTimeout=10');
+
+		if (config.port !== 22) {
+			args.push('-p', config.port.toString());
+		}
+
+		if (config.username && config.username.trim()) {
+			args.push(`${config.username}@${config.host}`);
+		} else {
+			args.push(config.host);
+		}
+
+		const commandParts: string[] = [];
 		if (remoteOptions.cwd) {
 			commandParts.push(`cd '${remoteOptions.cwd}'`);
 		}
 
-		// Add env vars if present
 		const mergedEnv = { ...(config.remoteEnv || {}), ...(remoteOptions.env || {}) };
 		const envParts: string[] = [];
 		for (const [key, value] of Object.entries(mergedEnv)) {
 			envParts.push(`${key}='${value}'`);
 		}
 
-		// Build command with args
 		const cmdWithArgs =
 			`'${remoteOptions.command}' ${remoteOptions.args.map((a: string) => `'${a}'`).join(' ')}`.trim();
-
-		// Combine env + command
 		const fullCmd = envParts.length > 0 ? `${envParts.join(' ')} ${cmdWithArgs}` : cmdWithArgs;
 		commandParts.push(fullCmd);
 
-		// Join with &&
 		const remoteCommand = commandParts.join(' && ');
 		args.push(`$SHELL -lc "${remoteCommand}"`);
 
@@ -899,13 +943,17 @@ describe('process IPC handlers', () => {
 				},
 			});
 
-			// Should use session SSH config
+			// Should use session SSH config with stdin-based execution
+			// The new approach uses buildSshCommandWithStdin which runs /bin/bash on remote
+			// and sends the command script via stdin
 			expect(mockProcessManager.spawn).toHaveBeenCalledWith(
 				expect.objectContaining({
 					command: 'ssh',
-					args: expect.arrayContaining(['devuser@dev.example.com']),
+					args: expect.arrayContaining(['devuser@dev.example.com', '/bin/bash']),
 					// PTY should be disabled for SSH
 					requiresPty: false,
+					// sshStdinScript should contain the command to execute
+					sshStdinScript: expect.stringContaining('claude'),
 				})
 			);
 		});
@@ -993,18 +1041,17 @@ describe('process IPC handlers', () => {
 				},
 			});
 
-			// When using SSH, customEnvVars should be undefined (passed via remote command)
+			// When using SSH, customEnvVars should be undefined (passed via stdin script)
 			expect(mockProcessManager.spawn).toHaveBeenCalledWith(
 				expect.objectContaining({
 					command: 'ssh',
-					customEnvVars: undefined, // Env vars passed in SSH command, not locally
+					customEnvVars: undefined, // Env vars passed in SSH stdin script, not locally
 				})
 			);
 
-			// The SSH args should contain the remote command with env vars
+			// The sshStdinScript should contain the env var export
 			const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
-			const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
-			expect(remoteCommandArg).toContain('CUSTOM_API_KEY=');
+			expect(spawnCall.sshStdinScript).toContain('CUSTOM_API_KEY=');
 		});
 
 		it('should run locally when session SSH is explicitly disabled', async () => {
@@ -1119,8 +1166,8 @@ describe('process IPC handlers', () => {
 			// We can't easily test the exact value of os.homedir() in a mock,
 			// but we verify it's NOT the remote path
 			expect(spawnCall.cwd).not.toBe('/home/remoteuser/remote-project');
-			// The remote path should be embedded in the SSH command args instead
-			expect(spawnCall.args.join(' ')).toContain('claude');
+			// The remote path should be embedded in the SSH stdin script instead
+			expect(spawnCall.sshStdinScript).toContain('/home/remoteuser/remote-project');
 		});
 
 		it('should use agent binaryName for SSH remote instead of local path (fixes Codex/Claude remote path issue)', async () => {
@@ -1161,14 +1208,13 @@ describe('process IPC handlers', () => {
 				},
 			});
 
-			// The SSH command args should contain 'codex' (binaryName), NOT '/opt/homebrew/bin/codex'
+			// The sshStdinScript should contain 'codex' (binaryName), NOT '/opt/homebrew/bin/codex'
 			const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
 			expect(spawnCall.command).toBe('ssh');
 
-			// The remote command in SSH args should use just 'codex', not the full local path
-			const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
-			expect(remoteCommandArg).toContain("'codex'");
-			expect(remoteCommandArg).not.toContain('/opt/homebrew/bin/codex');
+			// The stdin script should use just 'codex', not the full local path
+			expect(spawnCall.sshStdinScript).toContain('codex');
+			expect(spawnCall.sshStdinScript).not.toContain('/opt/homebrew/bin/codex');
 		});
 
 		it('should use sessionCustomPath for SSH remote when user specifies a custom path', async () => {
@@ -1209,10 +1255,9 @@ describe('process IPC handlers', () => {
 			const spawnCall = mockProcessManager.spawn.mock.calls[0][0];
 			expect(spawnCall.command).toBe('ssh');
 
-			// Should use the custom path, not binaryName or local path
-			const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
-			expect(remoteCommandArg).toContain("'/usr/local/bin/codex'");
-			expect(remoteCommandArg).not.toContain('/opt/homebrew/bin/codex');
+			// Should use the custom path in the stdin script, not binaryName or local path
+			expect(spawnCall.sshStdinScript).toContain('/usr/local/bin/codex');
+			expect(spawnCall.sshStdinScript).not.toContain('/opt/homebrew/bin/codex');
 		});
 
 		it('should fall back to config.command when agent.binaryName is not available', async () => {
@@ -1241,8 +1286,8 @@ describe('process IPC handlers', () => {
 			expect(spawnCall.command).toBe('ssh');
 
 			// Should fall back to config.command when agent.binaryName is unavailable
-			const remoteCommandArg = spawnCall.args[spawnCall.args.length - 1];
-			expect(remoteCommandArg).toContain("'custom-agent'");
+			// The stdin script should contain the command
+			expect(spawnCall.sshStdinScript).toContain('custom-agent');
 		});
 	});
 });

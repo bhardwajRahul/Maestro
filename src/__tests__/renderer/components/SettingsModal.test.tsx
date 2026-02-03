@@ -74,7 +74,7 @@ vi.mock('../../../renderer/hooks/settings/useSettings', () => ({
 			showMergePreview: true,
 			groomingTimeout: 60000,
 			preferredGroomingAgent: 'fastest',
-			contextWarningsEnabled: true,
+			contextWarningsEnabled: false,
 			contextWarningYellowThreshold: 60,
 			contextWarningRedThreshold: 80,
 		},
