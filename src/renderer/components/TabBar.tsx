@@ -1599,7 +1599,7 @@ function TabBarInner({
 	const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 	const [isOverflowing, setIsOverflowing] = useState(false);
 
-	// Center the active tab in the scrollable area when activeTabId or activeFileTabId changes, or filter is toggled
+	// Ensure the active tab is fully visible (including close button) when activeTabId or activeFileTabId changes, or filter is toggled
 	useEffect(() => {
 		requestAnimationFrame(() => {
 			const container = tabBarRef.current;
@@ -1609,10 +1609,10 @@ function TabBarInner({
 				`[data-tab-id="${targetTabId}"]`
 			) as HTMLElement | null;
 			if (container && tabElement) {
-				// Calculate scroll position to center the tab
-				const scrollLeft =
-					tabElement.offsetLeft - container.clientWidth / 2 + tabElement.offsetWidth / 2;
-				container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+				// Use scrollIntoView with 'nearest' to ensure the full tab is visible
+				// This scrolls minimally - only if the tab is partially or fully out of view
+				// The 'end' option ensures the right edge (with close button) is visible
+				tabElement.scrollIntoView({ inline: 'nearest', behavior: 'smooth', block: 'nearest' });
 			}
 		});
 	}, [activeTabId, activeFileTabId, showUnreadOnly]);

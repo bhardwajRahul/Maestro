@@ -164,8 +164,9 @@ describe('TabBar', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		vi.clearAllMocks();
-		// Mock scrollTo
+		// Mock scrollTo and scrollIntoView
 		Element.prototype.scrollTo = vi.fn();
+		Element.prototype.scrollIntoView = vi.fn();
 		// Mock clipboard
 		Object.assign(navigator, {
 			clipboard: {
@@ -1430,13 +1431,13 @@ describe('TabBar', () => {
 	});
 
 	describe('scroll behavior', () => {
-		it('scrolls to center active tab when activeTabId changes', async () => {
+		it('scrolls active tab into view when activeTabId changes', async () => {
 			// Mock requestAnimationFrame
 			const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
 				cb(0);
 				return 0;
 			});
-			const scrollToSpy = vi.fn();
+			const scrollIntoViewSpy = vi.fn();
 
 			const tabs = [
 				createTab({ id: 'tab-1', name: 'Tab 1' }),
@@ -1454,9 +1455,11 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// Mock scrollTo on the container
-			const tabBarContainer = container.firstChild as HTMLElement;
-			tabBarContainer.scrollTo = scrollToSpy;
+			// Mock scrollIntoView on the tab elements
+			const tabElements = container.querySelectorAll('[data-tab-id]');
+			tabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
 
 			// Change active tab
 			rerender(
@@ -1470,19 +1473,29 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// scrollTo should have been called via requestAnimationFrame
-			expect(scrollToSpy).toHaveBeenCalled();
+			// Re-mock scrollIntoView on tab elements after rerender
+			const newTabElements = container.querySelectorAll('[data-tab-id]');
+			newTabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
+
+			// scrollIntoView should have been called via requestAnimationFrame
+			expect(scrollIntoViewSpy).toHaveBeenCalledWith({
+				inline: 'nearest',
+				behavior: 'smooth',
+				block: 'nearest',
+			});
 
 			rafSpy.mockRestore();
 		});
 
-		it('scrolls to center active tab when showUnreadOnly filter is toggled off', async () => {
+		it('scrolls active tab into view when showUnreadOnly filter is toggled off', async () => {
 			// Mock requestAnimationFrame
 			const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
 				cb(0);
 				return 0;
 			});
-			const scrollToSpy = vi.fn();
+			const scrollIntoViewSpy = vi.fn();
 
 			const tabs = [
 				createTab({ id: 'tab-1', name: 'Tab 1' }),
@@ -1502,12 +1515,14 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// Mock scrollTo on the container
-			const tabBarContainer = container.firstChild as HTMLElement;
-			tabBarContainer.scrollTo = scrollToSpy;
+			// Mock scrollIntoView on the tab elements
+			const tabElements = container.querySelectorAll('[data-tab-id]');
+			tabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
 
 			// Clear initial calls
-			scrollToSpy.mockClear();
+			scrollIntoViewSpy.mockClear();
 
 			// Toggle filter off - this should trigger scroll to active tab
 			rerender(
@@ -1522,19 +1537,29 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// scrollTo should have been called when filter was toggled
-			expect(scrollToSpy).toHaveBeenCalled();
+			// Re-mock scrollIntoView on tab elements after rerender
+			const newTabElements = container.querySelectorAll('[data-tab-id]');
+			newTabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
+
+			// scrollIntoView should have been called when filter was toggled
+			expect(scrollIntoViewSpy).toHaveBeenCalledWith({
+				inline: 'nearest',
+				behavior: 'smooth',
+				block: 'nearest',
+			});
 
 			rafSpy.mockRestore();
 		});
 
-		it('scrolls to center file tab when activeFileTabId changes', async () => {
+		it('scrolls file tab into view when activeFileTabId changes', async () => {
 			// Mock requestAnimationFrame
 			const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
 				cb(0);
 				return 0;
 			});
-			const scrollToSpy = vi.fn();
+			const scrollIntoViewSpy = vi.fn();
 
 			const tabs = [createTab({ id: 'tab-1', name: 'Tab 1' })];
 			const fileTab: FilePreviewTab = {
@@ -1563,12 +1588,14 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// Mock scrollTo on the container
-			const tabBarContainer = container.firstChild as HTMLElement;
-			tabBarContainer.scrollTo = scrollToSpy;
+			// Mock scrollIntoView on the tab elements
+			const tabElements = container.querySelectorAll('[data-tab-id]');
+			tabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
 
 			// Clear initial calls
-			scrollToSpy.mockClear();
+			scrollIntoViewSpy.mockClear();
 
 			// Select the file tab - this should trigger scroll to file tab
 			rerender(
@@ -1586,8 +1613,18 @@ describe('TabBar', () => {
 				/>
 			);
 
-			// scrollTo should have been called when file tab was selected
-			expect(scrollToSpy).toHaveBeenCalled();
+			// Re-mock scrollIntoView on tab elements after rerender
+			const newTabElements = container.querySelectorAll('[data-tab-id]');
+			newTabElements.forEach((el) => {
+				(el as HTMLElement).scrollIntoView = scrollIntoViewSpy;
+			});
+
+			// scrollIntoView should have been called when file tab was selected
+			expect(scrollIntoViewSpy).toHaveBeenCalledWith({
+				inline: 'nearest',
+				behavior: 'smooth',
+				block: 'nearest',
+			});
 
 			rafSpy.mockRestore();
 		});
@@ -1878,6 +1915,7 @@ describe('TabBar', () => {
 							querySelector: vi.fn().mockReturnValue({
 								offsetLeft: 100,
 								offsetWidth: 80,
+								scrollIntoView: vi.fn(),
 							}),
 							scrollTo: vi.fn(),
 						}),
