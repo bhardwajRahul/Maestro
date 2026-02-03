@@ -345,17 +345,22 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 						// The script contains PATH setup, cd, env vars, and the actual command
 						// This eliminates all shell escaping issues
 						//
-						// IMPORTANT: OpenCode prompts must be passed via stdin to avoid CLI length limits.
-						// Prompts can be huge and contain arbitrary characters; do NOT pass them as argv.
-						const shouldSendPromptViaStdin = config.toolType === 'opencode' && !!config.prompt;
-						const promptForArgs = shouldSendPromptViaStdin ? undefined : config.prompt;
-						const stdinInput = shouldSendPromptViaStdin ? config.prompt : undefined;
+						// IMPORTANT: ALL agent prompts are passed via stdin passthrough for SSH.
+						// Benefits:
+						// - Avoids CLI argument length limits (128KB-2MB depending on OS)
+						// - No shell escaping needed - prompt is never parsed by any shell
+						// - Works with any prompt content (quotes, newlines, special chars)
+						// - Simpler code - no heredoc or delimiter collision detection
+						//
+						// How it works: bash reads the script, `exec` replaces bash with the agent,
+						// and the agent reads the remaining stdin (the prompt) directly.
+						const stdinInput = config.prompt;
 						const sshCommand = await buildSshCommandWithStdin(sshResult.config, {
 							command: remoteCommand,
 							args: finalArgs,
 							cwd: config.cwd,
 							env: effectiveCustomEnvVars,
-							prompt: promptForArgs,
+							// prompt is not passed as CLI arg - it goes via stdinInput
 							stdinInput,
 						});
 
@@ -366,7 +371,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 						// For SSH, env vars are passed in the stdin script, not locally
 						customEnvVarsToPass = undefined;
 
-						logger.info(`SSH command built with stdin script`, LOG_CONTEXT, {
+						logger.info(`SSH command built with stdin passthrough`, LOG_CONTEXT, {
 							sessionId: config.sessionId,
 							toolType: config.toolType,
 							sshBinary: sshCommand.command,
@@ -374,7 +379,7 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 							remoteCommand,
 							remoteCwd: config.cwd,
 							promptLength: config.prompt?.length,
-							scriptLength: sshCommand.stdinScript?.length,
+							stdinScriptLength: sshCommand.stdinScript?.length,
 						});
 					}
 				}

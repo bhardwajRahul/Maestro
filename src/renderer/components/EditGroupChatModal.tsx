@@ -3,19 +3,19 @@
  *
  * Modal for editing an existing Group Chat. Allows user to:
  * - Change the name of the group chat
- * - Change the moderator agent
- * - Customize moderator settings (CLI args, path, ENV vars)
+ * - Change the moderator agent via dropdown
+ * - Customize moderator settings (CLI args, path, ENV vars) via expandable panel
  *
  * Similar to NewGroupChatModal but pre-populated with existing values.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Check, X, Settings, ArrowLeft } from 'lucide-react';
+import { X, Settings, ChevronDown, Check } from 'lucide-react';
 import type { Theme, AgentConfig, ModeratorConfig, GroupChat } from '../types';
 import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../shared/types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { Modal, ModalFooter, FormInput } from './ui';
-import { AgentLogo, AGENT_TILES } from './Wizard/screens/AgentSelectionScreen';
+import { AGENT_TILES } from './Wizard/screens/AgentSelectionScreen';
 import { AgentConfigPanel } from './shared/AgentConfigPanel';
 import { SshRemoteSelector } from './shared/SshRemoteSelector';
 
@@ -44,9 +44,8 @@ export function EditGroupChatModal({
 	const [detectedAgents, setDetectedAgents] = useState<AgentConfig[]>([]);
 	const [isDetecting, setIsDetecting] = useState(true);
 
-	// View mode for switching between grid and config
-	const [viewMode, setViewMode] = useState<'grid' | 'config'>('grid');
-	const [isTransitioning, setIsTransitioning] = useState(false);
+	// Configuration panel state - expandable below dropdown
+	const [isConfigExpanded, setIsConfigExpanded] = useState(false);
 
 	// Custom moderator configuration state
 	const [customPath, setCustomPath] = useState('');
@@ -81,8 +80,7 @@ export function EditGroupChatModal({
 		setCustomPath(groupChat.moderatorConfig?.customPath || '');
 		setCustomArgs(groupChat.moderatorConfig?.customArgs || '');
 		setCustomEnvVars(groupChat.moderatorConfig?.customEnvVars || {});
-		setViewMode('grid');
-		setIsTransitioning(false);
+		setIsConfigExpanded(false);
 		setAgentConfig({});
 		setAvailableModels([]);
 		setLoadingModels(false);
@@ -94,8 +92,7 @@ export function EditGroupChatModal({
 		setName('');
 		setSelectedAgent(null);
 		setIsDetecting(true);
-		setViewMode('grid');
-		setIsTransitioning(false);
+		setIsConfigExpanded(false);
 		setCustomPath('');
 		setCustomArgs('');
 		setCustomEnvVars({});
@@ -143,10 +140,41 @@ export function EditGroupChatModal({
 
 	// Focus name input when agents detected
 	useEffect(() => {
-		if (!isDetecting && isOpen && viewMode === 'grid') {
+		if (!isDetecting && isOpen) {
 			nameInputRef.current?.focus();
 		}
-	}, [isDetecting, isOpen, viewMode]);
+	}, [isDetecting, isOpen]);
+
+	// Load agent config when expanding configuration panel
+	useEffect(() => {
+		if (isConfigExpanded && selectedAgent) {
+			loadAgentConfig(selectedAgent);
+		}
+	}, [isConfigExpanded, selectedAgent]);
+
+	// Load agent configuration
+	const loadAgentConfig = useCallback(
+		async (agentId: string) => {
+			const config = await window.maestro.agents.getConfig(agentId);
+			setAgentConfig(config || {});
+			agentConfigRef.current = config || {};
+
+			// Load models if agent supports it
+			const agent = detectedAgents.find((a) => a.id === agentId);
+			if (agent?.capabilities?.supportsModelSelection) {
+				setLoadingModels(true);
+				try {
+					const models = await window.maestro.agents.getModels(agentId);
+					setAvailableModels(models);
+				} catch (err) {
+					console.error('Failed to load models:', err);
+				} finally {
+					setLoadingModels(false);
+				}
+			}
+		},
+		[detectedAgents]
+	);
 
 	// Build moderator config from state
 	const buildModeratorConfig = useCallback((): ModeratorConfig | undefined => {
@@ -194,45 +222,9 @@ export function EditGroupChatModal({
 
 	const canSave = name.trim().length > 0 && selectedAgent !== null && hasChanges();
 
-	// Open configuration panel for the selected agent
-	const handleOpenConfig = useCallback(async () => {
-		if (!selectedAgent) return;
-
-		// Load agent config
-		const config = await window.maestro.agents.getConfig(selectedAgent);
-		setAgentConfig(config || {});
-		agentConfigRef.current = config || {};
-
-		// Load models if agent supports it
-		const agent = detectedAgents.find((a) => a.id === selectedAgent);
-		// Note: capabilities is added by agent-detector but not in the TypeScript type
-		if ((agent as any)?.capabilities?.supportsModelSelection) {
-			setLoadingModels(true);
-			try {
-				const models = await window.maestro.agents.getModels(selectedAgent);
-				setAvailableModels(models);
-			} catch (err) {
-				console.error('Failed to load models:', err);
-			} finally {
-				setLoadingModels(false);
-			}
-		}
-
-		// Transition to config view
-		setIsTransitioning(true);
-		setTimeout(() => {
-			setViewMode('config');
-			setIsTransitioning(false);
-		}, 150);
-	}, [selectedAgent, detectedAgents]);
-
-	// Close configuration panel
-	const handleCloseConfig = useCallback(() => {
-		setIsTransitioning(true);
-		setTimeout(() => {
-			setViewMode('grid');
-			setIsTransitioning(false);
-		}, 150);
+	// Toggle configuration panel
+	const handleToggleConfig = useCallback(() => {
+		setIsConfigExpanded((prev) => !prev);
 	}, []);
 
 	// Refresh agent detection after config changes
@@ -266,6 +258,22 @@ export function EditGroupChatModal({
 		}
 	}, [selectedAgent]);
 
+	// Handle agent selection change
+	const handleAgentChange = useCallback(
+		(agentId: string) => {
+			setSelectedAgent(agentId);
+			// Reset customizations when changing agent
+			setCustomPath('');
+			setCustomArgs('');
+			setCustomEnvVars({});
+			// If config is expanded, reload config for new agent
+			if (isConfigExpanded) {
+				loadAgentConfig(agentId);
+			}
+		},
+		[isConfigExpanded, loadAgentConfig]
+	);
+
 	if (!isOpen || !groupChat) return null;
 
 	// Filter AGENT_TILES to only show supported + detected agents
@@ -281,127 +289,6 @@ export function EditGroupChatModal({
 	// Check if there's any customization set
 	const hasCustomization = customPath || customArgs || Object.keys(customEnvVars).length > 0;
 
-	// Render configuration view
-	if (viewMode === 'config' && selectedAgentConfig && selectedTile) {
-		return (
-			<Modal
-				theme={theme}
-				title={`Configure ${selectedTile.name}`}
-				priority={MODAL_PRIORITIES.EDIT_GROUP_CHAT}
-				onClose={onClose}
-				width={600}
-				customHeader={
-					<div
-						className="p-4 border-b flex items-center justify-between shrink-0"
-						style={{ borderColor: theme.colors.border }}
-					>
-						<div className="flex items-center gap-3">
-							<button
-								onClick={handleCloseConfig}
-								className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white/10 transition-colors"
-								style={{ color: theme.colors.textDim }}
-							>
-								<ArrowLeft className="w-4 h-4" />
-								Back
-							</button>
-							<h2 className="text-sm font-bold" style={{ color: theme.colors.textMain }}>
-								Configure {selectedTile.name}
-							</h2>
-						</div>
-						<button
-							type="button"
-							onClick={onClose}
-							className="p-1 rounded hover:bg-white/10 transition-colors"
-							style={{ color: theme.colors.textDim }}
-							aria-label="Close modal"
-						>
-							<X className="w-4 h-4" />
-						</button>
-					</div>
-				}
-				footer={
-					<ModalFooter
-						theme={theme}
-						onCancel={handleCloseConfig}
-						cancelLabel="Back"
-						onConfirm={handleCloseConfig}
-						confirmLabel="Done"
-					/>
-				}
-			>
-				<div
-					className={`transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
-				>
-					<AgentConfigPanel
-						theme={theme}
-						agent={selectedAgentConfig}
-						customPath={customPath}
-						onCustomPathChange={setCustomPath}
-						onCustomPathBlur={() => {
-							/* Local state only */
-						}}
-						onCustomPathClear={() => setCustomPath('')}
-						customArgs={customArgs}
-						onCustomArgsChange={setCustomArgs}
-						onCustomArgsBlur={() => {
-							/* Local state only */
-						}}
-						onCustomArgsClear={() => setCustomArgs('')}
-						customEnvVars={customEnvVars}
-						onEnvVarKeyChange={(oldKey, newKey, value) => {
-							const newVars = { ...customEnvVars };
-							delete newVars[oldKey];
-							newVars[newKey] = value;
-							setCustomEnvVars(newVars);
-						}}
-						onEnvVarValueChange={(key, value) => {
-							setCustomEnvVars({ ...customEnvVars, [key]: value });
-						}}
-						onEnvVarRemove={(key) => {
-							const newVars = { ...customEnvVars };
-							delete newVars[key];
-							setCustomEnvVars(newVars);
-						}}
-						onEnvVarAdd={() => {
-							let newKey = 'NEW_VAR';
-							let counter = 1;
-							while (customEnvVars[newKey]) {
-								newKey = `NEW_VAR_${counter}`;
-								counter++;
-							}
-							setCustomEnvVars({ ...customEnvVars, [newKey]: '' });
-						}}
-						onEnvVarsBlur={() => {
-							/* Local state only */
-						}}
-						agentConfig={agentConfig}
-						onConfigChange={(key, value) => {
-							const newConfig = { ...agentConfig, [key]: value };
-							setAgentConfig(newConfig);
-							agentConfigRef.current = newConfig;
-							setConfigWasModified(true);
-						}}
-						onConfigBlur={async () => {
-							if (selectedAgent) {
-								// Use ref to get latest config (state may be stale in async callback)
-								await window.maestro.agents.setConfig(selectedAgent, agentConfigRef.current);
-								setConfigWasModified(true);
-							}
-						}}
-						availableModels={availableModels}
-						loadingModels={loadingModels}
-						onRefreshModels={handleRefreshModels}
-						onRefreshAgent={handleRefreshAgent}
-						refreshingAgent={refreshingAgent}
-						compact
-						showBuiltInEnvVars
-					/>
-				</div>
-			</Modal>
-		);
-	}
-
-	// Render grid view
 	return (
 		<Modal
 			theme={theme}
@@ -420,9 +307,7 @@ export function EditGroupChatModal({
 				/>
 			}
 		>
-			<div
-				className={`transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
-			>
+			<div>
 				{/* Name Input */}
 				<div className="mb-6">
 					<FormInput
@@ -436,105 +321,179 @@ export function EditGroupChatModal({
 					/>
 				</div>
 
-				{/* Agent Selection */}
-				<div className="mb-4">
+				{/* Moderator Selection - Dropdown with Customize button */}
+				<div className="mb-6">
 					<label
-						className="block text-sm font-medium mb-3"
+						className="block text-xs font-bold opacity-70 uppercase mb-2"
 						style={{ color: theme.colors.textMain }}
 					>
 						Moderator Agent
 					</label>
 
 					{isDetecting ? (
-						<div className="flex items-center justify-center py-8">
+						<div className="flex items-center gap-2 py-2">
 							<div
-								className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+								className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
 								style={{ borderColor: theme.colors.accent, borderTopColor: 'transparent' }}
 							/>
+							<span className="text-sm" style={{ color: theme.colors.textDim }}>
+								Detecting agents...
+							</span>
 						</div>
 					) : availableTiles.length === 0 ? (
-						<div className="text-center py-8 text-sm" style={{ color: theme.colors.textDim }}>
-							No agents available. Please install Claude Code, OpenCode, or Codex.
+						<div className="text-sm py-2" style={{ color: theme.colors.textDim }}>
+							No agents available. Please install Claude Code, OpenCode, Codex, or Factory Droid.
 						</div>
 					) : (
-						<div className="grid grid-cols-3 gap-3">
-							{availableTiles.map((tile) => {
-								const isSelected = selectedAgent === tile.id;
+						<div className="flex items-center gap-2">
+							{/* Dropdown */}
+							<div className="relative flex-1">
+								<select
+									value={selectedAgent || ''}
+									onChange={(e) => handleAgentChange(e.target.value)}
+									className="w-full px-3 py-2 pr-10 rounded-lg border outline-none appearance-none cursor-pointer text-sm"
+									style={{
+										backgroundColor: theme.colors.bgMain,
+										borderColor: theme.colors.border,
+										color: theme.colors.textMain,
+									}}
+									aria-label="Select moderator agent"
+								>
+									{availableTiles.map((tile) => {
+										const isBeta =
+											tile.id === 'codex' ||
+											tile.id === 'opencode' ||
+											tile.id === 'factory-droid';
+										return (
+											<option key={tile.id} value={tile.id}>
+												{tile.name}
+												{isBeta ? ' (Beta)' : ''}
+											</option>
+										);
+									})}
+								</select>
+								<ChevronDown
+									className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+									style={{ color: theme.colors.textDim }}
+								/>
+							</div>
 
-								return (
-									<div
-										key={tile.id}
-										role="button"
-										tabIndex={0}
-										onClick={() => setSelectedAgent(tile.id)}
-										onKeyDown={(e) => {
-											if (e.key === 'Enter' || e.key === ' ') {
-												e.preventDefault();
-												setSelectedAgent(tile.id);
-											}
-										}}
-										className="relative flex flex-col items-center p-4 pb-10 rounded-lg border-2 transition-all outline-none cursor-pointer"
-										style={{
-											backgroundColor: isSelected ? `${tile.brandColor}15` : theme.colors.bgMain,
-											borderColor: isSelected ? tile.brandColor : theme.colors.border,
-										}}
-									>
-										{isSelected && (
-											<div
-												className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
-												style={{ backgroundColor: tile.brandColor }}
-											>
-												<Check className="w-3 h-3 text-white" />
-											</div>
-										)}
-										<AgentLogo
-											agentId={tile.id}
-											supported={true}
-											detected={true}
-											brandColor={tile.brandColor}
-											theme={theme}
-										/>
-										<span
-											className="mt-2 text-sm font-medium"
-											style={{ color: theme.colors.textMain }}
-										>
-											{tile.name}
+							{/* Customize button */}
+							<button
+								onClick={handleToggleConfig}
+								className="flex items-center gap-1.5 px-3 py-2 rounded-lg border transition-colors hover:bg-white/5"
+								style={{
+									borderColor: isConfigExpanded ? theme.colors.accent : theme.colors.border,
+									color: isConfigExpanded ? theme.colors.accent : theme.colors.textDim,
+									backgroundColor: isConfigExpanded ? `${theme.colors.accent}10` : 'transparent',
+								}}
+								title="Customize moderator settings"
+							>
+								<Settings className="w-4 h-4" />
+								<span className="text-sm">Customize</span>
+								{hasCustomization && (
+									<span
+										className="w-2 h-2 rounded-full"
+										style={{ backgroundColor: theme.colors.accent }}
+									/>
+								)}
+							</button>
+						</div>
+					)}
+
+					{/* Expandable Configuration Panel */}
+					{isConfigExpanded && selectedAgentConfig && selectedTile && (
+						<div
+							className="mt-3 p-4 rounded-lg border"
+							style={{
+								backgroundColor: theme.colors.bgActivity,
+								borderColor: theme.colors.border,
+							}}
+						>
+							<div className="flex items-center justify-between mb-3">
+								<span className="text-xs font-medium" style={{ color: theme.colors.textDim }}>
+									{selectedTile.name} Configuration
+								</span>
+								{hasCustomization && (
+									<div className="flex items-center gap-1">
+										<Check className="w-3 h-3" style={{ color: theme.colors.success }} />
+										<span className="text-xs" style={{ color: theme.colors.success }}>
+											Customized
 										</span>
-
-										{/* Customize button */}
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												setSelectedAgent(tile.id);
-												// Small delay to update selection before opening config
-												setTimeout(() => handleOpenConfig(), 50);
-											}}
-											className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded text-[10px] hover:bg-white/10 transition-colors"
-											style={{
-												color:
-													isSelected && hasCustomization ? tile.brandColor : theme.colors.textDim,
-											}}
-											title="Customize moderator settings"
-										>
-											<Settings className="w-3 h-3" />
-											Customize
-											{isSelected && hasCustomization && (
-												<span
-													className="w-1.5 h-1.5 rounded-full ml-0.5"
-													style={{ backgroundColor: tile.brandColor }}
-												/>
-											)}
-										</button>
 									</div>
-								);
-							})}
+								)}
+							</div>
+							<AgentConfigPanel
+								theme={theme}
+								agent={selectedAgentConfig}
+								customPath={customPath}
+								onCustomPathChange={setCustomPath}
+								onCustomPathBlur={() => {
+									/* Local state only */
+								}}
+								onCustomPathClear={() => setCustomPath('')}
+								customArgs={customArgs}
+								onCustomArgsChange={setCustomArgs}
+								onCustomArgsBlur={() => {
+									/* Local state only */
+								}}
+								onCustomArgsClear={() => setCustomArgs('')}
+								customEnvVars={customEnvVars}
+								onEnvVarKeyChange={(oldKey, newKey, value) => {
+									const newVars = { ...customEnvVars };
+									delete newVars[oldKey];
+									newVars[newKey] = value;
+									setCustomEnvVars(newVars);
+								}}
+								onEnvVarValueChange={(key, value) => {
+									setCustomEnvVars({ ...customEnvVars, [key]: value });
+								}}
+								onEnvVarRemove={(key) => {
+									const newVars = { ...customEnvVars };
+									delete newVars[key];
+									setCustomEnvVars(newVars);
+								}}
+								onEnvVarAdd={() => {
+									let newKey = 'NEW_VAR';
+									let counter = 1;
+									while (customEnvVars[newKey]) {
+										newKey = `NEW_VAR_${counter}`;
+										counter++;
+									}
+									setCustomEnvVars({ ...customEnvVars, [newKey]: '' });
+								}}
+								onEnvVarsBlur={() => {
+									/* Local state only */
+								}}
+								agentConfig={agentConfig}
+								onConfigChange={(key, value) => {
+									const newConfig = { ...agentConfig, [key]: value };
+									setAgentConfig(newConfig);
+									agentConfigRef.current = newConfig;
+									setConfigWasModified(true);
+								}}
+								onConfigBlur={async () => {
+									if (selectedAgent) {
+										// Use ref to get latest config (state may be stale in async callback)
+										await window.maestro.agents.setConfig(selectedAgent, agentConfigRef.current);
+										setConfigWasModified(true);
+									}
+								}}
+								availableModels={availableModels}
+								loadingModels={loadingModels}
+								onRefreshModels={handleRefreshModels}
+								onRefreshAgent={handleRefreshAgent}
+								refreshingAgent={refreshingAgent}
+								compact
+								showBuiltInEnvVars
+							/>
 						</div>
 					)}
 				</div>
 
 				{/* SSH Remote Execution - Top Level */}
 				{sshRemotes.length > 0 && (
-					<div className="mb-4">
+					<div className="mb-6">
 						<SshRemoteSelector
 							theme={theme}
 							sshRemotes={sshRemotes}

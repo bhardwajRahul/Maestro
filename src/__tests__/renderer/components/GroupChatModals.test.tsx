@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { NewGroupChatModal } from '../../../renderer/components/NewGroupChatModal';
 import { EditGroupChatModal } from '../../../renderer/components/EditGroupChatModal';
 import type { Theme, GroupChat, AgentConfig } from '../../../renderer/types';
@@ -167,18 +167,17 @@ describe('Group Chat Modals', () => {
 				/>
 			);
 
-			// Wait for agent detection
+			// Wait for agent detection and verify dropdown is rendered
 			await waitFor(() => {
-				expect(screen.getByText('Claude Code')).toBeInTheDocument();
+				expect(screen.getByRole('combobox', { name: /select moderator/i })).toBeInTheDocument();
 			});
 
-			// Select the agent first (the tile is now a div with role="button")
-			const agentTile = screen.getByText('Claude Code').closest('[role="button"]');
-			expect(agentTile).not.toBeNull();
-			fireEvent.click(agentTile!);
+			// Verify Claude Code is selected in dropdown
+			const dropdown = screen.getByRole('combobox', { name: /select moderator/i });
+			expect(dropdown).toHaveValue('claude-code');
 
-			// Click the Customize button to open config panel
-			const customizeButton = screen.getByText('Customize');
+			// Click the Customize button to expand config panel
+			const customizeButton = screen.getByRole('button', { name: /customize/i });
 			fireEvent.click(customizeButton);
 
 			// Wait for config panel to appear and verify MAESTRO_SESSION_RESUMED is displayed
@@ -188,6 +187,39 @@ describe('Group Chat Modals', () => {
 
 			// Also verify the value hint is shown
 			expect(screen.getByText('1 (when resuming)')).toBeInTheDocument();
+		});
+
+		it('should show all available agents in dropdown', async () => {
+			// Setup multiple agents
+			vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+				createMockAgent({ id: 'claude-code', name: 'Claude Code' }),
+				createMockAgent({ id: 'codex', name: 'Codex' }),
+				createMockAgent({ id: 'opencode', name: 'OpenCode' }),
+				createMockAgent({ id: 'factory-droid', name: 'Factory Droid' }),
+			]);
+
+			const onCreate = vi.fn();
+			const onClose = vi.fn();
+
+			render(
+				<NewGroupChatModal
+					theme={createMockTheme()}
+					isOpen={true}
+					onClose={onClose}
+					onCreate={onCreate}
+				/>
+			);
+
+			// Wait for dropdown to be rendered
+			await waitFor(() => {
+				expect(screen.getByRole('combobox', { name: /select moderator/i })).toBeInTheDocument();
+			});
+
+			// Verify all agents appear as options
+			expect(screen.getByRole('option', { name: /Claude Code/i })).toBeInTheDocument();
+			expect(screen.getByRole('option', { name: /Codex.*Beta/i })).toBeInTheDocument();
+			expect(screen.getByRole('option', { name: /OpenCode.*Beta/i })).toBeInTheDocument();
+			expect(screen.getByRole('option', { name: /Factory Droid.*Beta/i })).toBeInTheDocument();
 		});
 	});
 
@@ -207,13 +239,17 @@ describe('Group Chat Modals', () => {
 				/>
 			);
 
-			// Wait for agent detection
+			// Wait for dropdown to be rendered
 			await waitFor(() => {
-				expect(screen.getByText('Claude Code')).toBeInTheDocument();
+				expect(screen.getByRole('combobox', { name: /select moderator/i })).toBeInTheDocument();
 			});
 
-			// Click the Customize button to open config panel
-			const customizeButton = screen.getByText('Customize');
+			// Verify Claude Code is pre-selected
+			const dropdown = screen.getByRole('combobox', { name: /select moderator/i });
+			expect(dropdown).toHaveValue('claude-code');
+
+			// Click the Customize button to expand config panel
+			const customizeButton = screen.getByRole('button', { name: /customize/i });
 			fireEvent.click(customizeButton);
 
 			// Wait for config panel to appear and verify MAESTRO_SESSION_RESUMED is displayed
@@ -223,6 +259,42 @@ describe('Group Chat Modals', () => {
 
 			// Also verify the value hint is shown
 			expect(screen.getByText('1 (when resuming)')).toBeInTheDocument();
+		});
+
+		it('should show warning when changing moderator agent', async () => {
+			// Setup multiple agents
+			vi.mocked(window.maestro.agents.detect).mockResolvedValue([
+				createMockAgent({ id: 'claude-code', name: 'Claude Code' }),
+				createMockAgent({ id: 'codex', name: 'Codex' }),
+			]);
+
+			const onSave = vi.fn();
+			const onClose = vi.fn();
+			const groupChat = createMockGroupChat({ moderatorAgentId: 'claude-code' });
+
+			render(
+				<EditGroupChatModal
+					theme={createMockTheme()}
+					isOpen={true}
+					groupChat={groupChat}
+					onClose={onClose}
+					onSave={onSave}
+				/>
+			);
+
+			// Wait for dropdown
+			await waitFor(() => {
+				expect(screen.getByRole('combobox', { name: /select moderator/i })).toBeInTheDocument();
+			});
+
+			// Change to different agent
+			const dropdown = screen.getByRole('combobox', { name: /select moderator/i });
+			fireEvent.change(dropdown, { target: { value: 'codex' } });
+
+			// Verify warning message appears
+			await waitFor(() => {
+				expect(screen.getByText(/changing the moderator agent/i)).toBeInTheDocument();
+			});
 		});
 	});
 });

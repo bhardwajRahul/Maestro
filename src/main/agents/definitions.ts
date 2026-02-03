@@ -200,11 +200,14 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
 		imageArgs: (imagePath: string) => ['-f', imagePath], // Image/file attachment: opencode run -f /path/to/image.png -- "prompt"
 		noPromptSeparator: true, // OpenCode doesn't need '--' before prompt - yargs handles positional args
 		// Default env vars: enable YOLO mode (allow all permissions including external_directory)
-		// Also disable the question tool - it waits for stdin input which hangs batch mode
+		// Disable the question tool via both methods:
+		// - "question": "deny" in permission block (per OpenCode GitHub issue workaround)
+		// - "question": false in tools block (original approach)
+		// The question tool waits for stdin input which hangs batch mode
 		// Users can override by setting customEnvVars in agent config
 		defaultEnvVars: {
 			OPENCODE_CONFIG_CONTENT:
-				'{"permission":{"*":"allow","external_directory":"allow"},"tools":{"question":false}}',
+				'{"permission":{"*":"allow","external_directory":"allow","question":"deny"},"tools":{"question":false}}',
 		},
 		// Agent-specific configuration options shown in UI
 		configOptions: [

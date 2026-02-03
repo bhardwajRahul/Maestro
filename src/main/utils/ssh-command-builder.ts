@@ -140,17 +140,24 @@ export function buildRemoteCommand(options: RemoteCommandOptions): string {
  * This approach completely bypasses shell escaping issues by:
  * 1. SSH connects and runs `/bin/bash` on the remote
  * 2. The script (with PATH setup, cd, env vars, command) is sent via stdin
- * 3. No shell parsing of command-line arguments occurs
+ * 3. The prompt (if any) is appended after the script, passed through to the exec'd command
  *
  * This is the preferred method for SSH remote execution as it:
  * - Handles any prompt content (special chars, newlines, quotes, etc.)
  * - Avoids command-line length limits
  * - Works regardless of the remote user's login shell (bash, zsh, fish, etc.)
  * - Eliminates the escaping nightmare of nested shell contexts
+ * - No heredoc or delimiter collision detection needed
+ *
+ * How stdin passthrough works:
+ * - Bash reads and executes the script lines
+ * - The `exec` command replaces bash with the target process
+ * - Any remaining stdin (the prompt) is inherited by the exec'd command
+ * - The prompt is NEVER parsed by any shell - it flows through as raw bytes
  *
  * @param config SSH remote configuration
  * @param remoteOptions Options for the remote command
- * @returns SSH command/args plus the script to send via stdin
+ * @returns SSH command/args plus the script+prompt to send via stdin
  *
  * @example
  * const result = await buildSshCommandWithStdin(config, {
@@ -162,7 +169,7 @@ export function buildRemoteCommand(options: RemoteCommandOptions): string {
  * });
  * // result.command = 'ssh'
  * // result.args = ['-o', 'BatchMode=yes', ..., 'user@host', '/bin/bash']
- * // result.stdinScript = '#!/bin/bash\nexport PATH=...\ncd /home/user/project\nOPENCODE_CONFIG_CONTENT=...\nexec opencode run --format json <<'MAESTRO_PROMPT_EOF'\nWrite hello world to a file\nMAESTRO_PROMPT_EOF\n'
+ * // result.stdinScript = 'export PATH=...\ncd /home/user/project\nexport OPENCODE_CONFIG_CONTENT=...\nexec opencode run --format json\nWrite hello world to a file'
  */
 export async function buildSshCommandWithStdin(
 	config: SshRemoteConfig,
@@ -232,30 +239,27 @@ export async function buildSshCommandWithStdin(
 	// For the script, we use simple quoting since we're not going through shell parsing layers
 	const cmdParts = [remoteOptions.command, ...remoteOptions.args.map((arg) => shellEscape(arg))];
 
-	// Add prompt as final argument if provided and not sending via stdin
+	// Add prompt as final argument if provided and not sending via stdin passthrough
 	const hasStdinInput = remoteOptions.stdinInput !== undefined;
 	if (remoteOptions.prompt && !hasStdinInput) {
 		cmdParts.push(shellEscape(remoteOptions.prompt));
 	}
 
 	// Use exec to replace the shell with the command (cleaner process tree)
-	if (hasStdinInput) {
-		// IMPORTANT: Prompts must be passed via stdin to avoid CLI length limits.
-		// Build a safe heredoc delimiter that won't collide with the prompt content.
-		const delimiterBase = 'MAESTRO_PROMPT_EOF';
-		let delimiter = delimiterBase;
-		let counter = 0;
-		while (remoteOptions.stdinInput?.includes(delimiter)) {
-			delimiter = `${delimiterBase}_${counter++}`;
-		}
-		scriptLines.push(`exec ${cmdParts.join(' ')} <<'${delimiter}'`);
-		scriptLines.push(remoteOptions.stdinInput ?? '');
-		scriptLines.push(delimiter);
-	} else {
-		scriptLines.push(`exec ${cmdParts.join(' ')}`);
-	}
+	// When stdinInput is provided, the prompt will be appended after the script
+	// and passed through to the exec'd command via stdin inheritance
+	scriptLines.push(`exec ${cmdParts.join(' ')}`);
 
-	const stdinScript = scriptLines.join('\n') + '\n';
+	// Build the final stdin content: script + optional prompt passthrough
+	// The script ends with exec, which replaces bash with the target command
+	// Any content after the script (the prompt) is read by the exec'd command from stdin
+	let stdinScript = scriptLines.join('\n') + '\n';
+
+	if (hasStdinInput && remoteOptions.stdinInput) {
+		// Append the prompt after the script - it will be passed through to the exec'd command
+		// No escaping needed - the prompt is never parsed by any shell
+		stdinScript += remoteOptions.stdinInput;
+	}
 
 	logger.info('SSH command built with stdin script', '[ssh-command-builder]', {
 		host: config.host,
@@ -264,7 +268,9 @@ export async function buildSshCommandWithStdin(
 		sshPath,
 		sshArgsCount: args.length,
 		scriptLineCount: scriptLines.length,
-		scriptLength: stdinScript.length,
+		stdinLength: stdinScript.length,
+		hasStdinInput,
+		stdinInputLength: remoteOptions.stdinInput?.length,
 		// Show first part of script for debugging (truncate if long)
 		scriptPreview: stdinScript.length > 500 ? stdinScript.substring(0, 500) + '...' : stdinScript,
 	});
