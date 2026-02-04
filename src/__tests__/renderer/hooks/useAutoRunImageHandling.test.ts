@@ -573,6 +573,7 @@ describe('useAutoRunImageHandling', () => {
 							yield textItem;
 						},
 					} as unknown as DataTransferItemList,
+					getData: () => 'some text', // Text content for whitespace trim check
 				},
 				preventDefault: vi.fn(),
 			} as unknown as React.ClipboardEvent;
