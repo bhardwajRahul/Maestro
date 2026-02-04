@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, X, Settings, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Check, X, Settings, ArrowLeft, AlertTriangle, Info, Wand2 } from 'lucide-react';
 import type { Theme, AgentConfig } from '../../../types';
 import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../../../shared/types';
 import { useWizard } from '../WizardContext';
@@ -1111,15 +1111,41 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 					)}
 				</div>
 
-				<p className="text-sm" style={{ color: theme.colors.textDim }}>
-					Select the provider that will power your agent.
-				</p>
+				{/* Tip about in-tab wizard */}
+				<div
+					className="flex items-start gap-2.5 px-4 py-3 rounded-lg max-w-lg text-xs"
+					style={{
+						backgroundColor: theme.colors.accent + '15',
+						border: `1px solid ${theme.colors.accent}30`,
+					}}
+				>
+					<Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: theme.colors.accent }} />
+					<span style={{ color: theme.colors.textDim }}>
+						This wizard captures keyboard input until complete. For a lighter touch, skip this
+						and use{' '}
+						<code
+							className="px-1 py-0.5 rounded text-[11px]"
+							style={{ backgroundColor: theme.colors.border }}
+						>
+							/wizard
+						</code>
+						{' '}or click the{' '}
+						<Wand2
+							className="inline w-3.5 h-3.5 align-text-bottom"
+							style={{ color: theme.colors.accent }}
+						/>
+						{' '}button in the Auto Run panel after creating an agent.
+					</span>
+				</div>
 			</div>
 
 			{/* Section 2: Agent Grid or Connection Error */}
 			{sshConnectionError ? (
 				/* SSH Connection Error State */
-				<div className="flex justify-center">
+				<div className="flex flex-col items-center gap-4">
+					<p className="text-sm" style={{ color: theme.colors.textDim }}>
+						Select the provider that will power your agent.
+					</p>
 					<div
 						className="flex flex-col items-center justify-center p-8 rounded-xl border-2 max-w-lg text-center"
 						style={{
@@ -1141,7 +1167,10 @@ export function AgentSelectionScreen({ theme }: AgentSelectionScreenProps): JSX.
 				</div>
 			) : (
 				/* Agent Grid */
-				<div className="flex justify-center">
+				<div className="flex flex-col items-center gap-4">
+					<p className="text-sm" style={{ color: theme.colors.textDim }}>
+						Select the provider that will power your agent.
+					</p>
 					<div className="grid grid-cols-3 gap-4 max-w-3xl">
 						{AGENT_TILES.map((tile, index) => {
 							const isDetected = isAgentAvailable(tile.id);
