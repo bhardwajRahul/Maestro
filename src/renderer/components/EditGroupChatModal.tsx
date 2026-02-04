@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Settings, ChevronDown, Check } from 'lucide-react';
+import { Settings, ChevronDown, Check } from 'lucide-react';
 import type { Theme, AgentConfig, ModeratorConfig, GroupChat } from '../types';
 import type { SshRemoteConfig, AgentSshRemoteConfig } from '../../shared/types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';

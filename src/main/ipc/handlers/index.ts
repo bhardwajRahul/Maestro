@@ -259,6 +259,7 @@ export function registerAllHandlers(deps: HandlerDependencies): void {
 	registerSymphonyHandlers({
 		app: deps.app,
 		getMainWindow: deps.getMainWindow,
+		sessionsStore: deps.sessionsStore,
 	});
 	// Register agent error handlers (error state management)
 	registerAgentErrorHandlers();

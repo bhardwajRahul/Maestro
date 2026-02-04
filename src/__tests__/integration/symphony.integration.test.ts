@@ -222,10 +222,17 @@ describe('Symphony Integration Tests', () => {
       },
     } as unknown as BrowserWindow;
 
+    // Setup mock sessions store (returns empty by default - no sessions)
+    const mockSessionsStore = {
+      get: vi.fn().mockReturnValue([]),
+      set: vi.fn(),
+    };
+
     // Setup dependencies
     mockDeps = {
       app: mockApp,
       getMainWindow: () => mockMainWindow,
+      sessionsStore: mockSessionsStore as any,
     };
 
     // Default fetch mock (successful responses)

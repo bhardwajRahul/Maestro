@@ -252,3 +252,28 @@ const isRemote = !!session.sshRemoteId;
 // CORRECT
 const isRemote = !!session.sshRemoteId || !!session.sessionSshRemoteConfig?.enabled;
 ```
+
+## 11. UI Bug Debugging Checklist
+
+When debugging visual issues (tooltips clipped, elements not visible, scroll behavior):
+
+1. **CSS First:** Check parent container properties before code logic:
+   - `overflow: hidden` on ancestors (clipping issues)
+   - `z-index` stacking context conflicts
+   - `position` mismatches (fixed/absolute/relative)
+
+2. **Scroll Issues:** Use `scrollIntoView({ block: 'nearest' })` not centering
+
+3. **Portal Escape:** For overlays/tooltips that get clipped, use `createPortal(el, document.body)` to escape stacking context
+
+4. **Fixed Positioning:** Elements with `position: fixed` inside transformed parents won't position relative to viewport—check ancestor transforms
+
+**Common fixes:**
+```typescript
+// Tooltip/overlay escaping parent overflow
+import { createPortal } from 'react-dom';
+{isOpen && createPortal(<Overlay />, document.body)}
+
+// Scroll element into view without centering
+element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+```

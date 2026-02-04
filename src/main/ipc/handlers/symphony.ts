@@ -11,10 +11,12 @@
  */
 
 import { ipcMain, App, BrowserWindow } from 'electron';
+import type Store from 'electron-store';
 import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../utils/logger';
 import { isWebContentsAvailable } from '../../utils/safe-send';
+import type { SessionsData, StoredSession } from '../../stores/types';
 import { createIpcHandler, CreateHandlerOptions } from '../../utils/ipcHandler';
 import { execFileNoThrow } from '../../utils/execFile';
 import { getExpandedEnv } from '../../agents/path-prober';
@@ -194,6 +196,7 @@ function validateContributionParams(params: {
 export interface SymphonyHandlerDependencies {
 	app: App;
 	getMainWindow: () => BrowserWindow | null;
+	sessionsStore: Store<SessionsData>;
 }
 
 // ============================================================================
@@ -865,6 +868,39 @@ function broadcastSymphonyUpdate(getMainWindow: () => BrowserWindow | null): voi
 	}
 }
 
+/**
+ * Filter out orphaned contributions whose sessions no longer exist.
+ * Returns only contributions that have a corresponding session in the sessions store.
+ */
+function filterOrphanedContributions(
+	contributions: ActiveContribution[],
+	sessionsStore: Store<SessionsData>
+): ActiveContribution[] {
+	const sessions = sessionsStore.get('sessions', []) as StoredSession[];
+	const sessionIds = new Set(sessions.map((s) => s.id));
+
+	const validContributions: ActiveContribution[] = [];
+	const orphanedIds: string[] = [];
+
+	for (const contribution of contributions) {
+		if (sessionIds.has(contribution.sessionId)) {
+			validContributions.push(contribution);
+		} else {
+			orphanedIds.push(contribution.id);
+		}
+	}
+
+	if (orphanedIds.length > 0) {
+		logger.info(
+			`Filtering ${orphanedIds.length} orphaned contribution(s) with missing sessions`,
+			LOG_CONTEXT,
+			{ orphanedIds }
+		);
+	}
+
+	return validContributions;
+}
+
 // ============================================================================
 // Handler Options Helper
 // ============================================================================
@@ -882,6 +918,7 @@ const handlerOpts = (operation: string, logSuccess = true): CreateHandlerOptions
 export function registerSymphonyHandlers({
 	app,
 	getMainWindow,
+	sessionsStore,
 }: SymphonyHandlerDependencies): void {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Registry Operations
@@ -1031,6 +1068,7 @@ export function registerSymphonyHandlers({
 
 	/**
 	 * Get current symphony state.
+	 * Filters out contributions whose sessions no longer exist.
 	 */
 	ipcMain.handle(
 		'symphony:getState',
@@ -1038,6 +1076,8 @@ export function registerSymphonyHandlers({
 			handlerOpts('getState', false),
 			async (): Promise<{ state: SymphonyState }> => {
 				const state = await readState(app);
+				// Filter out orphaned contributions whose sessions are gone
+				state.active = filterOrphanedContributions(state.active, sessionsStore);
 				return { state };
 			}
 		)
@@ -1045,6 +1085,7 @@ export function registerSymphonyHandlers({
 
 	/**
 	 * Get active contributions.
+	 * Filters out contributions whose sessions no longer exist.
 	 */
 	ipcMain.handle(
 		'symphony:getActive',
@@ -1052,7 +1093,8 @@ export function registerSymphonyHandlers({
 			handlerOpts('getActive', false),
 			async (): Promise<{ contributions: ActiveContribution[] }> => {
 				const state = await readState(app);
-				return { contributions: state.active };
+				const validContributions = filterOrphanedContributions(state.active, sessionsStore);
+				return { contributions: validContributions };
 			}
 		)
 	);

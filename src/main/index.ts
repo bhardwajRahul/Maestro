@@ -608,6 +608,7 @@ function setupIpcHandlers() {
 	registerSymphonyHandlers({
 		app,
 		getMainWindow: () => mainWindow,
+		sessionsStore,
 	});
 
 	// Register tab naming handlers for automatic tab naming

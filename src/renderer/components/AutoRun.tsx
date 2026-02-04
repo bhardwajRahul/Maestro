@@ -1983,7 +1983,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 								The selected folder doesn't contain any markdown (.md) files.
 							</p>
 							<p className="mb-6 max-w-xs text-xs" style={{ color: theme.colors.textDim }}>
-								Create a markdown file in the folder to get started, or select a different folder.
+								Create a markdown file in the folder to get started, or change to a different folder.
 							</p>
 							<div className="flex gap-3">
 								<button
@@ -2007,7 +2007,7 @@ const AutoRunInner = forwardRef<AutoRunHandle, AutoRunProps>(function AutoRunInn
 									}}
 								>
 									<FolderOpen className="w-4 h-4" />
-									Select Folder
+									Change Folder
 								</button>
 							</div>
 						</div>

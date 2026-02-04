@@ -64,6 +64,12 @@ Use these terms consistently in code, comments, and documentation:
 
 ---
 
+## Code Style
+
+This codebase uses **tabs for indentation**, not spaces. Always match existing file indentation when editing.
+
+---
+
 ## Project Overview
 
 Maestro is an Electron desktop app for managing multiple AI coding assistants simultaneously with a keyboard-first interface.
@@ -259,6 +265,20 @@ See [[CLAUDE-PATTERNS.md]] for detailed SSH patterns.
 ---
 
 ## Debugging
+
+### Root Cause Verification (Before Implementing Fixes)
+
+Initial hypotheses are often wrong. Before implementing any fix:
+
+1. **IPC issues:** Verify handler is registered in `src/main/index.ts` before modifying caller code
+2. **UI rendering bugs:** Check CSS properties (overflow, z-index, position) on element AND parent containers before changing component logic
+3. **State not updating:** Trace the data flow from source to consumer; check if the setter is being called vs if re-render is suppressed
+4. **Feature not working:** Verify the code path is actually being executed (add temporary `console.log`, check output, then remove)
+
+**Historical patterns that wasted time:**
+- Tab naming bug: Modal coordination was "fixed" when the actual issue was an unregistered IPC handler
+- Tooltip clipping: Attempted `overflow: visible` on element when parent container had `overflow: hidden`
+- Session validation: Fixed renderer calls when handler wasn't wired in main process
 
 ### Focus Not Working
 1. Add `tabIndex={0}` or `tabIndex={-1}`

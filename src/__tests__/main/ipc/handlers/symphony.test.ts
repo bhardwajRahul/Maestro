@@ -64,6 +64,7 @@ describe('Symphony IPC handlers', () => {
 	let mockApp: App;
 	let mockMainWindow: BrowserWindow;
 	let mockDeps: SymphonyHandlerDependencies;
+	let mockSessionsStore: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -88,10 +89,17 @@ describe('Symphony IPC handlers', () => {
 			},
 		} as unknown as BrowserWindow;
 
+		// Setup mock sessions store (exposed for individual tests to modify)
+		mockSessionsStore = {
+			get: vi.fn().mockReturnValue([]),
+			set: vi.fn(),
+		};
+
 		// Setup dependencies
 		mockDeps = {
 			app: mockApp,
 			getMainWindow: () => mockMainWindow,
+			sessionsStore: mockSessionsStore as any,
 		};
 
 		// Default mock for fs operations
@@ -1209,7 +1217,7 @@ describe('Symphony IPC handlers', () => {
 			expect(result.state.stats.repositoriesContributed).toEqual([]);
 		});
 
-		it('should return persisted state from disk', async () => {
+		it('should return persisted state from disk (with valid sessions)', async () => {
 			const persistedState = {
 				active: [
 					{
@@ -1267,15 +1275,47 @@ describe('Symphony IPC handlers', () => {
 				},
 			};
 			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(persistedState));
+			// Mock the session to exist so the active contribution is included
+			mockSessionsStore.get.mockReturnValue([{ id: 'session-123', name: 'Test Session' }]);
 
 			const handler = handlers.get('symphony:getState');
 			const result = await handler!({} as any);
 
-			expect(result.state).toEqual(persistedState);
 			expect(result.state.active).toHaveLength(1);
 			expect(result.state.active[0].id).toBe('contrib_123');
 			expect(result.state.history).toHaveLength(1);
 			expect(result.state.stats.totalContributions).toBe(1);
+		});
+
+		it('should filter out active contributions with missing sessions', async () => {
+			const persistedState = {
+				active: [
+					{
+						id: 'contrib_with_session',
+						repoSlug: 'owner/repo',
+						sessionId: 'session-exists',
+						status: 'running',
+					},
+					{
+						id: 'contrib_orphaned',
+						repoSlug: 'owner/repo2',
+						sessionId: 'session-gone',
+						status: 'running',
+					},
+				],
+				history: [],
+				stats: { totalContributions: 0 },
+			};
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(persistedState));
+			// Only one session exists
+			mockSessionsStore.get.mockReturnValue([{ id: 'session-exists', name: 'Existing' }]);
+
+			const handler = handlers.get('symphony:getState');
+			const result = await handler!({} as any);
+
+			// Only the contribution with an existing session should be returned
+			expect(result.state.active).toHaveLength(1);
+			expect(result.state.active[0].id).toBe('contrib_with_session');
 		});
 
 		it('should handle file read errors gracefully', async () => {
@@ -1302,7 +1342,7 @@ describe('Symphony IPC handlers', () => {
 			expect(result.contributions).toEqual([]);
 		});
 
-		it('should return all active contributions from state', async () => {
+		it('should return active contributions that have matching sessions', async () => {
 			const stateWithActive = {
 				active: [
 					{
@@ -1310,18 +1350,25 @@ describe('Symphony IPC handlers', () => {
 						repoSlug: 'owner/repo1',
 						issueNumber: 1,
 						status: 'running',
+						sessionId: 'session_1',
 					},
 					{
 						id: 'contrib_2',
 						repoSlug: 'owner/repo2',
 						issueNumber: 2,
 						status: 'paused',
+						sessionId: 'session_2',
 					},
 				],
 				history: [],
 				stats: {},
 			};
 			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(stateWithActive));
+			// Mock sessions store to return matching sessions
+			mockSessionsStore.get.mockReturnValue([
+				{ id: 'session_1', name: 'Session 1' },
+				{ id: 'session_2', name: 'Session 2' },
+			]);
 
 			const handler = handlers.get('symphony:getActive');
 			const result = await handler!({} as any);
@@ -1329,6 +1376,39 @@ describe('Symphony IPC handlers', () => {
 			expect(result.contributions).toHaveLength(2);
 			expect(result.contributions[0].id).toBe('contrib_1');
 			expect(result.contributions[1].id).toBe('contrib_2');
+		});
+
+		it('should filter out contributions whose sessions no longer exist', async () => {
+			const stateWithActive = {
+				active: [
+					{
+						id: 'contrib_1',
+						repoSlug: 'owner/repo1',
+						issueNumber: 1,
+						status: 'running',
+						sessionId: 'session_exists',
+					},
+					{
+						id: 'contrib_2',
+						repoSlug: 'owner/repo2',
+						issueNumber: 2,
+						status: 'paused',
+						sessionId: 'session_gone',
+					},
+				],
+				history: [],
+				stats: {},
+			};
+			vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(stateWithActive));
+			// Only return session_exists, session_gone is missing
+			mockSessionsStore.get.mockReturnValue([{ id: 'session_exists', name: 'Existing Session' }]);
+
+			const handler = handlers.get('symphony:getActive');
+			const result = await handler!({} as any);
+
+			// Only contrib_1 should be returned since contrib_2's session is gone
+			expect(result.contributions).toHaveLength(1);
+			expect(result.contributions[0].id).toBe('contrib_1');
 		});
 	});
 
