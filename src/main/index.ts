@@ -50,6 +50,7 @@ import {
 	registerNotificationsHandlers,
 	registerSymphonyHandlers,
 	registerTabNamingHandlers,
+	registerAgentErrorHandlers,
 	setupLoggerEventForwarding,
 	cleanupAllGroomingSessions,
 	getActiveGroomingSessionCount,
@@ -597,6 +598,7 @@ function setupIpcHandlers() {
 	// Claude Code sessions - extracted to src/main/ipc/handlers/claude.ts
 
 	// Agent Error Handling API - extracted to src/main/ipc/handlers/agent-error.ts
+	registerAgentErrorHandlers();
 
 	// Register notification handlers (extracted to handlers/notifications.ts)
 	registerNotificationsHandlers();
