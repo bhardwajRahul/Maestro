@@ -20,8 +20,8 @@ export interface UseAutoRunHandlersDeps {
 	setAutoRunDocumentList: React.Dispatch<React.SetStateAction<string[]>>;
 	setAutoRunDocumentTree: React.Dispatch<React.SetStateAction<AutoRunTreeNode[]>>;
 	setAutoRunIsLoadingDocuments: React.Dispatch<React.SetStateAction<boolean>>;
-	setAutoRunSetupModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
-	setBatchRunnerModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+	setAutoRunSetupModalOpen: (open: boolean) => void;
+	setBatchRunnerModalOpen: (open: boolean) => void;
 	setActiveRightTab: React.Dispatch<React.SetStateAction<'files' | 'history' | 'autorun'>>;
 	setRightPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
 	setActiveFocus: React.Dispatch<React.SetStateAction<'sidebar' | 'main' | 'right'>>;

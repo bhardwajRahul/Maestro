@@ -7,8 +7,7 @@ import MaestroConsole from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LayerStackProvider } from './contexts/LayerStackContext';
 import { ToastProvider } from './contexts/ToastContext';
-import { ModalProvider } from './contexts/ModalContext';
-import { UILayoutProvider } from './contexts/UILayoutContext';
+// ModalProvider removed - modal state now managed by modalStore (Zustand)
 import { WizardProvider } from './components/Wizard';
 import { logger } from './utils/logger';
 import './index.css';
@@ -90,13 +89,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 		<ErrorBoundary>
 			<ToastProvider>
 				<LayerStackProvider>
-					<ModalProvider>
-						<UILayoutProvider>
-							<WizardProvider>
-								<MaestroConsole />
-							</WizardProvider>
-						</UILayoutProvider>
-					</ModalProvider>
+					<WizardProvider>
+						<MaestroConsole />
+					</WizardProvider>
 				</LayerStackProvider>
 			</ToastProvider>
 		</ErrorBoundary>

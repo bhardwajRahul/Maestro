@@ -87,7 +87,7 @@ interface InputProviderProps {
  * Only completion states (which change infrequently) are managed here.
  *
  * Usage:
- * Wrap App with this provider (after ModalProvider and UILayoutProvider):
+ * Wrap App with this provider:
  * <InputProvider>
  *   <App />
  * </InputProvider>

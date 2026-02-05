@@ -119,7 +119,7 @@ import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './ho
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
 import { useToast } from './contexts/ToastContext';
-import { useModalContext } from './contexts/ModalContext';
+import { useModalActions, getModalActions } from './stores/modalStore';
 import { GitStatusProvider } from './contexts/GitStatusContext';
 import { InputProvider, useInputContext } from './contexts/InputContext';
 import { GroupChatProvider, useGroupChat } from './contexts/GroupChatContext';
@@ -201,7 +201,7 @@ import {
 	isBatchSession,
 } from './utils/sessionIdParser';
 import { isLikelyConcatenatedToolNames, getSlashCommandDescription } from './constants/app';
-import { useUILayout } from './contexts/UILayoutContext';
+import { useUIStore } from './stores/uiStore';
 
 // Note: DEFAULT_IMAGE_ONLY_PROMPT is now imported from useInputProcessing hook
 
@@ -242,7 +242,7 @@ function MaestroConsoleInner() {
 		setOsNotifications,
 	} = useToast();
 
-	// --- MODAL STATE (centralized modal state management) ---
+	// --- MODAL STATE (from modalStore, replaces ModalContext) ---
 	const {
 		// Settings Modal
 		settingsModalOpen,
@@ -274,8 +274,10 @@ function MaestroConsoleInner() {
 		lightboxImages,
 		setLightboxImages,
 		setLightboxSource,
-		lightboxIsGroupChatRef,
-		lightboxAllowDeleteRef,
+		lightboxIsGroupChat,
+		lightboxAllowDelete,
+		setLightboxIsGroupChat,
+		setLightboxAllowDelete,
 		// About Modal
 		aboutModalOpen,
 		setAboutModalOpen,
@@ -425,7 +427,7 @@ function MaestroConsoleInner() {
 		// Symphony Modal
 		symphonyModalOpen,
 		setSymphonyModalOpen,
-	} = useModalContext();
+	} = useModalActions();
 
 	// --- MOBILE LANDSCAPE MODE (reading-only view) ---
 	const isMobileLandscape = useMobileLandscape();
@@ -609,9 +611,50 @@ function MaestroConsoleInner() {
 	// OpenSpec commands (loaded from bundled prompts)
 	const [openspecCommands, setOpenspecCommands] = useState<OpenSpecCommand[]>([]);
 
+	// --- UI LAYOUT STATE (from uiStore, replaces UILayoutContext) ---
+	// State: individual selectors for granular re-render control
+	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
+	const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+	const activeRightTab = useUIStore((s) => s.activeRightTab);
+	const activeFocus = useUIStore((s) => s.activeFocus);
+	const bookmarksCollapsed = useUIStore((s) => s.bookmarksCollapsed);
+	const groupChatsExpanded = useUIStore((s) => s.groupChatsExpanded);
+	const showUnreadOnly = useUIStore((s) => s.showUnreadOnly);
+	const selectedFileIndex = useUIStore((s) => s.selectedFileIndex);
+	const fileTreeFilter = useUIStore((s) => s.fileTreeFilter);
+	const fileTreeFilterOpen = useUIStore((s) => s.fileTreeFilterOpen);
+	const editingGroupId = useUIStore((s) => s.editingGroupId);
+	const editingSessionId = useUIStore((s) => s.editingSessionId);
+	const draggingSessionId = useUIStore((s) => s.draggingSessionId);
+	const outputSearchOpen = useUIStore((s) => s.outputSearchOpen);
+	const outputSearchQuery = useUIStore((s) => s.outputSearchQuery);
+	const flashNotification = useUIStore((s) => s.flashNotification);
+	const successFlashNotification = useUIStore((s) => s.successFlashNotification);
+	const selectedSidebarIndex = useUIStore((s) => s.selectedSidebarIndex);
+
+	// Actions: stable closures created at store init, no hook overhead needed
+	const {
+		setLeftSidebarOpen,
+		setRightPanelOpen,
+		setActiveRightTab,
+		setActiveFocus,
+		setBookmarksCollapsed,
+		setGroupChatsExpanded,
+		setShowUnreadOnly,
+		setSelectedFileIndex,
+		setFileTreeFilter,
+		setFileTreeFilterOpen,
+		setEditingGroupId,
+		setEditingSessionId,
+		setDraggingSessionId,
+		setOutputSearchOpen,
+		setOutputSearchQuery,
+		setFlashNotification,
+		setSuccessFlashNotification,
+		setSelectedSidebarIndex,
+	} = useUIStore.getState();
+
 	// --- GROUP CHAT STATE (Phase 4: extracted to GroupChatContext) ---
-	// Note: groupChatsExpanded remains here as it's a UI layout concern (already in UILayoutContext)
-	const { groupChatsExpanded, setGroupChatsExpanded } = useUILayout();
 
 	// Use GroupChatContext for all group chat states
 	const {
@@ -755,27 +798,12 @@ function MaestroConsoleInner() {
 		setCommandHistorySelectedIndex,
 	} = useInputContext();
 
-	// UI State
-	const { leftSidebarOpen, setLeftSidebarOpen } = useUILayout();
-	const { rightPanelOpen, setRightPanelOpen } = useUILayout();
-	const { activeRightTab, setActiveRightTab } = useUILayout();
-	const { activeFocus, setActiveFocus } = useUILayout();
-	const { bookmarksCollapsed, setBookmarksCollapsed } = useUILayout();
-	const { showUnreadOnly, setShowUnreadOnly } = useUILayout();
-	// Track the active tab ID before entering unread filter mode, so we can restore it when exiting
-	const { preFilterActiveTabIdRef } = useUILayout();
-	// Track the active file tab ID before switching to terminal mode, so we can restore it when returning to AI mode
-	const { preTerminalFileTabIdRef } = useUILayout();
-
 	// File Explorer State
 	const [filePreviewLoading, setFilePreviewLoading] = useState<{
 		name: string;
 		path: string;
 	} | null>(null);
-	const { selectedFileIndex, setSelectedFileIndex } = useUILayout();
 	const [flatFileList, setFlatFileList] = useState<any[]>([]);
-	const { fileTreeFilter, setFileTreeFilter } = useUILayout();
-	const { fileTreeFilterOpen, setFileTreeFilterOpen } = useUILayout();
 	const [isGraphViewOpen, setIsGraphViewOpen] = useState(false);
 	// File path to focus on when opening the Document Graph (relative to session.cwd)
 	const [graphFocusFilePath, setGraphFocusFilePath] = useState<string | undefined>(undefined);
@@ -801,17 +829,13 @@ function MaestroConsoleInner() {
 	const [deleteAgentModalOpen, setDeleteAgentModalOpen] = useState(false);
 	const [deleteAgentSession, setDeleteAgentSession] = useState<Session | null>(null);
 
-	// Note: Git Diff State, Tour Overlay State, and Git Log Viewer State are now from ModalContext
+	// Note: Git Diff State, Tour Overlay State, and Git Log Viewer State are from modalStore
 
-	// Renaming State
-	const { editingGroupId, setEditingGroupId } = useUILayout();
-	const { editingSessionId, setEditingSessionId } = useUILayout();
+	// Note: Renaming state (editingGroupId/editingSessionId) and drag state (draggingSessionId)
+	// are now destructured from useUIStore() above
 
-	// Drag and Drop State (for session list - image drag handled by useAppHandlers)
-	const { draggingSessionId, setDraggingSessionId } = useUILayout();
-
-	// Note: All modal states are now managed by ModalContext
-	// See useModalContext() destructuring above for modal states
+	// Note: All modal states are now managed by modalStore (Zustand)
+	// See useModalActions() destructuring above for modal states
 
 	// Stable callbacks for memoized modals (prevents re-renders from callback reference changes)
 	// NOTE: These must be declared AFTER the state they reference
@@ -904,21 +928,12 @@ function MaestroConsoleInner() {
 	}, []);
 
 	// Note: All modal states (confirmation, rename, queue browser, batch runner, etc.)
-	// are now managed by ModalContext - see useModalContext() destructuring above
+	// are now managed by modalStore - see useModalActions() destructuring above
 
 	// NOTE: showSessionJumpNumbers state is now provided by useMainKeyboardHandler hook
 
-	// Output Search State
-	const { outputSearchOpen, setOutputSearchOpen } = useUILayout();
-	const { outputSearchQuery, setOutputSearchQuery } = useUILayout();
-
-	// Note: Command History, Tab Completion, and @ Mention states are now in InputContext
-	// See useInputContext() destructuring above for these states
-
-	// Flash notification state (for inline notifications like "Commands disabled while agent is working")
-	const { flashNotification, setFlashNotification } = useUILayout();
-	// Success flash notification state (for success messages like "Refresh complete")
-	const { successFlashNotification, setSuccessFlashNotification } = useUILayout();
+	// Note: Output search, flash notifications, command history, tab completion, and @ mention
+	// states are now destructured from useUIStore() and useInputContext() above
 
 	// Note: Images are now stored per-tab in AITab.stagedImages
 	// See stagedImages/setStagedImages computed from active tab below
@@ -3535,7 +3550,7 @@ function MaestroConsoleInner() {
 	}, []);
 
 	// Keyboard navigation state
-	const { selectedSidebarIndex, setSelectedSidebarIndex } = useUILayout();
+	// Note: selectedSidebarIndex/setSelectedSidebarIndex are destructured from useUIStore() above
 	// Note: activeSession is now provided by SessionContext
 	// Note: activeTab is memoized later at line ~3795 - use that for all tab operations
 
@@ -8265,17 +8280,22 @@ You are taking over this conversation. Based on the context above, provide a bri
 	// source: 'staged' allows deletion, 'history' is read-only
 	const handleSetLightboxImage = useCallback(
 		(image: string | null, contextImages?: string[], source: 'staged' | 'history' = 'history') => {
-			// Capture state SYNCHRONOUSLY in refs before any state updates
-			// This ensures values are available immediately when the component re-renders
-			// React batches state updates, so refs are more reliable for immediate access
-			lightboxIsGroupChatRef.current = activeGroupChatId !== null;
-			lightboxAllowDeleteRef.current = source === 'staged';
+			// Set lightbox context data before opening
+			setLightboxIsGroupChat(activeGroupChatId !== null);
+			setLightboxAllowDelete(source === 'staged');
 
 			setLightboxImage(image);
 			setLightboxImages(contextImages || []);
 			setLightboxSource(source);
 		},
-		[activeGroupChatId]
+		[
+			activeGroupChatId,
+			setLightboxIsGroupChat,
+			setLightboxAllowDelete,
+			setLightboxImage,
+			setLightboxImages,
+			setLightboxSource,
+		]
 	);
 
 	// --- GROUP CHAT HANDLERS ---
@@ -9708,7 +9728,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 				if (newMode === 'terminal') {
 					// Switching to terminal mode: save current file tab (if any) and clear it
-					preTerminalFileTabIdRef.current = s.activeFileTabId;
+					useUIStore.getState().setPreTerminalFileTabId(s.activeFileTabId);
 					return {
 						...s,
 						inputMode: newMode,
@@ -9716,10 +9736,10 @@ You are taking over this conversation. Based on the context above, provide a bri
 					};
 				} else {
 					// Switching to AI mode: restore previous file tab if it still exists
-					const savedFileTabId = preTerminalFileTabIdRef.current;
+					const savedFileTabId = useUIStore.getState().preTerminalFileTabId;
 					const fileTabStillExists =
 						savedFileTabId && s.filePreviewTabs?.some((t) => t.id === savedFileTabId);
-					preTerminalFileTabIdRef.current = null;
+					useUIStore.getState().setPreTerminalFileTabId(null);
 					return {
 						...s,
 						inputMode: newMode,
@@ -9737,25 +9757,24 @@ You are taking over this conversation. Based on the context above, provide a bri
 	const toggleUnreadFilter = useCallback(() => {
 		if (!showUnreadOnly) {
 			// Entering filter mode: save current active tab
-			preFilterActiveTabIdRef.current = activeSession?.activeTabId || null;
+			useUIStore.getState().setPreFilterActiveTabId(activeSession?.activeTabId || null);
 		} else {
 			// Exiting filter mode: restore previous active tab if it still exists
-			if (preFilterActiveTabIdRef.current && activeSession) {
-				const tabStillExists = activeSession.aiTabs.some(
-					(t) => t.id === preFilterActiveTabIdRef.current
-				);
+			const preFilterActiveTabId = useUIStore.getState().preFilterActiveTabId;
+			if (preFilterActiveTabId && activeSession) {
+				const tabStillExists = activeSession.aiTabs.some((t) => t.id === preFilterActiveTabId);
 				if (tabStillExists) {
 					setSessions((prev) =>
 						prev.map((s) => {
 							if (s.id !== activeSession.id) return s;
-							return { ...s, activeTabId: preFilterActiveTabIdRef.current! };
+							return { ...s, activeTabId: preFilterActiveTabId };
 						})
 					);
 				}
-				preFilterActiveTabIdRef.current = null;
+				useUIStore.getState().setPreFilterActiveTabId(null);
 			}
 		}
-		setShowUnreadOnly((prev) => !prev);
+		setShowUnreadOnly((prev: boolean) => !prev);
 	}, [showUnreadOnly, activeSession]);
 
 	// Toggle star on the current active tab
@@ -12008,16 +12027,25 @@ You are taking over this conversation. Based on the context above, provide a bri
 		setLightboxImage(null);
 		setLightboxImages([]);
 		setLightboxSource('history');
-		lightboxIsGroupChatRef.current = false;
-		lightboxAllowDeleteRef.current = false;
+		setLightboxIsGroupChat(false);
+		setLightboxAllowDelete(false);
 		// Return focus to input after closing carousel
 		setTimeout(() => inputRef.current?.focus(), 0);
-	}, []);
-	const handleNavigateLightbox = useCallback((img: string) => setLightboxImage(img), []);
+	}, [
+		setLightboxImage,
+		setLightboxImages,
+		setLightboxSource,
+		setLightboxIsGroupChat,
+		setLightboxAllowDelete,
+	]);
+	const handleNavigateLightbox = useCallback(
+		(img: string) => setLightboxImage(img),
+		[setLightboxImage]
+	);
 	const handleDeleteLightboxImage = useCallback(
 		(img: string) => {
-			// Use ref for group chat check - refs are set synchronously before React batches state updates
-			if (lightboxIsGroupChatRef.current) {
+			// Use lightboxIsGroupChat from store to check which staged images to update
+			if (lightboxIsGroupChat) {
 				setGroupChatStagedImages((prev) => prev.filter((i) => i !== img));
 			} else {
 				setStagedImages((prev) => prev.filter((i) => i !== img));
@@ -12026,7 +12054,13 @@ You are taking over this conversation. Based on the context above, provide a bri
 			// (lightboxImages is a snapshot taken when the lightbox opened, so it gets stale on deletion)
 			setLightboxImages(lightboxImages.filter((i) => i !== img));
 		},
-		[setStagedImages, setLightboxImages, lightboxImages]
+		[
+			setStagedImages,
+			setLightboxImages,
+			lightboxImages,
+			lightboxIsGroupChat,
+			setGroupChatStagedImages,
+		]
 	);
 	const handleCloseAutoRunSetup = useCallback(() => setAutoRunSetupModalOpen(false), []);
 	const handleCloseBatchRunner = useCallback(() => setBatchRunnerModalOpen(false), []);
@@ -13590,9 +13624,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 					stagedImages={stagedImages}
 					onCloseLightbox={handleCloseLightbox}
 					onNavigateLightbox={handleNavigateLightbox}
-					onDeleteLightboxImage={
-						lightboxAllowDeleteRef.current ? handleDeleteLightboxImage : undefined
-					}
+					onDeleteLightboxImage={lightboxAllowDelete ? handleDeleteLightboxImage : undefined}
 					gitDiffPreview={gitDiffPreview}
 					gitViewerCwd={gitViewerCwd}
 					onCloseGitDiff={handleCloseGitDiff}

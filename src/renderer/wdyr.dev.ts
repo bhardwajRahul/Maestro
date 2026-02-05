@@ -15,38 +15,35 @@
  * - Whether the re-render was necessary
  */
 import React from 'react';
+import whyDidYouRender from '@welldone-software/why-did-you-render';
 
-// Use dynamic import for ESM compatibility with Vite
-import('@welldone-software/why-did-you-render')
-	.then((whyDidYouRenderModule) => {
-		const whyDidYouRender = whyDidYouRenderModule.default;
+// Must run synchronously before any component renders so that React hooks
+// are patched consistently from the very first render. Async loading (dynamic
+// import) causes hooks to be patched mid-session, changing the hook count
+// between renders and crashing libraries that use internal React hooks
+// (e.g. Zustand v5's useCallback inside useStore).
+whyDidYouRender(React, {
+	// Track all pure components (React.memo, PureComponent)
+	// Set to true to see ALL unnecessary re-renders
+	trackAllPureComponents: true,
 
-		whyDidYouRender(React, {
-			// Track all pure components (React.memo, PureComponent)
-			// Set to true to see ALL unnecessary re-renders
-			trackAllPureComponents: true,
+	// Track React hooks like useMemo, useCallback
+	trackHooks: true,
 
-			// Track React hooks like useMemo, useCallback
-			trackHooks: true,
+	// Log to console (can also use custom notifier)
+	logOnDifferentValues: true,
 
-			// Log to console (can also use custom notifier)
-			logOnDifferentValues: true,
+	// Collapse logs by default (expand to see details)
+	collapseGroups: true,
 
-			// Collapse logs by default (expand to see details)
-			collapseGroups: true,
+	// Include component stack traces
+	include: [
+		// Add specific components to always track, e.g.:
+		// /^RightPanel/,
+		// /^AutoRun/,
+		// /^FilePreview/,
+	],
 
-			// Include component stack traces
-			include: [
-				// Add specific components to always track, e.g.:
-				// /^RightPanel/,
-				// /^AutoRun/,
-				// /^FilePreview/,
-			],
-
-			// Exclude noisy components you don't care about
-			exclude: [/^BrowserRouter/, /^Link/, /^Route/],
-		});
-	})
-	.catch((err) => {
-		console.warn('[wdyr] Failed to load why-did-you-render:', err);
-	});
+	// Exclude noisy components you don't care about
+	exclude: [/^BrowserRouter/, /^Link/, /^Route/],
+});
