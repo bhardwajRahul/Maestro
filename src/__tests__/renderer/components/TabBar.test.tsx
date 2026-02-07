@@ -960,12 +960,13 @@ describe('TabBar', () => {
 			expect(screen.getByText('Rename Tab')).toBeInTheDocument();
 		});
 
-		it('does not show overlay for tabs without agentSessionId', () => {
+		it('does not show overlay for single tab without agentSessionId or logs', () => {
 			const tabs = [
 				createTab({
 					id: 'tab-1',
 					name: '',
 					agentSessionId: undefined,
+					logs: [],
 				}),
 			];
 
@@ -2347,6 +2348,7 @@ describe('TabBar', () => {
 					id: 'tab-1',
 					name: 'Tab 1',
 					agentSessionId: 'abc123-def456',
+					logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
 				}),
 			];
 
@@ -2405,12 +2407,13 @@ describe('TabBar', () => {
 			expect(screen.queryByText('Context: Send to Agent')).not.toBeInTheDocument();
 		});
 
-		it('does not show Send to Agent button for tabs without agentSessionId', async () => {
+		it('does not show Send to Agent button for tabs without logs', async () => {
 			const tabs = [
 				createTab({
 					id: 'tab-1',
 					name: '',
 					agentSessionId: undefined,
+					logs: [],
 				}),
 			];
 
@@ -2433,8 +2436,45 @@ describe('TabBar', () => {
 				vi.advanceTimersByTime(500);
 			});
 
-			// Overlay shouldn't be shown for tabs without agentSessionId
+			// No overlay or Send to Agent for tabs without logs
 			expect(screen.queryByText('Context: Send to Agent')).not.toBeInTheDocument();
+		});
+
+		it('shows Send to Agent button for tabs with logs but no agentSessionId', async () => {
+			const tabs = [
+				createTab({
+					id: 'tab-1',
+					name: 'Compacted Tab',
+					agentSessionId: undefined,
+					logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
+				}),
+				createTab({
+					id: 'tab-2',
+					name: 'Tab 2',
+					agentSessionId: 'abc123',
+				}),
+			];
+
+			render(
+				<TabBar
+					tabs={tabs}
+					activeTabId="tab-1"
+					theme={mockTheme}
+					onTabSelect={mockOnTabSelect}
+					onTabClose={mockOnTabClose}
+					onNewTab={mockOnNewTab}
+					onSendToAgent={mockOnSendToAgent}
+				/>
+			);
+
+			const tab = screen.getByText('Compacted Tab').closest('[data-tab-id]')!;
+			fireEvent.mouseEnter(tab);
+
+			act(() => {
+				vi.advanceTimersByTime(450);
+			});
+
+			expect(screen.getByText('Context: Send to Agent')).toBeInTheDocument();
 		});
 
 		it('calls onSendToAgent with tab id when Send to Agent button is clicked', async () => {
@@ -2443,6 +2483,7 @@ describe('TabBar', () => {
 					id: 'tab-1',
 					name: 'Tab 1',
 					agentSessionId: 'abc123-def456',
+					logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
 				}),
 			];
 
@@ -2478,6 +2519,7 @@ describe('TabBar', () => {
 					id: 'tab-1',
 					name: 'Tab 1',
 					agentSessionId: 'abc123-def456',
+					logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
 				}),
 			];
 
@@ -2514,6 +2556,7 @@ describe('TabBar', () => {
 					id: 'tab-1',
 					name: 'Tab 1',
 					agentSessionId: 'abc123-def456',
+					logs: [{ id: '1', timestamp: Date.now(), source: 'user', text: 'Hello' }],
 				}),
 			];
 

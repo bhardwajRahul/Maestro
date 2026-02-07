@@ -249,9 +249,9 @@ const Tab = memo(function Tab({
 	const handleMouseEnter = () => {
 		setIsHovered(true);
 		// Only show overlay if there's something meaningful to show:
-		// - Tabs with sessions: always show (for session actions)
-		// - Tabs without sessions: show if there are move actions available
-		if (!tab.agentSessionId && isFirstTab && isLastTab) return;
+		// - Tabs with sessions or logs: always show (for session/context actions)
+		// - Tabs without sessions or logs: show if there are move actions available
+		if (!tab.agentSessionId && !(tab.logs?.length) && isFirstTab && isLastTab) return;
 
 		// Open overlay after delay
 		hoverTimeoutRef.current = setTimeout(() => {
@@ -775,7 +775,7 @@ const Tab = memo(function Tab({
 								)}
 
 								{/* Context: Merge Into */}
-								{tab.agentSessionId && onMergeWith && (
+								{(tab.logs?.length ?? 0) >= 1 && onMergeWith && (
 									<button
 										onClick={handleMergeWithClick}
 										className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
@@ -787,7 +787,7 @@ const Tab = memo(function Tab({
 								)}
 
 								{/* Context: Send to Agent */}
-								{tab.agentSessionId && onSendToAgent && (
+								{(tab.logs?.length ?? 0) >= 1 && onSendToAgent && (
 									<button
 										onClick={handleSendToAgentClick}
 										className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-white/10 transition-colors"
@@ -2012,10 +2012,8 @@ function TabBarInner({
 										onRename={handleRenameRequest}
 										onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
 										onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
-										onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
-										onSendToAgent={
-											onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined
-										}
+										onMergeWith={onMergeWith ? handleTabMergeWith : undefined}
+										onSendToAgent={onSendToAgent ? handleTabSendToAgent : undefined}
 										onSummarizeAndContinue={
 											onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5
 												? handleTabSummarizeAndContinue
@@ -2132,10 +2130,8 @@ function TabBarInner({
 									onRename={handleRenameRequest}
 									onStar={onTabStar && tab.agentSessionId ? handleTabStar : undefined}
 									onMarkUnread={onTabMarkUnread ? handleTabMarkUnread : undefined}
-									onMergeWith={onMergeWith && tab.agentSessionId ? handleTabMergeWith : undefined}
-									onSendToAgent={
-										onSendToAgent && tab.agentSessionId ? handleTabSendToAgent : undefined
-									}
+									onMergeWith={onMergeWith ? handleTabMergeWith : undefined}
+									onSendToAgent={onSendToAgent ? handleTabSendToAgent : undefined}
 									onSummarizeAndContinue={
 										onSummarizeAndContinue && (tab.logs?.length ?? 0) >= 5
 											? handleTabSummarizeAndContinue
