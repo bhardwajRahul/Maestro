@@ -71,6 +71,7 @@ export function WindowsWarningModal({
 			headerIcon={<AlertTriangle className="w-4 h-4" style={{ color: theme.colors.warning }} />}
 			priority={MODAL_PRIORITIES.WINDOWS_WARNING}
 			onClose={handleClose}
+			closeOnBackdropClick={true}
 			width={520}
 			initialFocusRef={continueButtonRef}
 			footer={

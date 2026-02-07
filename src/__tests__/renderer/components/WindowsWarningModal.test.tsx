@@ -133,6 +133,16 @@ describe('WindowsWarningModal', () => {
 			expect(onClose).toHaveBeenCalledTimes(1);
 		});
 
+		it('calls onClose when backdrop is clicked', () => {
+			const onClose = vi.fn();
+			renderWithLayerStack(<WindowsWarningModal {...defaultProps} onClose={onClose} />);
+
+			// Click the backdrop (the dialog overlay itself)
+			const dialog = screen.getByRole('dialog');
+			fireEvent.click(dialog);
+			expect(onClose).toHaveBeenCalledTimes(1);
+		});
+
 		it('calls onSetUseBetaChannel with true when Enable Beta Updates is clicked', () => {
 			const onSetUseBetaChannel = vi.fn();
 			renderWithLayerStack(
