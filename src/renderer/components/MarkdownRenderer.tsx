@@ -305,7 +305,22 @@ export const MarkdownRenderer = memo(
 										if (isMaestroFile && filePath && onFileClick) {
 											onFileClick(filePath);
 										} else if (href) {
-											window.maestro.shell.openExternal(href);
+											// Only open http/https/file URLs directly; convert git SSH URLs first
+											if (/^https?:\/\//.test(href) || /^file:\/\//.test(href)) {
+												window.maestro.shell.openExternal(href);
+											} else {
+												// Attempt to convert non-standard URLs (e.g. git@host:user/repo)
+												try {
+													const converted = href.startsWith('git@')
+														? href.replace(/^git@/, 'https://').replace(/:([^/])/, '/$1').replace(/\.git$/, '')
+														: href;
+													if (/^https?:\/\//.test(converted)) {
+														window.maestro.shell.openExternal(converted);
+													}
+												} catch {
+													// Silently ignore unparseable URLs
+												}
+											}
 										}
 									}}
 									style={{

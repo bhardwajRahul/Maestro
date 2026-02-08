@@ -14099,7 +14099,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 								});
 							}
 							// Copy the gist URL to clipboard
-							navigator.clipboard.writeText(gistUrl);
+							navigator.clipboard.writeText(gistUrl).catch(() => {});
 							// Show a toast notification
 							addToast({
 								type: 'success',

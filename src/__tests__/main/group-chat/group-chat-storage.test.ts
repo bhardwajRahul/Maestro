@@ -289,6 +289,24 @@ describe('group-chat-storage', () => {
 			// Should not throw
 			await expect(deleteGroupChat('non-existent-id')).resolves.not.toThrow();
 		});
+
+		it('deletes chat directory with image files inside', async () => {
+			const chat = await createGroupChat('Chat With Images', 'claude-code');
+
+			// Write some files into the images directory to simulate real usage
+			await fs.writeFile(path.join(chat.imagesDir, 'test.png'), 'fake-image-data');
+			await fs.writeFile(path.join(chat.imagesDir, 'test2.jpg'), 'fake-image-data-2');
+
+			// deleteGroupChat should handle non-empty directories
+			await expect(deleteGroupChat(chat.id)).resolves.not.toThrow();
+
+			// Verify directory is gone
+			const exists = await fs
+				.access(path.dirname(chat.logPath))
+				.then(() => true)
+				.catch(() => false);
+			expect(exists).toBe(false);
+		});
 	});
 
 	// ===========================================================================

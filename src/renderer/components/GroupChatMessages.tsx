@@ -112,8 +112,12 @@ export const GroupChatMessages = forwardRef<GroupChatMessagesHandle, GroupChatMe
 			[]
 		);
 
-		const copyToClipboard = useCallback((text: string) => {
-			navigator.clipboard.writeText(text);
+		const copyToClipboard = useCallback(async (text: string) => {
+			try {
+				await navigator.clipboard.writeText(text);
+			} catch {
+				// Ignore clipboard errors (e.g. document not focused)
+			}
 		}, []);
 
 		const toggleExpanded = useCallback((msgKey: string) => {

@@ -276,12 +276,27 @@ export async function listGroupChats(): Promise<GroupChat[]> {
 
 /**
  * Deletes a group chat and all its data.
+ * Retries on EPERM/EBUSY errors (common on Windows with OneDrive/antivirus file locks).
  *
  * @param id - The group chat ID to delete
  */
 export async function deleteGroupChat(id: string): Promise<void> {
 	const chatDir = getGroupChatDir(id);
-	await fs.rm(chatDir, { recursive: true, force: true });
+	const maxRetries = 3;
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		try {
+			await fs.rm(chatDir, { recursive: true, force: true });
+			return;
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException).code;
+			if ((code === 'EPERM' || code === 'EBUSY') && attempt < maxRetries) {
+				// Wait before retrying - file locks from OneDrive/antivirus may release
+				await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+				continue;
+			}
+			throw err;
+		}
+	}
 }
 
 /**
