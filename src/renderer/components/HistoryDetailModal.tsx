@@ -27,6 +27,7 @@ import { generateTerminalProseStyles } from '../utils/markdownConfig';
 import { calculateContextTokens } from '../utils/contextUsage';
 import { getContextColor } from '../utils/theme';
 import { DoubleCheck } from './History';
+import { getContextColor } from '../utils/theme';
 
 interface HistoryDetailModalProps {
 	theme: Theme;
