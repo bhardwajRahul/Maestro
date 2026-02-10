@@ -64,12 +64,22 @@ export interface SynopsisOptions {
 }
 
 /**
+ * Stats about the synopsis generation
+ */
+export interface SynopsisStats {
+	agentCount: number;     // Maestro agents with history in the lookback window
+	entryCount: number;     // Total history entries in the lookback window
+	durationMs: number;     // Time taken for AI generation
+}
+
+/**
  * Result of synopsis generation
  */
 export interface SynopsisResult {
 	success: boolean;
 	synopsis: string;
 	generatedAt?: number; // Unix ms timestamp of when the synopsis was generated
+	stats?: SynopsisStats;
 	error?: string;
 }
 

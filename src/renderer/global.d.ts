@@ -2654,6 +2654,11 @@ interface MaestroAPI {
 			success: boolean;
 			synopsis: string;
 			generatedAt?: number;
+			stats?: {
+				agentCount: number;
+				entryCount: number;
+				durationMs: number;
+			};
 			error?: string;
 		}>;
 	};

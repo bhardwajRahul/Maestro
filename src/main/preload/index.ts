@@ -457,4 +457,5 @@ export type {
 	UnifiedHistoryEntry,
 	SynopsisOptions,
 	SynopsisResult,
+	SynopsisStats,
 } from './directorNotes';

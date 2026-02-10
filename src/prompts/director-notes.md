@@ -63,3 +63,6 @@ Based on incomplete work and patterns observed, suggest next steps grouped by pr
 - Include specific details when available (file names, feature names)
 - If there's limited data, acknowledge it and provide what insights you can
 - If a history file cannot be read, note it and continue with available files
+- Do NOT include preamble text before the synopsis — start directly with the first section heading
+- Do NOT echo raw timestamps, cutoff values, or implementation details in the output
+- The lookback period and stats are displayed separately in the UI — do not repeat them in the synopsis

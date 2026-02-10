@@ -77,10 +77,17 @@ export interface SynopsisOptions {
 	customEnvVars?: Record<string, string>;
 }
 
+export interface SynopsisStats {
+	agentCount: number;     // Maestro agents with history in the lookback window
+	entryCount: number;     // Total history entries in the lookback window
+	durationMs: number;     // Time taken for AI generation
+}
+
 export interface SynopsisResult {
 	success: boolean;
 	synopsis: string;
 	generatedAt?: number; // Unix ms timestamp of when the synopsis was generated
+	stats?: SynopsisStats;
 	error?: string;
 }
 
@@ -187,11 +194,26 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 					historyFilePath: string;
 				}> = [];
 
+				// Collect stats: agents with entries and total entries within lookback
+				let agentCount = 0;
+				let entryCount = 0;
+
 				for (const sessionId of sessionIds) {
 					const filePath = historyManager.getHistoryFilePath(sessionId);
 					if (!filePath) continue;
 					const displayName = sessionNameMap.get(sessionId) || sessionId;
 					sessionManifest.push({ sessionId, displayName, historyFilePath: filePath });
+
+					// Count entries in lookback window and track which agents contributed
+					const entries = historyManager.getEntries(sessionId);
+					let agentHasEntries = false;
+					for (const entry of entries) {
+						if (entry.timestamp >= cutoffTime) {
+							entryCount++;
+							agentHasEntries = true;
+						}
+					}
+					if (agentHasEntries) agentCount++;
 				}
 
 				if (sessionManifest.length === 0) {
@@ -199,6 +221,7 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 						success: true,
 						synopsis: `# Director's Notes\n\n*Generated for the past ${options.lookbackDays} days*\n\nNo history files found.`,
 						generatedAt: Date.now(),
+						stats: { agentCount: 0, entryCount: 0, durationMs: 0 },
 					};
 				}
 
@@ -207,6 +230,13 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 					.map(s => `- Session "${s.displayName}" (ID: ${s.sessionId}): ${s.historyFilePath}`)
 					.join('\n');
 
+				const cutoffDate = new Date(cutoffTime).toLocaleDateString('en-US', {
+					month: 'short', day: 'numeric', year: 'numeric',
+				});
+				const nowDate = new Date().toLocaleDateString('en-US', {
+					month: 'short', day: 'numeric', year: 'numeric',
+				});
+
 				const prompt = [
 					directorNotesPrompt,
 					'',
@@ -214,9 +244,9 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 					'',
 					'## Session History Files',
 					'',
-					`Lookback period: ${options.lookbackDays} days`,
+					`Lookback period: ${options.lookbackDays} days (${cutoffDate} – ${nowDate})`,
 					`Timestamp cutoff: ${cutoffTime} (only consider entries with timestamp >= this value)`,
-					`Current time: ${Date.now()} (Unix ms)`,
+					`${agentCount} agents had ${entryCount} qualifying entries.`,
 					'',
 					manifestLines,
 				].join('\n');
@@ -261,6 +291,11 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 						success: true,
 						synopsis,
 						generatedAt: Date.now(),
+						stats: {
+							agentCount,
+							entryCount,
+							durationMs: result.durationMs,
+						},
 					};
 				} catch (err) {
 					const errorMsg = err instanceof Error ? err.message : String(err);

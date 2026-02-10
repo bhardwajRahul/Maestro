@@ -241,6 +241,78 @@ describe('AIOverviewTab', () => {
 		expect(screen.getByTestId('save-markdown-modal')).toBeInTheDocument();
 	});
 
+	it('displays stats bar when synopsis includes stats', async () => {
+		mockGenerateSynopsis.mockResolvedValue({
+			success: true,
+			synopsis: '# Synopsis',
+			stats: { agentCount: 3, entryCount: 42, durationMs: 95000 },
+		});
+
+		render(<AIOverviewTab theme={mockTheme} />);
+
+		await waitFor(() => {
+			expect(screen.getByTestId('markdown-renderer')).toBeInTheDocument();
+		});
+
+		// Verify stats are displayed
+		expect(screen.getByText('42')).toBeInTheDocument();
+		expect(screen.getByText('history entries')).toBeInTheDocument();
+		expect(screen.getByText('3')).toBeInTheDocument();
+		expect(screen.getByText('agents')).toBeInTheDocument();
+		expect(screen.getByText('1m 35s')).toBeInTheDocument();
+	});
+
+	it('uses singular labels when counts are 1', async () => {
+		mockGenerateSynopsis.mockResolvedValue({
+			success: true,
+			synopsis: '# Synopsis',
+			stats: { agentCount: 1, entryCount: 1, durationMs: 5000 },
+		});
+
+		render(<AIOverviewTab theme={mockTheme} />);
+
+		await waitFor(() => {
+			expect(screen.getByTestId('markdown-renderer')).toBeInTheDocument();
+		});
+
+		expect(screen.getByText('history entry')).toBeInTheDocument();
+		expect(screen.getByText('agent')).toBeInTheDocument();
+	});
+
+	it('does not update state after unmount but caches result', async () => {
+		let resolveGeneration!: (value: any) => void;
+		mockGenerateSynopsis.mockReturnValue(new Promise((resolve) => {
+			resolveGeneration = resolve;
+		}));
+
+		const onSynopsisReady = vi.fn();
+		const { unmount } = render(<AIOverviewTab theme={mockTheme} onSynopsisReady={onSynopsisReady} />);
+
+		// Wait for generation to start
+		await waitFor(() => {
+			expect(mockGenerateSynopsis).toHaveBeenCalledTimes(1);
+		});
+
+		// Unmount (simulates closing the modal)
+		unmount();
+
+		// Resolve the generation after unmount — should not throw or update state
+		await act(async () => {
+			resolveGeneration({
+				success: true,
+				synopsis: '# Cached Result',
+				generatedAt: 1234567890,
+			});
+		});
+
+		// onSynopsisReady should NOT have been called (component unmounted)
+		expect(onSynopsisReady).not.toHaveBeenCalled();
+
+		// But the module-level cache should still be populated for next open
+		const { hasCachedSynopsis } = await import('../../../../renderer/components/DirectorNotes/AIOverviewTab');
+		expect(hasCachedSynopsis(7)).toBe(true);
+	});
+
 	it('closes save modal when close button is clicked', async () => {
 		mockGenerateSynopsis.mockResolvedValue({
 			success: true,

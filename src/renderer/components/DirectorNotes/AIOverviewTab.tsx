@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Save, Loader2, Clock, Copy, Check } from 'lucide-react';
+import { RefreshCw, Save, Loader2, Clock, Copy, Check, Bot, History, Timer } from 'lucide-react';
 import type { Theme } from '../../types';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { SaveMarkdownModal } from '../SaveMarkdownModal';
 import { useSettings } from '../../hooks';
 import { generateTerminalProseStyles } from '../../utils/markdownConfig';
+
+type SynopsisStats = NonNullable<Awaited<ReturnType<typeof window.maestro.directorNotes.generateSynopsis>>['stats']>;
 
 interface AIOverviewTabProps {
 	theme: Theme;
@@ -12,7 +14,7 @@ interface AIOverviewTabProps {
 }
 
 // Module-level cache so synopsis survives tab switches (unmount/remount)
-let cachedSynopsis: { content: string; generatedAt: number; lookbackDays: number } | null = null;
+let cachedSynopsis: { content: string; generatedAt: number; lookbackDays: number; stats?: SynopsisStats } | null = null;
 
 // Exported for testing only – allows resetting the module-level cache between test runs
 export function _resetCacheForTesting() { cachedSynopsis = null; }
@@ -32,10 +34,20 @@ export function AIOverviewTab({ theme, onSynopsisReady }: AIOverviewTabProps) {
 	const [showSaveModal, setShowSaveModal] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [stats, setStats] = useState<SynopsisStats | null>(cachedSynopsis?.stats ?? null);
 	const mountedRef = useRef(true);
 
 	// Generate prose styles for markdown rendering
 	const proseStyles = generateTerminalProseStyles(theme, '.director-notes-content');
+
+	// Format generation duration for display
+	const formatDurationMs = (ms: number): string => {
+		const totalSeconds = Math.floor(ms / 1000);
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		if (minutes > 0) return `${minutes}m ${seconds}s`;
+		return `${seconds}s`;
+	};
 
 	// Format the generation timestamp
 	const formatGeneratedAt = (timestamp: number): string => {
@@ -73,20 +85,32 @@ export function AIOverviewTab({ theme, onSynopsisReady }: AIOverviewTabProps) {
 				customEnvVars: directorNotesSettings.customEnvVars,
 			});
 
+			// Always cache regardless of mount state so result is available next open
+			if (result.success) {
+				const ts = result.generatedAt ?? Date.now();
+				cachedSynopsis = { content: result.synopsis, generatedAt: ts, lookbackDays, stats: result.stats };
+			}
+
+			// Only update component state if still mounted
+			if (!mountedRef.current) return;
+
 			if (result.success) {
 				const ts = result.generatedAt ?? Date.now();
 				setSynopsis(result.synopsis);
 				setGeneratedAt(ts);
-				cachedSynopsis = { content: result.synopsis, generatedAt: ts, lookbackDays };
+				setStats(result.stats ?? null);
 				setProgress({ phase: 'complete', message: 'Synopsis complete', percent: 100 });
 				onSynopsisReady?.();
 			} else {
 				setError(result.error || 'Failed to generate synopsis');
 			}
 		} catch (err) {
+			if (!mountedRef.current) return;
 			setError(err instanceof Error ? err.message : 'Failed to generate synopsis');
 		} finally {
-			setIsGenerating(false);
+			if (mountedRef.current) {
+				setIsGenerating(false);
+			}
 		}
 	}, [lookbackDays, directorNotesSettings, onSynopsisReady]);
 
@@ -96,6 +120,7 @@ export function AIOverviewTab({ theme, onSynopsisReady }: AIOverviewTabProps) {
 		if (cachedSynopsis && cachedSynopsis.lookbackDays === lookbackDays) {
 			setSynopsis(cachedSynopsis.content);
 			setGeneratedAt(cachedSynopsis.generatedAt);
+			setStats(cachedSynopsis.stats ?? null);
 			onSynopsisReady?.();
 		} else {
 			generateSynopsis();
@@ -212,6 +237,41 @@ export function AIOverviewTab({ theme, onSynopsisReady }: AIOverviewTabProps) {
 							{progress.message}
 						</span>
 					</div>
+				</div>
+			)}
+
+			{/* Stats bar */}
+			{stats && !isGenerating && synopsis && (
+				<div
+					className="shrink-0 flex items-center gap-6 px-6 py-2.5 border-b"
+					style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgActivity }}
+				>
+					<div className="flex items-center gap-1.5" style={{ color: theme.colors.textDim }}>
+						<History className="w-3.5 h-3.5" />
+						<span className="text-xs">
+							<span style={{ color: theme.colors.textMain, fontWeight: 600 }}>{stats.entryCount}</span>
+							{' '}{stats.entryCount === 1 ? 'history entry' : 'history entries'}
+						</span>
+					</div>
+					<div className="flex items-center gap-1.5" style={{ color: theme.colors.textDim }}>
+						<Bot className="w-3.5 h-3.5" />
+						<span className="text-xs">
+							across{' '}
+							<span style={{ color: theme.colors.textMain, fontWeight: 600 }}>{stats.agentCount}</span>
+							{' '}{stats.agentCount === 1 ? 'agent' : 'agents'}
+						</span>
+					</div>
+					{stats.durationMs > 0 && (
+						<div className="flex items-center gap-1.5" style={{ color: theme.colors.textDim }}>
+							<Timer className="w-3.5 h-3.5" />
+							<span className="text-xs">
+								generated in{' '}
+								<span style={{ color: theme.colors.textMain, fontWeight: 600 }}>
+									{formatDurationMs(stats.durationMs)}
+								</span>
+							</span>
+						</div>
+					)}
 				</div>
 			)}
 
