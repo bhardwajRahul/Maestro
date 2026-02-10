@@ -131,6 +131,7 @@ import { GroupChatProvider, useGroupChat } from './contexts/GroupChatContext';
 import { AutoRunProvider, useAutoRun } from './contexts/AutoRunContext';
 // All session state is read directly from useSessionStore in MaestroConsoleInner.
 import { useSessionStore, selectActiveSession } from './stores/sessionStore';
+import { useAgentStore } from './stores/agentStore';
 import { InlineWizardProvider, useInlineWizardContext } from './contexts/InlineWizardContext';
 import { ToastContainer } from './components/Toast';
 
@@ -4100,112 +4101,42 @@ function MaestroConsoleInner() {
 		setAgentErrorModalSessionId(null);
 	}, []);
 
-	// Handler to clear agent error and resume operations
+	// Error recovery handlers — delegate state mutation + IPC to agentStore,
+	// keep UI side-effects (focus input, close modal) here in App.tsx.
 	const handleClearAgentError = useCallback((sessionId: string, tabId?: string) => {
-		setSessions((prev) =>
-			prev.map((s) => {
-				if (s.id !== sessionId) return s;
-				const targetTabId = tabId ?? s.agentErrorTabId;
-				const updatedAiTabs = targetTabId
-					? s.aiTabs.map((tab) =>
-							tab.id === targetTabId ? { ...tab, agentError: undefined } : tab
-						)
-					: s.aiTabs;
-				return {
-					...s,
-					agentError: undefined,
-					agentErrorTabId: undefined,
-					agentErrorPaused: false,
-					state: 'idle' as SessionState,
-					aiTabs: updatedAiTabs,
-				};
-			})
-		);
+		useAgentStore.getState().clearAgentError(sessionId, tabId);
 		setAgentErrorModalSessionId(null);
-		// Notify main process to clear error state
-		window.maestro.agentError.clearError(sessionId).catch((err) => {
-			console.error('Failed to clear agent error:', err);
-		});
 	}, []);
 
-	// Handler to start a new session (recovery action)
 	const handleStartNewSessionAfterError = useCallback(
 		(sessionId: string) => {
-			const session = sessions.find((s) => s.id === sessionId);
-			if (!session) return;
-
-			// Clear the error state
-			handleClearAgentError(sessionId);
-
-			// Create a new tab in the session to start fresh
-			setSessions((prev) =>
-				prev.map((s) => {
-					if (s.id !== sessionId) return s;
-					const result = createTab(s, {
-						saveToHistory: defaultSaveToHistory,
-						showThinking: defaultShowThinking,
-					});
-					if (!result) return s;
-					return result.session;
-				})
-			);
-
-			// Focus the input after creating new tab
+			useAgentStore.getState().startNewSessionAfterError(sessionId, {
+				saveToHistory: defaultSaveToHistory,
+				showThinking: defaultShowThinking,
+			});
+			setAgentErrorModalSessionId(null);
 			setTimeout(() => inputRef.current?.focus(), 0);
 		},
-		[sessions, handleClearAgentError, defaultSaveToHistory, defaultShowThinking]
+		[defaultSaveToHistory, defaultShowThinking]
 	);
 
-	// Handler to retry after error (recovery action)
-	const handleRetryAfterError = useCallback(
-		(sessionId: string) => {
-			// Clear the error state and let user retry manually
-			handleClearAgentError(sessionId);
+	const handleRetryAfterError = useCallback((sessionId: string) => {
+		useAgentStore.getState().retryAfterError(sessionId);
+		setAgentErrorModalSessionId(null);
+		setTimeout(() => inputRef.current?.focus(), 0);
+	}, []);
 
-			// Focus the input for retry
-			setTimeout(() => inputRef.current?.focus(), 0);
-		},
-		[handleClearAgentError]
-	);
+	const handleRestartAgentAfterError = useCallback(async (sessionId: string) => {
+		await useAgentStore.getState().restartAgentAfterError(sessionId);
+		setAgentErrorModalSessionId(null);
+		setTimeout(() => inputRef.current?.focus(), 0);
+	}, []);
 
-	// Handler to restart the agent (recovery action for crashes)
-	const handleRestartAgentAfterError = useCallback(
-		async (sessionId: string) => {
-			const session = sessions.find((s) => s.id === sessionId);
-			if (!session) return;
-
-			// Clear the error state
-			handleClearAgentError(sessionId);
-
-			// Kill any existing processes and respawn
-			try {
-				await window.maestro.process.kill(`${sessionId}-ai`);
-			} catch {
-				// Process may not exist
-			}
-
-			// The agent will be respawned when user sends next message
-			// Focus the input
-			setTimeout(() => inputRef.current?.focus(), 0);
-		},
-		[sessions, handleClearAgentError]
-	);
-
-	const handleAuthenticateAfterError = useCallback(
-		(sessionId: string) => {
-			const session = sessions.find((s) => s.id === sessionId);
-			if (!session) return;
-
-			handleClearAgentError(sessionId);
-			setActiveSessionId(sessionId);
-			setSessions((prev) =>
-				prev.map((s) => (s.id === sessionId ? { ...s, inputMode: 'terminal' } : s))
-			);
-
-			setTimeout(() => inputRef.current?.focus(), 0);
-		},
-		[sessions, handleClearAgentError, setActiveSessionId, setSessions]
-	);
+	const handleAuthenticateAfterError = useCallback((sessionId: string) => {
+		useAgentStore.getState().authenticateAfterError(sessionId);
+		setAgentErrorModalSessionId(null);
+		setTimeout(() => inputRef.current?.focus(), 0);
+	}, []);
 
 	// Use the agent error recovery hook to get recovery actions
 	const { recoveryActions } = useAgentErrorRecovery({
