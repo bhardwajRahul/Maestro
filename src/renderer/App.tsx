@@ -163,6 +163,7 @@ import type {
 	BatchRunConfig,
 	AgentError,
 	BatchRunState,
+	Group,
 	GroupChatMessage,
 	SpecKitCommand,
 	OpenSpecCommand,
