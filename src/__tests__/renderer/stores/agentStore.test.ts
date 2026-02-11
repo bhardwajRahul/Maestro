@@ -14,8 +14,9 @@ import {
 	getAgentState,
 	getAgentActions,
 } from '../../../renderer/stores/agentStore';
+import type { ProcessQueuedItemDeps } from '../../../renderer/stores/agentStore';
 import { useSessionStore } from '../../../renderer/stores/sessionStore';
-import type { Session, AgentConfig } from '../../../renderer/types';
+import type { Session, AgentConfig, QueuedItem } from '../../../renderer/types';
 
 // ============================================================================
 // Helpers
@@ -87,6 +88,7 @@ const mockSpawn = vi.fn().mockResolvedValue({ pid: 123, success: true });
 const mockKill = vi.fn().mockResolvedValue(true);
 const mockInterrupt = vi.fn().mockResolvedValue(true);
 const mockDetect = vi.fn().mockResolvedValue([]);
+const mockGetAgent = vi.fn().mockResolvedValue(null);
 const mockClearError = vi.fn().mockResolvedValue(undefined);
 
 (window as any).maestro = {
@@ -97,11 +99,31 @@ const mockClearError = vi.fn().mockResolvedValue(undefined);
 	},
 	agents: {
 		detect: mockDetect,
+		get: mockGetAgent,
 	},
 	agentError: {
 		clearError: mockClearError,
 	},
 };
+
+// Mock gitService
+vi.mock('../../../renderer/services/git', () => ({
+	gitService: {
+		getStatus: vi.fn().mockResolvedValue({ branch: 'main', files: [] }),
+	},
+}));
+
+// Mock prompts
+vi.mock('../../../prompts', () => ({
+	maestroSystemPrompt: 'Mock system prompt for {{CWD}}',
+	autorunSynopsisPrompt: '',
+	imageOnlyDefaultPrompt: 'Describe this image',
+}));
+
+// Mock substituteTemplateVariables — pass through the template as-is for simplicity
+vi.mock('../../../renderer/utils/templateVariables', () => ({
+	substituteTemplateVariables: vi.fn((template: string) => template),
+}));
 
 function resetStores() {
 	useAgentStore.setState({
@@ -903,11 +925,12 @@ describe('agentStore', () => {
 			expect(getAgentState().agentsDetected).toBe(true);
 		});
 
-		it('getAgentActions returns all 9 action functions', () => {
+		it('getAgentActions returns all 10 action functions', () => {
 			const actions = getAgentActions();
 
 			expect(typeof actions.refreshAgents).toBe('function');
 			expect(typeof actions.getAgentConfig).toBe('function');
+			expect(typeof actions.processQueuedItem).toBe('function');
 			expect(typeof actions.clearAgentError).toBe('function');
 			expect(typeof actions.startNewSessionAfterError).toBe('function');
 			expect(typeof actions.retryAfterError).toBe('function');
@@ -916,8 +939,8 @@ describe('agentStore', () => {
 			expect(typeof actions.killAgent).toBe('function');
 			expect(typeof actions.interruptAgent).toBe('function');
 
-			// Verify exactly 9 actions (no extras, no missing)
-			expect(Object.keys(actions)).toHaveLength(9);
+			// Verify exactly 10 actions (no extras, no missing)
+			expect(Object.keys(actions)).toHaveLength(10);
 		});
 
 		it('getAgentActions clearAgentError works end-to-end', () => {
@@ -988,9 +1011,10 @@ describe('agentStore', () => {
 
 			const after = useAgentStore.getState();
 
-			// All 9 actions must be referentially stable
+			// All 10 actions must be referentially stable
 			expect(before.refreshAgents).toBe(after.refreshAgents);
 			expect(before.getAgentConfig).toBe(after.getAgentConfig);
+			expect(before.processQueuedItem).toBe(after.processQueuedItem);
 			expect(before.clearAgentError).toBe(after.clearAgentError);
 			expect(before.startNewSessionAfterError).toBe(after.startNewSessionAfterError);
 			expect(before.retryAfterError).toBe(after.retryAfterError);
@@ -1180,6 +1204,494 @@ describe('agentStore', () => {
 			await useAgentStore.getState().interruptAgent('session-abc-123');
 
 			expect(mockInterrupt).toHaveBeenCalledWith('session-abc-123');
+		});
+	});
+
+	describe('processQueuedItem', () => {
+		const mockAgent: AgentConfig = {
+			id: 'claude-code',
+			name: 'Claude Code',
+			available: true,
+			command: 'claude',
+			args: ['--json'],
+		} as AgentConfig;
+
+		const defaultDeps: ProcessQueuedItemDeps = {
+			conductorProfile: 'Test conductor profile',
+			customAICommands: [],
+			speckitCommands: [],
+			openspecCommands: [],
+		};
+
+		function createQueuedItem(overrides: Partial<QueuedItem> = {}): QueuedItem {
+			return {
+				id: 'item-1',
+				timestamp: Date.now(),
+				tabId: 'default-tab',
+				type: 'message',
+				text: 'Hello agent',
+				...overrides,
+			};
+		}
+
+		beforeEach(() => {
+			mockGetAgent.mockResolvedValue(mockAgent);
+		});
+
+		it('spawns agent with queued message text', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'existing-conv-id',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Build the feature' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			expect(mockSpawn).toHaveBeenCalledTimes(1);
+			expect(mockSpawn).toHaveBeenCalledWith(
+				expect.objectContaining({
+					sessionId: 'session-1-ai-tab-1',
+					toolType: 'claude-code',
+					prompt: 'Build the feature',
+					cwd: '/test',
+					agentSessionId: 'existing-conv-id',
+				})
+			);
+		});
+
+		it('prepends system prompt for new sessions (no agentSessionId)', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: null, // NEW session — no conversation ID
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Hello' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			// System prompt should be prepended for new sessions
+			const spawnCall = mockSpawn.mock.calls[0][0];
+			expect(spawnCall.prompt).toContain('Mock system prompt');
+			expect(spawnCall.prompt).toContain('Hello');
+			expect(spawnCall.prompt).toContain('# User Request');
+		});
+
+		it('does NOT prepend system prompt for existing sessions', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'existing-conv', // Existing conversation
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Follow up question' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			const spawnCall = mockSpawn.mock.calls[0][0];
+			expect(spawnCall.prompt).toBe('Follow up question');
+			expect(spawnCall.prompt).not.toContain('Mock system prompt');
+		});
+
+		it('filters YOLO flags when read-only mode is active', async () => {
+			const agentWithYolo = {
+				...mockAgent,
+				args: ['--json', '--dangerously-skip-permissions', '--other-flag'],
+			};
+			mockGetAgent.mockResolvedValueOnce(agentWithYolo);
+
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+						readOnlyMode: true,
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Read only query' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			const spawnCall = mockSpawn.mock.calls[0][0];
+			expect(spawnCall.args).toContain('--json');
+			expect(spawnCall.args).toContain('--other-flag');
+			expect(spawnCall.args).not.toContain('--dangerously-skip-permissions');
+			expect(spawnCall.readOnlyMode).toBe(true);
+		});
+
+		it('processes slash command and spawns agent', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const deps: ProcessQueuedItemDeps = {
+				...defaultDeps,
+				customAICommands: [
+					{
+						id: 'cmd-1',
+						command: '/commit',
+						description: 'Commit changes',
+						prompt: 'Please commit all changes with a descriptive message',
+					},
+				],
+			};
+
+			const item = createQueuedItem({
+				tabId: 'tab-1',
+				type: 'command',
+				command: '/commit',
+				text: undefined,
+			});
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, deps);
+
+			expect(mockSpawn).toHaveBeenCalledTimes(1);
+			expect(mockSpawn).toHaveBeenCalledWith(
+				expect.objectContaining({
+					prompt: expect.stringContaining('commit all changes'),
+				})
+			);
+
+			// Should add user log entry
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.aiTabs[0].logs).toHaveLength(1);
+			expect(updated.aiTabs[0].logs[0].source).toBe('user');
+			expect(updated.aiTabs[0].logs[0].aiCommand?.command).toBe('/commit');
+		});
+
+		it('substitutes $ARGUMENTS in command prompt', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const deps: ProcessQueuedItemDeps = {
+				...defaultDeps,
+				speckitCommands: [
+					{
+						id: 'sk-1',
+						command: '/speckit.plan',
+						description: 'Plan feature',
+						prompt: 'Create a plan for: $ARGUMENTS',
+						isCustom: false,
+						isModified: false,
+					},
+				],
+			};
+
+			const item = createQueuedItem({
+				tabId: 'tab-1',
+				type: 'command',
+				command: '/speckit.plan',
+				commandArgs: 'user authentication flow',
+				text: undefined,
+			});
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, deps);
+
+			const spawnCall = mockSpawn.mock.calls[0][0];
+			expect(spawnCall.prompt).toContain('Create a plan for: user authentication flow');
+		});
+
+		it('adds error log and resets to idle for unknown command', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				state: 'busy',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: null,
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'busy',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({
+				tabId: 'tab-1',
+				type: 'command',
+				command: '/nonexistent',
+				text: undefined,
+			});
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			// Should NOT have spawned
+			expect(mockSpawn).not.toHaveBeenCalled();
+
+			// Should have added error log to active tab
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.state).toBe('idle');
+			expect(updated.busySource).toBeUndefined();
+			expect(updated.aiTabs[0].logs).toHaveLength(1);
+			expect(updated.aiTabs[0].logs[0].source).toBe('system');
+			expect(updated.aiTabs[0].logs[0].text).toContain('Unknown command: /nonexistent');
+		});
+
+		it('handles spawn error gracefully', async () => {
+			mockSpawn.mockRejectedValueOnce(new Error('Spawn failed'));
+			const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+			const session = createMockSession({
+				id: 'session-1',
+				state: 'busy',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: null,
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'busy',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Will fail' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			// Should have reset to idle
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.state).toBe('idle');
+			expect(updated.busySource).toBeUndefined();
+
+			consoleSpy.mockRestore();
+		});
+
+		it('does nothing for nonexistent session', async () => {
+			const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+			const item = createQueuedItem({ text: 'Hello' });
+
+			await useAgentStore.getState().processQueuedItem('nonexistent', item, defaultDeps);
+
+			expect(mockSpawn).not.toHaveBeenCalled();
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining('[processQueuedItem] Session not found'),
+				'nonexistent'
+			);
+
+			consoleSpy.mockRestore();
+		});
+
+		it('passes session custom config to spawn', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				toolType: 'claude-code',
+				customPath: '/custom/claude',
+				customArgs: ['--custom-flag'],
+				customEnvVars: { MY_VAR: 'value' },
+				customModel: 'claude-opus',
+				customContextWindow: 200000,
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({ tabId: 'tab-1', text: 'Hello' });
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			expect(mockSpawn).toHaveBeenCalledWith(
+				expect.objectContaining({
+					sessionCustomPath: '/custom/claude',
+					sessionCustomArgs: ['--custom-flag'],
+					sessionCustomEnvVars: { MY_VAR: 'value' },
+					sessionCustomModel: 'claude-opus',
+					sessionCustomContextWindow: 200000,
+				})
+			);
+		});
+
+		it('tracks pendingAICommandForSynopsis for command items', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const deps: ProcessQueuedItemDeps = {
+				...defaultDeps,
+				customAICommands: [
+					{
+						id: 'cmd-1',
+						command: '/review',
+						description: 'Code review',
+						prompt: 'Review the code changes',
+					},
+				],
+			};
+
+			const item = createQueuedItem({
+				tabId: 'tab-1',
+				type: 'command',
+				command: '/review',
+				text: undefined,
+			});
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, deps);
+
+			const updated = useSessionStore.getState().sessions[0];
+			expect(updated.pendingAICommandForSynopsis).toBe('/review');
+		});
+
+		it('passes images to spawn for message with images', async () => {
+			const session = createMockSession({
+				id: 'session-1',
+				aiTabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'conv-1',
+						name: null,
+						starred: false,
+						logs: [],
+						inputValue: '',
+						stagedImages: [],
+						createdAt: Date.now(),
+						state: 'idle',
+					},
+				],
+				activeTabId: 'tab-1',
+			});
+			useSessionStore.getState().setSessions([session]);
+
+			const item = createQueuedItem({
+				tabId: 'tab-1',
+				text: 'Describe this image',
+				images: ['base64encodedimage'],
+			});
+
+			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+
+			expect(mockSpawn).toHaveBeenCalledWith(
+				expect.objectContaining({
+					images: ['base64encodedimage'],
+					prompt: 'Describe this image',
+				})
+			);
 		});
 	});
 });

@@ -306,7 +306,7 @@ export function useAppHandlers(deps: UseAppHandlersDeps): UseAppHandlersReturn {
 	const expandAllFolders = useCallback(
 		(
 			sessionId: string,
-			session: Session,
+			_session: Session,
 			setSessionsFn: React.Dispatch<React.SetStateAction<Session[]>>
 		) => {
 			setSessionsFn((prev) =>

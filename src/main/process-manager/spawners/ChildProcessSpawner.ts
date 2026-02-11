@@ -439,6 +439,21 @@ export class ChildProcessSpawner {
 			});
 
 			// Handle stdin for SSH script, raw stdin, stream-json, or batch mode
+			// Attach an error handler to prevent unhandled EPIPE errors when
+			// the child process exits before stdin data is fully consumed.
+			if (childProcess.stdin) {
+				childProcess.stdin.on('error', (err) => {
+					// EPIPE is expected if the child exits before reading all stdin
+					if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
+						logger.warn('[ProcessManager] stdin error', 'ProcessManager', {
+							sessionId,
+							error: err.message,
+							code: (err as NodeJS.ErrnoException).code,
+						});
+					}
+				});
+			}
+
 			if (config.sshStdinScript) {
 				// SSH stdin script mode: send the entire script to /bin/bash on remote
 				// This bypasses all shell escaping issues by piping the script via stdin

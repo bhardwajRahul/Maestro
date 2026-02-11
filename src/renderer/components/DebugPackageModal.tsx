@@ -8,7 +8,7 @@
  * - Generate the package with a progress indicator
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Package, Check, Loader2, FolderOpen, AlertCircle, Copy } from 'lucide-react';
 import type { Theme } from '../types';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';

@@ -15,9 +15,23 @@
  */
 
 import { create } from 'zustand';
-import type { Session, SessionState, AgentConfig } from '../types';
-import { createTab } from '../utils/tabHelpers';
+import type {
+	Session,
+	SessionState,
+	AgentConfig,
+	LogEntry,
+	QueuedItem,
+	CustomAICommand,
+	SpecKitCommand,
+	OpenSpecCommand,
+} from '../types';
+import { createTab, getActiveTab } from '../utils/tabHelpers';
+import { generateId } from '../utils/ids';
 import { useSessionStore } from './sessionStore';
+import { DEFAULT_IMAGE_ONLY_PROMPT } from '../hooks/input/useInputProcessing';
+import { maestroSystemPrompt } from '../../prompts';
+import { substituteTemplateVariables } from '../utils/templateVariables';
+import { gitService } from '../services/git';
 
 // ============================================================================
 // Store Types
@@ -72,6 +86,18 @@ export interface AgentStoreActions {
 	 */
 	authenticateAfterError: (sessionId: string) => void;
 
+	// === Queue Processing ===
+
+	/**
+	 * Process a queued item (message or command) for a session.
+	 * Builds spawn config and dispatches to the agent process.
+	 */
+	processQueuedItem: (
+		sessionId: string,
+		item: QueuedItem,
+		deps: ProcessQueuedItemDeps
+	) => Promise<void>;
+
 	// === Agent Lifecycle ===
 
 	/** Kill an agent process by session ID and optional suffix */
@@ -79,6 +105,17 @@ export interface AgentStoreActions {
 
 	/** Send interrupt (CTRL+C) to an agent process */
 	interruptAgent: (sessionId: string) => Promise<void>;
+}
+
+/**
+ * Dependencies passed from App.tsx for processQueuedItem.
+ * These are mutable values from hooks/refs that can't be imported directly.
+ */
+export interface ProcessQueuedItemDeps {
+	conductorProfile: string;
+	customAICommands: CustomAICommand[];
+	speckitCommands: SpecKitCommand[];
+	openspecCommands: OpenSpecCommand[];
 }
 
 export type AgentStore = AgentStoreState & AgentStoreActions;
@@ -192,6 +229,255 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
 		updateSession(sessionId, (s) => ({ ...s, inputMode: 'terminal' }));
 	},
 
+	processQueuedItem: async (sessionId, item, deps) => {
+		const session = getSession(sessionId);
+		if (!session) {
+			console.error('[processQueuedItem] Session not found:', sessionId);
+			return;
+		}
+
+		// Find the TARGET tab for this queued item (NOT the active tab!)
+		// The item carries its intended tabId from when it was queued
+		const tabByItemId = session.aiTabs.find((tab) => tab.id === item.tabId);
+		const targetTab = tabByItemId || getActiveTab(session);
+		const targetSessionId = `${sessionId}-ai-${targetTab?.id || 'default'}`;
+
+		try {
+			// Get agent configuration for this session's tool type
+			const agent = await window.maestro.agents.get(session.toolType);
+			if (!agent) throw new Error(`Agent not found for toolType: ${session.toolType}`);
+
+			// Get the TARGET TAB's agentSessionId for session continuity
+			const tabAgentSessionId = targetTab?.agentSessionId;
+			const isReadOnly = item.readOnlyMode || targetTab?.readOnlyMode;
+
+			// Filter out YOLO/skip-permissions flags when read-only mode is active
+			const spawnArgs = isReadOnly
+				? (agent.args || []).filter(
+						(arg) =>
+							arg !== '--dangerously-skip-permissions' &&
+							arg !== '--dangerously-bypass-approvals-and-sandbox'
+					)
+				: [...(agent.args || [])];
+
+			const commandToUse = agent.path ?? agent.command;
+
+			// Check if this is a message with images but no text
+			const hasImages = item.images && item.images.length > 0;
+			const hasText = item.text && item.text.trim();
+			const isImageOnlyMessage = item.type === 'message' && hasImages && !hasText;
+
+			if (item.type === 'message' && (hasText || isImageOnlyMessage)) {
+				// Process a message - spawn agent with the message text
+				let effectivePrompt = isImageOnlyMessage ? DEFAULT_IMAGE_ONLY_PROMPT : item.text!;
+
+				// For NEW sessions (no agentSessionId), prepend Maestro system prompt
+				const isNewSession = !tabAgentSessionId;
+				if (isNewSession && maestroSystemPrompt) {
+					let gitBranch: string | undefined;
+					if (session.isGitRepo) {
+						try {
+							const status = await gitService.getStatus(session.cwd);
+							gitBranch = status.branch;
+						} catch {
+							// Ignore git errors
+						}
+					}
+
+					const substitutedSystemPrompt = substituteTemplateVariables(maestroSystemPrompt, {
+						session,
+						gitBranch,
+						conductorProfile: deps.conductorProfile,
+					});
+
+					effectivePrompt = `${substitutedSystemPrompt}\n\n---\n\n# User Request\n\n${effectivePrompt}`;
+				}
+
+				console.log('[processQueuedItem] Spawning agent with queued message:', {
+					sessionId: targetSessionId,
+					toolType: session.toolType,
+					prompt: effectivePrompt,
+					promptLength: effectivePrompt?.length,
+					hasAgentSessionId: !!tabAgentSessionId,
+					agentSessionId: tabAgentSessionId,
+					isReadOnly,
+					argsLength: spawnArgs.length,
+					args: spawnArgs,
+				});
+
+				await window.maestro.process.spawn({
+					sessionId: targetSessionId,
+					toolType: session.toolType,
+					cwd: session.cwd,
+					command: commandToUse,
+					args: spawnArgs,
+					prompt: effectivePrompt,
+					images: hasImages ? item.images : undefined,
+					agentSessionId: tabAgentSessionId ?? undefined,
+					readOnlyMode: isReadOnly,
+					sessionCustomPath: session.customPath,
+					sessionCustomArgs: session.customArgs,
+					sessionCustomEnvVars: session.customEnvVars,
+					sessionCustomModel: session.customModel,
+					sessionCustomContextWindow: session.customContextWindow,
+					sessionSshRemoteConfig: session.sessionSshRemoteConfig,
+				});
+			} else if (item.type === 'command' && item.command) {
+				// Process a slash command - find matching command
+				const matchingCommand =
+					deps.customAICommands.find((cmd) => cmd.command === item.command) ||
+					deps.speckitCommands.find((cmd) => cmd.command === item.command) ||
+					deps.openspecCommands.find((cmd) => cmd.command === item.command);
+
+				if (matchingCommand) {
+					let gitBranch: string | undefined;
+					if (session.isGitRepo) {
+						try {
+							const status = await gitService.getStatus(session.cwd);
+							gitBranch = status.branch;
+						} catch {
+							// Ignore git errors
+						}
+					}
+
+					// Substitute $ARGUMENTS with command arguments
+					let promptWithArgs = matchingCommand.prompt;
+					if (item.commandArgs) {
+						promptWithArgs = promptWithArgs.replace(/\$ARGUMENTS/g, item.commandArgs);
+					} else {
+						promptWithArgs = promptWithArgs.replace(/\$ARGUMENTS/g, '');
+					}
+
+					// Substitute {{TEMPLATE_VARIABLES}}
+					const substitutedPrompt = substituteTemplateVariables(promptWithArgs, {
+						session,
+						gitBranch,
+						conductorProfile: deps.conductorProfile,
+					});
+
+					// For NEW sessions, prepend Maestro system prompt
+					const isNewSessionForCommand = !tabAgentSessionId;
+					let promptForAgent = substitutedPrompt;
+					if (isNewSessionForCommand && maestroSystemPrompt) {
+						const substitutedSystemPrompt = substituteTemplateVariables(maestroSystemPrompt, {
+							session,
+							gitBranch,
+							conductorProfile: deps.conductorProfile,
+						});
+						promptForAgent = `${substitutedSystemPrompt}\n\n---\n\n# User Request\n\n${substitutedPrompt}`;
+					}
+
+					// Add user log showing the command with its interpolated prompt
+					useSessionStore.getState().addLogToTab(
+						sessionId,
+						{
+							source: 'user',
+							text: substitutedPrompt,
+							aiCommand: {
+								command: matchingCommand.command,
+								description: matchingCommand.description,
+							},
+						},
+						item.tabId
+					);
+
+					// Track this command for automatic synopsis on completion
+					updateSession(sessionId, (s) => ({
+						...s,
+						pendingAICommandForSynopsis: matchingCommand.command,
+					}));
+
+					// Spawn agent with the prompt
+					await window.maestro.process.spawn({
+						sessionId: targetSessionId,
+						toolType: session.toolType,
+						cwd: session.cwd,
+						command: commandToUse,
+						args: spawnArgs,
+						prompt: promptForAgent,
+						agentSessionId: tabAgentSessionId ?? undefined,
+						readOnlyMode: isReadOnly,
+						sessionCustomPath: session.customPath,
+						sessionCustomArgs: session.customArgs,
+						sessionCustomEnvVars: session.customEnvVars,
+						sessionCustomModel: session.customModel,
+						sessionCustomContextWindow: session.customContextWindow,
+						sessionSshRemoteConfig: session.sessionSshRemoteConfig,
+					});
+				} else {
+					// Unknown command - add error log and reset to idle
+					useSessionStore.getState().addLogToTab(sessionId, {
+						source: 'system',
+						text: `Unknown command: ${item.command}`,
+					});
+					useSessionStore.getState().setSessions((prev) =>
+						prev.map((s) => {
+							if (s.id !== sessionId) return s;
+							const updatedAiTabs = s.aiTabs?.map((tab) =>
+								tab.id === item.tabId
+									? {
+											...tab,
+											state: 'idle' as const,
+											thinkingStartTime: undefined,
+										}
+									: tab
+							);
+							return {
+								...s,
+								state: 'idle' as SessionState,
+								busySource: undefined,
+								thinkingStartTime: undefined,
+								aiTabs: updatedAiTabs,
+							};
+						})
+					);
+				}
+			}
+		} catch (error: any) {
+			console.error('[processQueuedItem] Failed to process queued item:', error);
+			const errorLogEntry: LogEntry = {
+				id: generateId(),
+				timestamp: Date.now(),
+				source: 'system',
+				text: `Error: Failed to process queued ${item.type} - ${error.message}`,
+			};
+			useSessionStore.getState().setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== sessionId) return s;
+					const activeTab = getActiveTab(s);
+					const updatedAiTabs =
+						s.aiTabs?.length > 0
+							? s.aiTabs.map((tab) =>
+									tab.id === s.activeTabId
+										? {
+												...tab,
+												state: 'idle' as const,
+												thinkingStartTime: undefined,
+												logs: [...tab.logs, errorLogEntry],
+											}
+										: tab
+								)
+							: s.aiTabs;
+
+					if (!activeTab) {
+						console.error(
+							'[processQueuedItem error] No active tab found - session has no aiTabs, this should not happen'
+						);
+						return s;
+					}
+
+					return {
+						...s,
+						state: 'idle',
+						busySource: undefined,
+						thinkingStartTime: undefined,
+						aiTabs: updatedAiTabs,
+					};
+				})
+			);
+		}
+	},
+
 	killAgent: async (sessionId, suffix?) => {
 		const target = suffix ? `${sessionId}-${suffix}` : `${sessionId}-ai`;
 		try {
@@ -240,6 +526,7 @@ export function getAgentActions() {
 	return {
 		refreshAgents: state.refreshAgents,
 		getAgentConfig: state.getAgentConfig,
+		processQueuedItem: state.processQueuedItem,
 		clearAgentError: state.clearAgentError,
 		startNewSessionAfterError: state.startNewSessionAfterError,
 		retryAfterError: state.retryAfterError,

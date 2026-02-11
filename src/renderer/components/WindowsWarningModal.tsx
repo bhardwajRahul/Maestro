@@ -8,7 +8,7 @@
  * - Allow users to suppress this message for future sessions
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
 	AlertTriangle,
 	Bug,

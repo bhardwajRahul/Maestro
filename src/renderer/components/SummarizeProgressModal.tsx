@@ -16,7 +16,7 @@
  * - Cancel functionality with confirmation
  */
 
-import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { X, Check, Loader2, AlertTriangle, TrendingDown, Wand2 } from 'lucide-react';
 import type { Theme } from '../types';
 import type { SummarizeProgress, SummarizeResult } from '../types/contextMerge';

@@ -22,7 +22,11 @@ import { PlaybookDeleteConfirmModal } from './PlaybookDeleteConfirmModal';
 import { PlaybookNameModal } from './PlaybookNameModal';
 import { AgentPromptComposerModal } from './AgentPromptComposerModal';
 import { DocumentsPanel } from './DocumentsPanel';
-import { usePlaybookManagement, DEFAULT_BATCH_PROMPT, validateAgentPromptHasTaskReference } from '../hooks';
+import {
+	usePlaybookManagement,
+	DEFAULT_BATCH_PROMPT,
+	validateAgentPromptHasTaskReference,
+} from '../hooks';
 import { generateId } from '../utils/ids';
 
 // Platform detection helper (userAgentData is newer but not in all TS types yet)
@@ -265,7 +269,6 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 
 	// Count missing documents for warning display
 	const missingDocCount = documents.filter((doc) => doc.isMissing).length;
-	const _hasMissingDocs = missingDocCount > 0;
 
 	// Validate agent prompt has task references
 	const hasValidPrompt = validateAgentPromptHasTaskReference(prompt);
@@ -756,8 +759,8 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 									color: theme.colors.error,
 								}}
 							>
-								Agent prompt must reference Markdown tasks (e.g., include checkbox syntax
-								like &quot;- [ ]&quot; or the phrase &quot;markdown task&quot;).
+								Agent prompt must reference Markdown tasks (e.g., include checkbox syntax like
+								&quot;- [ ]&quot; or the phrase &quot;markdown task&quot;).
 							</div>
 						)}
 					</div>
@@ -801,12 +804,20 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 						<button
 							onClick={handleGo}
 							disabled={
-								hasNoTasks || documents.length === 0 || documents.length === missingDocCount || isPromptEmpty || !hasValidPrompt
+								hasNoTasks ||
+								documents.length === 0 ||
+								documents.length === missingDocCount ||
+								isPromptEmpty ||
+								!hasValidPrompt
 							}
 							className="flex items-center gap-2 px-4 py-2 rounded text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed"
 							style={{
 								backgroundColor:
-									hasNoTasks || documents.length === 0 || documents.length === missingDocCount || isPromptEmpty || !hasValidPrompt
+									hasNoTasks ||
+									documents.length === 0 ||
+									documents.length === missingDocCount ||
+									isPromptEmpty ||
+									!hasValidPrompt
 										? theme.colors.textDim
 										: theme.colors.accent,
 							}}
