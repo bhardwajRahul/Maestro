@@ -5,7 +5,7 @@
  * Features category tabs, search filtering, keyboard navigation, and playbook tiles grid.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1149,8 +1149,8 @@ export function MarketplaceModal({
 											</h3>
 											<p className="text-xs mb-3" style={{ color: theme.colors.textDim }}>
 												The Playbook Exchange is a curated collection of Auto Run playbooks for
-												common workflows. Browse, preview, and import playbooks directly
-												into your Auto Run folder.
+												common workflows. Browse, preview, and import playbooks directly into your
+												Auto Run folder.
 											</p>
 											<h4
 												className="text-xs font-semibold mb-1"

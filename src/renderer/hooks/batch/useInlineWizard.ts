@@ -10,9 +10,9 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { logger } from '../utils/logger';
-import { parseWizardIntent } from '../services/wizardIntentParser';
-import { getAutoRunFolderPath, type ExistingDocument } from '../utils/existingDocsDetector';
+import { logger } from '../../utils/logger';
+import { parseWizardIntent } from '../../services/wizardIntentParser';
+import { getAutoRunFolderPath, type ExistingDocument } from '../../utils/existingDocsDetector';
 import {
 	startInlineWizardConversation,
 	sendWizardMessage,
@@ -21,13 +21,13 @@ import {
 	type InlineWizardConversationSession,
 	type ExistingDocumentWithContent,
 	type ConversationCallbacks,
-} from '../services/inlineWizardConversation';
+} from '../../services/inlineWizardConversation';
 import {
 	generateInlineDocuments,
 	extractDisplayTextFromChunk,
 	type DocumentGenerationCallbacks,
-} from '../services/inlineWizardDocumentGeneration';
-import type { ToolType } from '../types';
+} from '../../services/inlineWizardDocumentGeneration';
+import type { ToolType } from '../../types';
 
 /**
  * Wizard mode determines whether the user wants to create new documents
@@ -50,7 +50,7 @@ export interface InlineWizardMessage {
 	ready?: boolean;
 }
 
-import type { ThinkingMode } from '../types';
+import type { ThinkingMode } from '../../types';
 
 /**
  * UI state to restore when wizard ends.

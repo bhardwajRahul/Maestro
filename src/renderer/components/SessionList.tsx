@@ -924,7 +924,12 @@ const SessionTooltipContent = memo(function SessionTooltipContent({
 						className="h-full transition-all"
 						style={{
 							width: `${session.contextUsage}%`,
-							backgroundColor: getContextColor(session.contextUsage, theme, contextWarningYellowThreshold, contextWarningRedThreshold),
+							backgroundColor: getContextColor(
+								session.contextUsage,
+								theme,
+								contextWarningYellowThreshold,
+								contextWarningRedThreshold
+							),
 						}}
 					/>
 				</div>
@@ -1414,11 +1419,6 @@ function SessionListInner(props: SessionListProps) {
 		return worktreeChildrenByParentId.get(parentId) || [];
 	};
 
-	// Helper: Check if a session has worktree children
-	const _hasWorktreeChildren = (sessionId: string): boolean => {
-		return worktreeChildrenByParentId.has(sessionId);
-	};
-
 	// Helper component: Renders a collapsed session pill with subdivided parts for worktrees
 	const renderCollapsedPill = (session: Session, keyPrefix: string, _onExpand: () => void) => {
 		const worktreeChildren = getWorktreeChildren(session.id);
@@ -1782,15 +1782,11 @@ function SessionListInner(props: SessionListProps) {
 	}, [sessionFilter, sessions, worktreeChildrenByParentId]);
 
 	// Destructure for backwards compatibility with existing code
-	const _filteredSessions = sessionCategories.filtered;
 	const bookmarkedSessions = sessionCategories.bookmarked;
-	const _bookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
 	const sortedBookmarkedSessions = sessionCategories.sortedBookmarked;
 	const sortedBookmarkedParentSessions = sessionCategories.sortedBookmarkedParent;
-	const _groupedSessionsById = sessionCategories.groupedMap;
 	const sortedGroupSessionsById = sessionCategories.sortedGrouped;
 	const ungroupedSessions = sessionCategories.ungrouped;
-	const _ungroupedParentSessions = sessionCategories.sortedUngroupedParent;
 	const sortedUngroupedSessions = sessionCategories.sortedUngrouped;
 	const sortedUngroupedParentSessions = sessionCategories.sortedUngroupedParent;
 	const sortedFilteredSessions = sessionCategories.sortedFiltered;

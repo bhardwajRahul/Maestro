@@ -10,6 +10,7 @@ import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import type { WizardStep } from './Wizard/WizardContext';
 import { useListNavigation } from '../hooks';
 import { useUIStore } from '../stores/uiStore';
+import { useFileExplorerStore } from '../stores/fileExplorerStore';
 
 interface QuickAction {
 	id: string;
@@ -203,7 +204,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
 	const setActiveFocus = useUIStore((s) => s.setActiveFocus);
 	const storeSetSessionFilterOpen = useUIStore((s) => s.setSessionFilterOpen);
 	const storeSetOutputSearchOpen = useUIStore((s) => s.setOutputSearchOpen);
-	const storeSetFileTreeFilterOpen = useUIStore((s) => s.setFileTreeFilterOpen);
+	const storeSetFileTreeFilterOpen = useFileExplorerStore((s) => s.setFileTreeFilterOpen);
 	const storeSetHistorySearchFilterOpen = useUIStore((s) => s.setHistorySearchFilterOpen);
 
 	const [search, setSearch] = useState('');
@@ -802,9 +803,7 @@ export function QuickActionsModal(props: QuickActionsModalProps) {
 									type: 'error',
 									title: 'Error',
 									message:
-										error instanceof Error
-											? error.message
-											: 'Failed to open repository in browser',
+										error instanceof Error ? error.message : 'Failed to open repository in browser',
 								});
 							}
 							setQuickActionOpen(false);

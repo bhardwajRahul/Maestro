@@ -137,17 +137,6 @@ function getSessionDisplayName(session: Session): string {
 }
 
 /**
- * Get the display name for a tab
- */
-function _getTabDisplayName(tab: AITab): string {
-	if (tab.name) return tab.name;
-	if (tab.agentSessionId) {
-		return tab.agentSessionId.split('-')[0].toUpperCase();
-	}
-	return 'New Tab';
-}
-
-/**
  * Generate a name for the merged session
  */
 function generateMergedSessionName(

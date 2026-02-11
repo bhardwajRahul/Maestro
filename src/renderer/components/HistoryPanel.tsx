@@ -466,8 +466,6 @@ export interface HistoryPanelHandle {
 
 // Constants for history pagination
 const MAX_HISTORY_IN_MEMORY = 500; // Maximum entries to keep in memory
-// Note: With virtualization, display count is managed by the virtualizer
-const _INITIAL_DISPLAY_COUNT = 50; // Kept for reference, prefixed to satisfy linter
 
 // Estimated row heights for virtualization
 // Entry breakdown: p-3 (24px padding) + header (~24px) + mb-2 (8px) + summary (~48px for 3 lines)

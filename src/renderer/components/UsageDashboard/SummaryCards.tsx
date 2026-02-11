@@ -18,19 +18,9 @@
  */
 
 import React, { useMemo } from 'react';
-import {
-	MessageSquare,
-	Clock,
-	Timer,
-	Bot,
-	Users,
-	Layers,
-	Sunrise,
-	Globe,
-	Zap,
-} from 'lucide-react';
+import { MessageSquare, Clock, Timer, Bot, Users, Layers, Sunrise, Globe, Zap } from 'lucide-react';
 import type { Theme, Session } from '../../types';
-import type { StatsAggregation } from '../../hooks/useStats';
+import type { StatsAggregation } from '../../hooks/stats/useStats';
 
 interface SummaryCardsProps {
 	/** Aggregated stats data from the API */
@@ -151,8 +141,7 @@ export function SummaryCards({ data, theme, columns = 3, sessions }: SummaryCard
 		useMemo(() => {
 			// Find most active agent by query count
 			const agents = Object.entries(data.byAgent);
-			const topAgent =
-				agents.length > 0 ? agents.sort((a, b) => b[1].count - a[1].count)[0] : null;
+			const topAgent = agents.length > 0 ? agents.sort((a, b) => b[1].count - a[1].count)[0] : null;
 
 			// Calculate interactive percentage
 			const totalBySource = data.bySource.user + data.bySource.auto;
@@ -174,10 +163,7 @@ export function SummaryCards({ data, theme, columns = 3, sessions }: SummaryCard
 					: 'N/A';
 
 			// Calculate queries per session using agent count for consistency
-			const qps =
-				agentCount > 0
-					? (data.totalQueries / agentCount).toFixed(1)
-					: 'N/A';
+			const qps = agentCount > 0 ? (data.totalQueries / agentCount).toFixed(1) : 'N/A';
 
 			return {
 				mostActiveAgent: topAgent ? topAgent[0] : 'N/A',

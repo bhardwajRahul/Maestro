@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QuickActionsModal } from '../../../renderer/components/QuickActionsModal';
 import type { Session, Group, Theme, Shortcut } from '../../../renderer/types';
 import { useUIStore } from '../../../renderer/stores/uiStore';
+import { useFileExplorerStore } from '../../../renderer/stores/fileExplorerStore';
 
 // Add missing window.maestro.devtools and debug mocks
 beforeAll(() => {
@@ -187,8 +188,11 @@ describe('QuickActionsModal', () => {
 			sessionFilterOpen: false,
 			historySearchFilterOpen: false,
 			outputSearchOpen: false,
-			fileTreeFilterOpen: false,
 			activeFocus: 'main',
+		});
+		// Reset fileExplorerStore state
+		useFileExplorerStore.setState({
+			fileTreeFilterOpen: false,
 		});
 	});
 
@@ -551,7 +555,7 @@ describe('QuickActionsModal', () => {
 			expect(useUIStore.getState().activeFocus).toBe('right');
 
 			vi.advanceTimersByTime(50);
-			expect(useUIStore.getState().fileTreeFilterOpen).toBe(true);
+			expect(useFileExplorerStore.getState().fileTreeFilterOpen).toBe(true);
 
 			vi.useRealTimers();
 		});

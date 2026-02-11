@@ -1,9 +1,11 @@
 /**
  * uiStore - Zustand store for centralized UI layout state management
  *
- * Replaces UILayoutContext. All sidebar, focus, file explorer, notification,
- * and editing states live here. Components subscribe to individual slices
- * via selectors to avoid unnecessary re-renders.
+ * Replaces UILayoutContext. All sidebar, focus, notification, and editing
+ * states live here. Components subscribe to individual slices via selectors
+ * to avoid unnecessary re-renders.
+ *
+ * File explorer UI state has been moved to fileExplorerStore.
  *
  * Can be used outside React via useUIStore.getState() / useUIStore.setState().
  */
@@ -31,11 +33,6 @@ export interface UIStoreState {
 
 	// Session sidebar selection
 	selectedSidebarIndex: number;
-
-	// File explorer
-	selectedFileIndex: number;
-	fileTreeFilter: string;
-	fileTreeFilterOpen: boolean;
 
 	// Flash notifications
 	flashNotification: string | null;
@@ -85,11 +82,6 @@ export interface UIStoreActions {
 	// Session sidebar selection
 	setSelectedSidebarIndex: (index: number | ((prev: number) => number)) => void;
 
-	// File explorer
-	setSelectedFileIndex: (index: number | ((prev: number) => number)) => void;
-	setFileTreeFilter: (filter: string | ((prev: string) => string)) => void;
-	setFileTreeFilterOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
-
 	// Flash notifications
 	setFlashNotification: (msg: string | null | ((prev: string | null) => string | null)) => void;
 	setSuccessFlashNotification: (
@@ -135,9 +127,6 @@ export const useUIStore = create<UIStore>()((set) => ({
 	preFilterActiveTabId: null,
 	preTerminalFileTabId: null,
 	selectedSidebarIndex: 0,
-	selectedFileIndex: 0,
-	fileTreeFilter: '',
-	fileTreeFilterOpen: false,
 	flashNotification: null,
 	successFlashNotification: null,
 	outputSearchOpen: false,
@@ -172,11 +161,6 @@ export const useUIStore = create<UIStore>()((set) => ({
 	setSelectedSidebarIndex: (v) =>
 		set((s) => ({ selectedSidebarIndex: resolve(v, s.selectedSidebarIndex) })),
 
-	setSelectedFileIndex: (v) => set((s) => ({ selectedFileIndex: resolve(v, s.selectedFileIndex) })),
-	setFileTreeFilter: (v) => set((s) => ({ fileTreeFilter: resolve(v, s.fileTreeFilter) })),
-	setFileTreeFilterOpen: (v) =>
-		set((s) => ({ fileTreeFilterOpen: resolve(v, s.fileTreeFilterOpen) })),
-
 	setFlashNotification: (v) => set((s) => ({ flashNotification: resolve(v, s.flashNotification) })),
 	setSuccessFlashNotification: (v) =>
 		set((s) => ({ successFlashNotification: resolve(v, s.successFlashNotification) })),
@@ -184,8 +168,7 @@ export const useUIStore = create<UIStore>()((set) => ({
 	setOutputSearchOpen: (v) => set((s) => ({ outputSearchOpen: resolve(v, s.outputSearchOpen) })),
 	setOutputSearchQuery: (v) => set((s) => ({ outputSearchQuery: resolve(v, s.outputSearchQuery) })),
 
-	setSessionFilterOpen: (v) =>
-		set((s) => ({ sessionFilterOpen: resolve(v, s.sessionFilterOpen) })),
+	setSessionFilterOpen: (v) => set((s) => ({ sessionFilterOpen: resolve(v, s.sessionFilterOpen) })),
 	setHistorySearchFilterOpen: (v) =>
 		set((s) => ({ historySearchFilterOpen: resolve(v, s.historySearchFilterOpen) })),
 
