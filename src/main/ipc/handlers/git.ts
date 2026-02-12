@@ -1078,16 +1078,17 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
 								subdirPath,
 								sshRemote
 							);
-							if (toplevelResult.exitCode === 0) {
-								const toplevel = toplevelResult.stdout.trim();
-								// For SSH, compare as-is; for local, resolve to handle symlinks
-								const normalizedSubdir = sshRemote
-									? subdirPath
-									: path.resolve(subdirPath);
-								const normalizedToplevel = sshRemote ? toplevel : path.resolve(toplevel);
-								if (normalizedSubdir !== normalizedToplevel) {
-									return null; // This is a subdirectory inside a repo, not a repo/worktree root
-								}
+							if (toplevelResult.exitCode !== 0) {
+								return null; // Git command failed — treat as invalid
+							}
+							const toplevel = toplevelResult.stdout.trim();
+							// For SSH, compare as-is; for local, resolve to handle symlinks
+							const normalizedSubdir = sshRemote
+								? subdirPath
+								: path.resolve(subdirPath);
+							const normalizedToplevel = sshRemote ? toplevel : path.resolve(toplevel);
+							if (normalizedSubdir !== normalizedToplevel) {
+								return null; // Subdirectory inside a repo, not a repo/worktree root
 							}
 
 							// Run remaining git commands in parallel for each subdirectory (SSH-aware via execGit)
@@ -1231,11 +1232,11 @@ export function registerGitHandlers(deps: GitHandlerDependencies): void {
 								['rev-parse', '--show-toplevel'],
 								dirPath
 							);
-							if (toplevelResult.exitCode === 0) {
-								const toplevel = toplevelResult.stdout.trim();
-								if (path.resolve(dirPath) !== path.resolve(toplevel)) {
-									return; // Subdirectory inside a repo, not a worktree root
-								}
+							if (toplevelResult.exitCode !== 0) {
+								return; // Git command failed — skip
+							}
+							if (path.resolve(dirPath) !== path.resolve(toplevelResult.stdout.trim())) {
+								return; // Subdirectory inside a repo, not a worktree root
 							}
 
 							// Get branch name

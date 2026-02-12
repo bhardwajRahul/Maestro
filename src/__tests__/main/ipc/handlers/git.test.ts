@@ -3683,6 +3683,56 @@ branch refs/heads/bugfix-123
 			expect(result.gitSubdirs[0].name).toBe('actual-worktree');
 			expect(result.gitSubdirs[0].branch).toBe('feature-branch');
 		});
+
+		it('should exclude subdirectories where --show-toplevel fails', async () => {
+			// Simulates a directory where git rev-parse --show-toplevel returns a non-zero exit code
+			// (e.g., corrupted repo, permission denied). Should be treated as invalid worktree.
+			vi.mocked(mockFs.readdir).mockResolvedValue([
+				{ name: 'good-worktree', isDirectory: () => true },
+				{ name: 'broken-repo', isDirectory: () => true },
+			] as any);
+
+			vi.mocked(execFile.execFileNoThrow).mockImplementation(async (cmd, args, cwd) => {
+				const cwdStr = String(cwd);
+
+				if (cwdStr.endsWith('good-worktree')) {
+					if (args?.includes('--is-inside-work-tree')) {
+						return { stdout: 'true\n', stderr: '', exitCode: 0 };
+					}
+					if (args?.includes('--show-toplevel')) {
+						return { stdout: '/parent/good-worktree', stderr: '', exitCode: 0 };
+					}
+					if (args?.includes('--git-dir')) {
+						return { stdout: '.git', stderr: '', exitCode: 0 };
+					}
+					if (args?.includes('--git-common-dir')) {
+						return { stdout: '.git', stderr: '', exitCode: 0 };
+					}
+					if (args?.includes('--abbrev-ref')) {
+						return { stdout: 'main\n', stderr: '', exitCode: 0 };
+					}
+				}
+
+				if (cwdStr.endsWith('/broken-repo')) {
+					if (args?.includes('--is-inside-work-tree')) {
+						return { stdout: 'true\n', stderr: '', exitCode: 0 };
+					}
+					if (args?.includes('--show-toplevel')) {
+						// Simulate failure (e.g., permission denied, corrupted .git)
+						return { stdout: '', stderr: 'fatal: unable to read tree', exitCode: 128 };
+					}
+				}
+
+				return { stdout: '', stderr: 'fatal: not a git repository', exitCode: 128 };
+			});
+
+			const handler = handlers.get('git:scanWorktreeDirectory');
+			const result = await handler!({} as any, '/parent');
+
+			// Only good-worktree should be included; broken-repo should be filtered out
+			expect(result.gitSubdirs).toHaveLength(1);
+			expect(result.gitSubdirs[0].name).toBe('good-worktree');
+		});
 	});
 
 	describe('git:watchWorktreeDirectory', () => {
@@ -4119,9 +4169,12 @@ branch refs/heads/bugfix-123
 			const { BrowserWindow } = await import('electron');
 			vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWindow] as any);
 
-			vi.mocked(execFile.execFileNoThrow).mockImplementation(async (cmd, args) => {
+			vi.mocked(execFile.execFileNoThrow).mockImplementation(async (cmd, args, cwd) => {
 				if (args?.includes('--is-inside-work-tree')) {
 					return { stdout: 'true\n', stderr: '', exitCode: 0 };
+				}
+				if (args?.includes('--show-toplevel')) {
+					return { stdout: String(cwd), stderr: '', exitCode: 0 };
 				}
 				if (args?.includes('--abbrev-ref')) {
 					return { stdout: 'feature\n', stderr: '', exitCode: 0 };
