@@ -320,6 +320,7 @@ export async function deleteGroupChat(id: string): Promise<void> {
 	for (let attempt = 0; attempt <= maxRetries; attempt++) {
 		try {
 			await fs.rm(chatDir, { recursive: true, force: true });
+			writeQueues.delete(id);
 			return;
 		} catch (err) {
 			const code = (err as NodeJS.ErrnoException).code;
