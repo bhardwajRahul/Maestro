@@ -2058,6 +2058,7 @@ function MaestroConsoleInner() {
 	const fileTreeContainerRef = useRef<HTMLDivElement>(null);
 	const fileTreeFilterInputRef = useRef<HTMLInputElement>(null);
 	const fileTreeKeyboardNavRef = useRef(false); // Track if selection change came from keyboard
+	const recentlyCreatedWorktreePathsRef = useRef(new Set<string>()); // Prevent duplicate UI entries from file watcher
 	const rightPanelRef = useRef<RightPanelHandle>(null);
 	const mainPanelRef = useRef<MainPanelHandle>(null);
 
@@ -6244,6 +6245,11 @@ You are taking over this conversation. Based on the context above, provide a bri
 		const cleanup = window.maestro.git.onWorktreeDiscovered(async (data) => {
 			const { sessionId, worktree } = data;
 
+			// Skip worktrees that were just manually created (prevents duplicate UI entries)
+			if (recentlyCreatedWorktreePathsRef.current.has(worktree.path)) {
+				return;
+			}
+
 			// Skip main/master/HEAD branches (already filtered by main process, but double-check)
 			if (
 				worktree.branch === 'main' ||
@@ -9929,6 +9935,10 @@ You are taking over this conversation. Based on the context above, provide a bri
 					sessionSshRemoteConfig: activeSession.sessionSshRemoteConfig,
 				};
 
+				// Mark path so the file watcher discovery handler skips it
+				recentlyCreatedWorktreePathsRef.current.add(worktreePath);
+				setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(worktreePath), 10000);
+
 				setSessions((prev) => [...prev, worktreeSession]);
 
 				// Expand parent's worktrees
@@ -10081,6 +10091,10 @@ You are taking over this conversation. Based on the context above, provide a bri
 				// Inherit SSH configuration from parent session
 				sessionSshRemoteConfig: createWorktreeSession.sessionSshRemoteConfig,
 			};
+
+			// Mark path so the file watcher discovery handler skips it
+			recentlyCreatedWorktreePathsRef.current.add(worktreePath);
+			setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(worktreePath), 10000);
 
 			setSessions((prev) => [...prev, worktreeSession]);
 
