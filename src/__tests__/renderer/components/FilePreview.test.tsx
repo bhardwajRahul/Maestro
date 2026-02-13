@@ -108,8 +108,8 @@ vi.mock('../../../renderer/components/MermaidRenderer', () => ({
 
 // Mock CsvTableRenderer
 vi.mock('../../../renderer/components/CsvTableRenderer', () => ({
-	CsvTableRenderer: ({ content, searchQuery }: { content: string; searchQuery?: string }) => (
-		<div data-testid="csv-table-renderer" data-search={searchQuery ?? ''}>
+	CsvTableRenderer: ({ content, searchQuery, delimiter }: { content: string; searchQuery?: string; delimiter?: string }) => (
+		<div data-testid="csv-table-renderer" data-search={searchQuery ?? ''} data-delimiter={delimiter ?? ','}>
 			{content.substring(0, 50)}
 		</div>
 	),
@@ -1324,7 +1324,7 @@ print("world")
 	});
 
 	describe('CSV file rendering', () => {
-		it('renders CsvTableRenderer for .csv files', () => {
+		it('renders CsvTableRenderer for .csv files with comma delimiter', () => {
 			render(
 				<FilePreview
 					{...defaultProps}
@@ -1332,10 +1332,12 @@ print("world")
 				/>
 			);
 
-			expect(screen.getByTestId('csv-table-renderer')).toBeInTheDocument();
+			const renderer = screen.getByTestId('csv-table-renderer');
+			expect(renderer).toBeInTheDocument();
+			expect(renderer).toHaveAttribute('data-delimiter', ',');
 		});
 
-		it('renders CsvTableRenderer for .tsv files', () => {
+		it('renders CsvTableRenderer for .tsv files with tab delimiter', () => {
 			render(
 				<FilePreview
 					{...defaultProps}
@@ -1343,7 +1345,9 @@ print("world")
 				/>
 			);
 
-			expect(screen.getByTestId('csv-table-renderer')).toBeInTheDocument();
+			const renderer = screen.getByTestId('csv-table-renderer');
+			expect(renderer).toBeInTheDocument();
+			expect(renderer).toHaveAttribute('data-delimiter', '\t');
 		});
 
 		it('shows edit button for CSV files', () => {

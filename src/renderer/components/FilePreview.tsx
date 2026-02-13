@@ -768,6 +768,7 @@ export const FilePreview = React.memo(
 		const language = file ? getLanguageFromFilename(file.name) : '';
 		const isMarkdown = language === 'markdown';
 		const isCsv = language === 'csv';
+		const csvDelimiter = file?.name.toLowerCase().endsWith('.tsv') ? '\t' : ',';
 		const isImage = file ? isImageFile(file.name) : false;
 
 		// Check for binary files - either by extension or by content analysis
@@ -2322,6 +2323,7 @@ export const FilePreview = React.memo(
 						<CsvTableRenderer
 							content={file.content}
 							theme={theme}
+							delimiter={csvDelimiter}
 							searchQuery={searchQuery}
 							onMatchCount={(count) => {
 								setTotalMatches(count);
