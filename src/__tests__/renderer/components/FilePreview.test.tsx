@@ -108,8 +108,10 @@ vi.mock('../../../renderer/components/MermaidRenderer', () => ({
 
 // Mock CsvTableRenderer
 vi.mock('../../../renderer/components/CsvTableRenderer', () => ({
-	CsvTableRenderer: ({ content }: { content: string }) => (
-		<div data-testid="csv-table-renderer">{content.substring(0, 50)}</div>
+	CsvTableRenderer: ({ content, searchQuery }: { content: string; searchQuery?: string }) => (
+		<div data-testid="csv-table-renderer" data-search={searchQuery ?? ''}>
+			{content.substring(0, 50)}
+		</div>
 	),
 }));
 

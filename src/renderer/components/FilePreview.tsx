@@ -1245,7 +1245,7 @@ export const FilePreview = React.memo(
 
 		// Highlight search matches in syntax-highlighted code
 		useEffect(() => {
-			if (!searchQuery.trim() || !codeContainerRef.current || isMarkdown || isImage) {
+			if (!searchQuery.trim() || !codeContainerRef.current || isMarkdown || isImage || isCsv) {
 				setTotalMatches(0);
 				setCurrentMatchIndex(0);
 				matchElementsRef.current = [];
@@ -1329,7 +1329,7 @@ export const FilePreview = React.memo(
 				});
 				matchElementsRef.current = [];
 			};
-		}, [searchQuery, file?.content, isMarkdown, isImage, theme.colors.accent]);
+		}, [searchQuery, file?.content, isMarkdown, isImage, isCsv, theme.colors.accent]);
 
 		// Search matches in markdown preview mode - use CSS Custom Highlight API
 		useEffect(() => {
@@ -2319,7 +2319,15 @@ export const FilePreview = React.memo(
 							}}
 						/>
 					) : isCsv && !markdownEditMode ? (
-						<CsvTableRenderer content={file.content} theme={theme} />
+						<CsvTableRenderer
+							content={file.content}
+							theme={theme}
+							searchQuery={searchQuery}
+							onMatchCount={(count) => {
+								setTotalMatches(count);
+								setCurrentMatchIndex(count > 0 ? 0 : -1);
+							}}
+						/>
 					) : isMarkdown ? (
 						<div
 							ref={markdownContainerRef}

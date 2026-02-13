@@ -178,4 +178,88 @@ describe('CsvTableRenderer', () => {
 			expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
 		});
 	});
+
+	describe('search filtering', () => {
+		it('filters rows to only those matching the search query', () => {
+			const { container } = render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC\nBob,LA\nCharlie,NYC"
+					theme={mockTheme}
+					searchQuery="NYC"
+				/>
+			);
+
+			const rows = container.querySelectorAll('tbody tr');
+			expect(rows).toHaveLength(2);
+			expect(rows[0]).toHaveTextContent('Alice');
+			expect(rows[1]).toHaveTextContent('Charlie');
+		});
+
+		it('performs case-insensitive search', () => {
+			const { container } = render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC\nBob,LA"
+					theme={mockTheme}
+					searchQuery="nyc"
+				/>
+			);
+
+			const rows = container.querySelectorAll('tbody tr');
+			expect(rows).toHaveLength(1);
+			expect(rows[0]).toHaveTextContent('Alice');
+		});
+
+		it('shows match count in footer when filtering', () => {
+			render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC\nBob,LA\nCharlie,NYC"
+					theme={mockTheme}
+					searchQuery="NYC"
+				/>
+			);
+
+			expect(screen.getByText(/2 of 3 rows match/)).toBeInTheDocument();
+		});
+
+		it('shows all rows when search query is empty', () => {
+			const { container } = render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC\nBob,LA"
+					theme={mockTheme}
+					searchQuery=""
+				/>
+			);
+
+			const rows = container.querySelectorAll('tbody tr');
+			expect(rows).toHaveLength(2);
+		});
+
+		it('calls onMatchCount with filtered row count', () => {
+			const onMatchCount = vi.fn();
+			render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC\nBob,LA\nCharlie,NYC"
+					theme={mockTheme}
+					searchQuery="NYC"
+					onMatchCount={onMatchCount}
+				/>
+			);
+
+			expect(onMatchCount).toHaveBeenCalledWith(2);
+		});
+
+		it('highlights matching text in cells', () => {
+			const { container } = render(
+				<CsvTableRenderer
+					content="Name,City\nAlice,NYC"
+					theme={mockTheme}
+					searchQuery="NYC"
+				/>
+			);
+
+			const marks = container.querySelectorAll('mark');
+			expect(marks).toHaveLength(1);
+			expect(marks[0]).toHaveTextContent('NYC');
+		});
+	});
 });

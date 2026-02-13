@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, type ReactNode } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import type { Theme } from '../types';
 
 interface CsvTableRendererProps {
 	content: string;
 	theme: Theme;
+	searchQuery?: string;
+	onMatchCount?: (count: number) => void;
 }
 
 const MAX_DISPLAY_ROWS = 500;
@@ -133,8 +135,37 @@ function compareValues(a: string, b: string, direction: SortDirection): number {
 	return direction === 'asc' ? cmp : -cmp;
 }
 
-export function CsvTableRenderer({ content, theme }: CsvTableRendererProps) {
+/**
+ * Highlight matching substrings within a cell value.
+ */
+function highlightMatches(text: string, query: string, accentColor: string): ReactNode {
+	if (!query) return text;
+	const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const regex = new RegExp(`(${escaped})`, 'gi');
+	const parts = text.split(regex);
+	if (parts.length === 1) return text;
+	return parts.map((part, i) =>
+		regex.test(part) ? (
+			<mark
+				key={i}
+				style={{
+					backgroundColor: accentColor,
+					color: '#fff',
+					padding: '0 1px',
+					borderRadius: '2px',
+				}}
+			>
+				{part}
+			</mark>
+		) : (
+			part
+		),
+	);
+}
+
+export function CsvTableRenderer({ content, theme, searchQuery, onMatchCount }: CsvTableRendererProps) {
 	const [sort, setSort] = useState<SortState | null>(null);
+	const query = searchQuery?.trim() ?? '';
 
 	const allRows = useMemo(() => parseCsv(content), [content]);
 
@@ -144,8 +175,19 @@ export function CsvTableRenderer({ content, theme }: CsvTableRendererProps) {
 		[allRows],
 	);
 	const dataRows = useMemo(() => allRows.slice(1), [allRows]);
+
+	// Filter rows by search query (match any cell, case-insensitive)
+	const filteredRows = useMemo(() => {
+		if (!query) return dataRows;
+		const lowerQuery = query.toLowerCase();
+		return dataRows.filter((row) =>
+			row.some((cell) => cell.toLowerCase().includes(lowerQuery)),
+		);
+	}, [dataRows, query]);
+
 	const totalDataRows = dataRows.length;
-	const isTruncated = totalDataRows > MAX_DISPLAY_ROWS;
+	const displayRows = filteredRows;
+	const isTruncated = displayRows.length > MAX_DISPLAY_ROWS;
 
 	const alignments = useMemo(
 		() => detectColumnAlignments(dataRows.slice(0, 100), columnCount),
@@ -153,12 +195,17 @@ export function CsvTableRenderer({ content, theme }: CsvTableRendererProps) {
 	);
 
 	const sortedRows = useMemo(() => {
-		const rows = isTruncated ? dataRows.slice(0, MAX_DISPLAY_ROWS) : dataRows;
+		const rows = isTruncated ? displayRows.slice(0, MAX_DISPLAY_ROWS) : displayRows;
 		if (!sort) return rows;
 		return [...rows].sort((a, b) =>
 			compareValues(a[sort.column] ?? '', b[sort.column] ?? '', sort.direction),
 		);
-	}, [dataRows, sort, isTruncated]);
+	}, [displayRows, sort, isTruncated]);
+
+	// Report match count back to FilePreview
+	useEffect(() => {
+		onMatchCount?.(query ? filteredRows.length : 0);
+	}, [filteredRows.length, query, onMatchCount]);
 
 	const handleHeaderClick = (colIndex: number) => {
 		setSort((prev) => {
@@ -296,7 +343,9 @@ export function CsvTableRenderer({ content, theme }: CsvTableRendererProps) {
 										}}
 										title={row[colIdx] ?? ''}
 									>
-										{row[colIdx] ?? ''}
+										{query
+											? highlightMatches(row[colIdx] ?? '', query, theme.colors.accent)
+											: (row[colIdx] ?? '')}
 									</td>
 								))}
 							</tr>
@@ -308,7 +357,9 @@ export function CsvTableRenderer({ content, theme }: CsvTableRendererProps) {
 				className="mt-2 text-xs"
 				style={{ color: theme.colors.textDim }}
 			>
-				{totalDataRows.toLocaleString()} rows × {columnCount} columns
+				{query
+					? `${filteredRows.length.toLocaleString()} of ${totalDataRows.toLocaleString()} rows match`
+					: `${totalDataRows.toLocaleString()} rows`} × {columnCount} columns
 			</div>
 		</div>
 	);
