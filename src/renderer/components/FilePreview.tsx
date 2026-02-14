@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSlug from 'rehype-slug';
+import GithubSlugger from 'github-slugger';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
@@ -308,6 +309,7 @@ const extractHeadings = (content: string): TocEntry[] => {
 	const headings: TocEntry[] = [];
 	const lines = content.split('\n');
 	let inCodeFence = false;
+	const slugger = new GithubSlugger();
 
 	for (const line of lines) {
 		// Track code fence boundaries (``` or ~~~, optionally with language specifier)
@@ -326,12 +328,8 @@ const extractHeadings = (content: string): TocEntry[] => {
 		if (match) {
 			const level = match[1].length;
 			const text = match[2].trim();
-			// Generate slug same way rehype-slug does (lowercase, replace spaces with hyphens, remove special chars)
-			const slug = text
-				.toLowerCase()
-				.replace(/[^\w\s-]/g, '')
-				.replace(/\s+/g, '-')
-				.replace(/^-+|-+$/g, '');
+			// Use github-slugger to match rehype-slug's ID generation exactly
+			const slug = slugger.slug(text);
 			headings.push({ level, text, slug });
 		}
 	}
