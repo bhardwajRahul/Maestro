@@ -192,7 +192,7 @@ import {
 import { shouldOpenExternally, flattenTree } from './utils/fileExplorer';
 import type { FileNode } from './types/fileTree';
 import { substituteTemplateVariables } from './utils/templateVariables';
-import { validateNewSession, getProviderDisplayName } from './utils/sessionValidation';
+import { validateNewSession } from './utils/sessionValidation';
 import { formatLogsForClipboard } from './utils/contextExtractor';
 import { getSlashCommandDescription } from './constants/app';
 import { useUIStore } from './stores/uiStore';
@@ -3306,12 +3306,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 			? hasActiveSessionCapability('supportsImageInputOnResume')
 			: hasActiveSessionCapability('supportsImageInput');
 	}, [activeSession, isResumingSession, hasActiveSessionCapability]);
-	const blockCodexResumeImages =
-		!!activeSession &&
-		activeSession.toolType === 'codex' &&
-		isResumingSession &&
-		!hasActiveSessionCapability('supportsImageInputOnResume');
-
 	// Track previous active tab to detect tab switches
 	const prevActiveTabIdRef = useRef<string | undefined>(activeTab?.id);
 
@@ -9386,15 +9380,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 	};
 
 	// Image Handlers
-	const showImageAttachBlockedNotice = useCallback(() => {
-		const agentName = activeSession?.toolType
-			? getProviderDisplayName(activeSession.toolType)
-			: 'the agent';
-		const message = `Images are only available in the initial message to ${agentName}. Please start a new session if you want to include an image.`;
-		setSuccessFlashNotification(message);
-		setTimeout(() => setSuccessFlashNotification(null), 4000);
-	}, [setSuccessFlashNotification, activeSession?.toolType]);
-
 	const handlePaste = (e: React.ClipboardEvent) => {
 		// Allow image pasting in group chat or direct AI mode
 		const isGroupChatActive = !!activeGroupChatId;
@@ -9428,12 +9413,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 
 		// Image handling requires AI mode or group chat
 		if (!isGroupChatActive && !isDirectAIMode) return;
-
-		if (hasImage && isDirectAIMode && !isGroupChatActive && blockCodexResumeImages) {
-			e.preventDefault();
-			showImageAttachBlockedNotice();
-			return;
-		}
 
 		for (let i = 0; i < items.length; i++) {
 			if (items[i].type.indexOf('image') !== -1) {
@@ -9483,12 +9462,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 		if (!isGroupChatActive && !isDirectAIMode) return;
 
 		const files = e.dataTransfer.files;
-		const hasImage = Array.from(files).some((file) => file.type.startsWith('image/'));
-
-		if (hasImage && isDirectAIMode && !isGroupChatActive && blockCodexResumeImages) {
-			showImageAttachBlockedNotice();
-			return;
-		}
 
 		for (let i = 0; i < files.length; i++) {
 			if (files[i].type.startsWith('image/')) {
@@ -11836,9 +11809,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 								? setStagedImages
 								: undefined
 					}
-					onPromptImageAttachBlocked={
-						activeGroupChatId || !blockCodexResumeImages ? undefined : showImageAttachBlockedNotice
-					}
+					onPromptImageAttachBlocked={undefined}
 					onPromptOpenLightbox={handleSetLightboxImage}
 					promptTabSaveToHistory={activeGroupChatId ? false : (activeTab?.saveToHistory ?? false)}
 					onPromptToggleTabSaveToHistory={

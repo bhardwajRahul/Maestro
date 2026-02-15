@@ -174,7 +174,7 @@ export const AGENT_CAPABILITIES: Record<string, AgentCapabilities> = {
 		supportsJsonOutput: true, // --json flag - Verified
 		supportsSessionId: true, // thread_id in thread.started event - Verified
 		supportsImageInput: true, // -i, --image flag - Documented
-		supportsImageInputOnResume: false, // Codex resume subcommand doesn't support -i flag - Verified
+		supportsImageInputOnResume: true, // Images are written to disk and paths embedded in prompt text (codex exec resume doesn't support -i flag)
 		supportsSlashCommands: false, // None - Verified
 		supportsSessionStorage: true, // ~/.codex/sessions/YYYY/MM/DD/*.jsonl - Verified
 		supportsCostTracking: false, // Token counts only - Codex doesn't provide cost, pricing varies by model
