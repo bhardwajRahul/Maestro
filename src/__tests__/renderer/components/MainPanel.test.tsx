@@ -3,6 +3,10 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { Theme, Session, Shortcut, FocusArea, BatchRunState } from '../../../renderer/types';
 import { gitService } from '../../../renderer/services/git';
+import {
+	clearCapabilitiesCache,
+	setCapabilitiesCache,
+} from '../../../renderer/hooks/agent/useAgentCapabilities';
 
 // Mock child components to simplify testing - must be before MainPanel import
 vi.mock('../../../renderer/components/LogViewer', () => ({
@@ -1660,10 +1664,10 @@ describe('MainPanel', () => {
 			render(<MainPanel {...defaultProps} activeSession={session} setGitLogOpen={setGitLogOpen} />);
 
 			await waitFor(() => {
-				expect(screen.getByText('MY-SSH-REMOTE')).toBeInTheDocument();
+				expect(screen.getByText('my-ssh-remote')).toBeInTheDocument();
 			});
 
-			fireEvent.click(screen.getByText('MY-SSH-REMOTE'));
+			fireEvent.click(screen.getByText('my-ssh-remote'));
 
 			expect(setGitLogOpen).toHaveBeenCalledWith(true);
 		});

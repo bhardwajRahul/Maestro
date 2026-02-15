@@ -97,7 +97,7 @@ describe('Git IPC handlers', () => {
 	let handlers: Map<string, Function>;
 	let mockSettingsStore: any;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		// Clear mocks
 		vi.clearAllMocks();
 
@@ -1175,6 +1175,8 @@ COMMIT_STARTdef987654321|Jane Smith|2024-01-14T09:00:00+00:00||Add feature
 				],
 				{
 					sshRemote: {
+						id: 'ssh-remote-123',
+						enabled: true,
 						host: 'example.com',
 						user: 'testuser',
 						privateKeyPath: '/path/to/key',
@@ -1222,6 +1224,8 @@ COMMIT_STARTdef987654321|Jane Smith|2024-01-14T09:00:00+00:00||Add feature
 				],
 				{
 					sshRemote: {
+						id: 'ssh-remote-123',
+						enabled: true,
 						host: 'example.com',
 						user: 'testuser',
 						privateKeyPath: '/path/to/key',
@@ -1315,6 +1319,8 @@ COMMIT_STARTdef987654321|Jane Smith|2024-01-14T09:00:00+00:00||Add feature
 
 			expect(remoteGit.execGitRemote).toHaveBeenCalledWith(['rev-list', '--count', 'HEAD'], {
 				sshRemote: {
+					id: 'ssh-remote-123',
+					enabled: true,
 					host: 'example.com',
 					user: 'testuser',
 					privateKeyPath: '/path/to/key',
@@ -1495,6 +1501,8 @@ index 0000000..abc1234
 				['show', '--stat', '--patch', 'abc123456789'],
 				{
 					sshRemote: {
+						id: 'ssh-remote-123',
+						enabled: true,
 						host: 'example.com',
 						user: 'testuser',
 						privateKeyPath: '/path/to/key',
@@ -1524,6 +1532,12 @@ index 1234567..abcdefg 100644
 @@ -1 +1,2 @@
  line 1
 +merged line`;
+
+			vi.mocked(execFile.execFileNoThrow).mockResolvedValue({
+				stdout: mergeShowOutput,
+				stderr: '',
+				exitCode: 0,
+			});
 
 			const handler = handlers.get('git:show');
 			const result = await handler!({} as any, '/test/repo', 'def789012345');
