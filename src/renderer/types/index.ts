@@ -904,7 +904,7 @@ export interface LeaderboardSubmitResponse {
 // Director's Notes settings for synopsis generation
 export interface DirectorNotesSettings {
 	/** Agent type to use for synopsis generation */
-	provider: string;
+	provider: ToolType;
 	/** Default lookback period in days (1-90) */
 	defaultLookbackDays: number;
 	/** Custom path to the agent binary */

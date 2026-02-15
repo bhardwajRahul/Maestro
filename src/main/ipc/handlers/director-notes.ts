@@ -12,7 +12,7 @@
 
 import { ipcMain } from 'electron';
 import { logger } from '../../utils/logger';
-import { HistoryEntry } from '../../../shared/types';
+import { HistoryEntry, ToolType } from '../../../shared/types';
 import { paginateEntries } from '../../../shared/history';
 import type { PaginatedResult } from '../../../shared/history';
 import { getHistoryManager } from '../../history-manager';
@@ -24,6 +24,20 @@ import type { ProcessManager } from '../../process-manager';
 import type { AgentDetector } from '../../agents';
 
 const LOG_CONTEXT = '[DirectorNotes]';
+
+/**
+ * Sanitize a session display name for safe embedding in AI prompts.
+ * Strips markdown formatting characters and control sequences that could
+ * be interpreted as prompt instructions by the AI agent.
+ */
+export function sanitizeDisplayName(name: string): string {
+	return name
+		// Strip markdown headers, bold, italic, links, images
+		.replace(/[#*_`~\[\]()!|>]/g, '')
+		// Collapse multiple whitespace/newlines into single space
+		.replace(/\s+/g, ' ')
+		.trim();
+}
 
 // Helper to create handler options with consistent context
 const handlerOpts = (operation: string): Pick<CreateHandlerOptions, 'context' | 'operation'> => ({
@@ -80,7 +94,7 @@ export interface UnifiedHistoryStats {
 
 export interface SynopsisOptions {
 	lookbackDays: number;
-	provider: string;
+	provider: ToolType;
 	customPath?: string;
 	customArgs?: string;
 	customEnvVars?: Record<string, string>;
@@ -251,7 +265,7 @@ export function registerDirectorNotesHandlers(deps: DirectorNotesHandlerDependen
 
 				// Build the prompt with file paths instead of inline data
 				const manifestLines = sessionManifest
-					.map(s => `- Session "${s.displayName}" (ID: ${s.sessionId}): ${s.historyFilePath}`)
+					.map(s => `- Session "${sanitizeDisplayName(s.displayName)}" (ID: ${s.sessionId}): ${s.historyFilePath}`)
 					.join('\n');
 
 				const cutoffDate = new Date(cutoffTime).toLocaleDateString('en-US', {

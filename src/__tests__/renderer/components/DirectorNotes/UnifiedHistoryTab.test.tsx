@@ -239,7 +239,7 @@ describe('UnifiedHistoryTab', () => {
 			render(<UnifiedHistoryTab theme={mockTheme} />);
 
 			await waitFor(() => {
-				expect(screen.getByText(/No history entries found/)).toBeInTheDocument();
+				expect(screen.getByText(/No history entries found across any agents/)).toBeInTheDocument();
 			});
 		});
 
@@ -298,7 +298,7 @@ describe('UnifiedHistoryTab', () => {
 			render(<UnifiedHistoryTab theme={mockTheme} />);
 
 			await waitFor(() => {
-				expect(screen.getByText(/No history entries found/)).toBeInTheDocument();
+				expect(screen.getByText(/No history entries found across any agents/)).toBeInTheDocument();
 			});
 			expect(screen.queryByTestId('history-stats-bar')).not.toBeInTheDocument();
 		});
@@ -647,7 +647,7 @@ describe('UnifiedHistoryTab', () => {
 			render(<UnifiedHistoryTab theme={mockTheme} />);
 
 			await waitFor(() => {
-				expect(screen.getByText(/No history entries found/)).toBeInTheDocument();
+				expect(screen.getByText(/No history entries found across any agents/)).toBeInTheDocument();
 			});
 		});
 	});

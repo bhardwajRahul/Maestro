@@ -7,6 +7,7 @@
  */
 
 import { ipcRenderer } from 'electron';
+import type { ToolType } from '../../shared/types';
 
 /** Aggregate stats returned alongside unified history */
 export interface UnifiedHistoryStats {
@@ -67,7 +68,7 @@ export interface UnifiedHistoryEntry {
  */
 export interface SynopsisOptions {
 	lookbackDays: number;
-	provider: string;
+	provider: ToolType;
 	customPath?: string;
 	customArgs?: string;
 	customEnvVars?: Record<string, string>;

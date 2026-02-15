@@ -19,6 +19,9 @@ import type { TabFocusHandle } from './OverviewTab';
 /** Page size for progressive loading */
 const PAGE_SIZE = 100;
 
+/** Distance from bottom (in px) at which to trigger loading the next page */
+const SCROLL_LOAD_THRESHOLD = 500;
+
 interface UnifiedHistoryEntry extends HistoryEntry {
 	agentName?: string;
 	sourceSessionId: string;
@@ -148,8 +151,7 @@ export const UnifiedHistoryTab = forwardRef<TabFocusHandle, UnifiedHistoryTabPro
 		const el = listRef.current;
 		if (!el) return;
 
-		// Trigger when within 500px of the bottom
-		const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 500;
+		const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_LOAD_THRESHOLD;
 		if (nearBottom) {
 			loadingMoreRef.current = true;
 			loadPage(entries.length, true, lookbackHours);
@@ -380,10 +382,16 @@ export const UnifiedHistoryTab = forwardRef<TabFocusHandle, UnifiedHistoryTabPro
 				)}
 
 				{isLoading ? (
-					<div className="text-center py-8 text-xs opacity-70">Loading history...</div>
+					<div className="text-center py-8 text-xs" style={{ color: theme.colors.textDim }}>Loading history...</div>
 				) : filteredEntries.length === 0 ? (
-					<div className="text-center py-8 text-xs opacity-70">
-						No history entries found.
+					<div className="text-center py-8 text-xs" style={{ color: theme.colors.textDim }}>
+						{searchQuery
+							? `No entries matching "${searchQuery}".`
+							: entries.length === 0
+								? lookbackHours !== null
+									? 'No history entries in this time range. Try expanding the lookback period.'
+									: 'No history entries found across any agents.'
+								: 'No entries match the current filters.'}
 					</div>
 				) : (
 					<div

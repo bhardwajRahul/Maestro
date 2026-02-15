@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ipcMain } from 'electron';
-import { registerDirectorNotesHandlers } from '../../../../main/ipc/handlers/director-notes';
+import { registerDirectorNotesHandlers, sanitizeDisplayName } from '../../../../main/ipc/handlers/director-notes';
 import * as historyManagerModule from '../../../../main/history-manager';
 import type { HistoryManager } from '../../../../main/history-manager';
 import type { HistoryEntry } from '../../../../shared/types';
@@ -627,6 +627,34 @@ describe('director-notes IPC handlers', () => {
 			expect(result.error).toContain('empty response');
 		});
 
+		it('should sanitize session names in the prompt manifest', async () => {
+			const { groomContext } = await import('../../../../main/utils/context-groomer');
+			vi.mocked(groomContext).mockResolvedValue({
+				response: '# Synopsis',
+				durationMs: 1000,
+				completionReason: 'process exited with code 0',
+			});
+
+			vi.mocked(mockHistoryManager.listSessionsWithHistory).mockReturnValue(['session-1']);
+			vi.mocked(mockHistoryManager.getHistoryFilePath).mockReturnValue('/data/history/session-1.json');
+
+			// Session name with markdown injection characters
+			mockGetSessionsStore.mockReturnValue({
+				get: vi.fn().mockReturnValue([
+					{ id: 'session-1', name: '**bold** [link](http://evil) # heading', toolType: 'claude-code', cwd: '/test', projectRoot: '/test' },
+				]),
+			});
+
+			const handler = handlers.get('director-notes:generateSynopsis');
+			await handler!({} as any, { lookbackDays: 7, provider: 'claude-code' });
+
+			const promptArg = vi.mocked(groomContext).mock.calls[0][0].prompt;
+			// Markdown characters should be stripped
+			expect(promptArg).not.toContain('**bold**');
+			expect(promptArg).not.toContain('[link]');
+			expect(promptArg).toContain('bold linkhttp://evil heading');
+		});
+
 		it('should include lookback and cutoff metadata in prompt', async () => {
 			const { groomContext } = await import('../../../../main/utils/context-groomer');
 			vi.mocked(groomContext).mockResolvedValue({
@@ -645,5 +673,34 @@ describe('director-notes IPC handlers', () => {
 			expect(promptArg).toContain('Lookback period: 14 days');
 			expect(promptArg).toContain('Timestamp cutoff:');
 		});
+	});
+});
+
+describe('sanitizeDisplayName', () => {
+	it('should strip markdown formatting characters', () => {
+		expect(sanitizeDisplayName('**bold** text')).toBe('bold text');
+		expect(sanitizeDisplayName('# heading')).toBe('heading');
+		expect(sanitizeDisplayName('`code`')).toBe('code');
+		expect(sanitizeDisplayName('~~strikethrough~~')).toBe('strikethrough');
+	});
+
+	it('should strip link and image syntax', () => {
+		expect(sanitizeDisplayName('[link](url)')).toBe('linkurl');
+		expect(sanitizeDisplayName('![alt](img)')).toBe('altimg');
+	});
+
+	it('should collapse whitespace and trim', () => {
+		expect(sanitizeDisplayName('  hello   world  ')).toBe('hello world');
+		expect(sanitizeDisplayName('line\nnewline')).toBe('line newline');
+	});
+
+	it('should preserve emoji and regular text', () => {
+		expect(sanitizeDisplayName('🚧 feature-branch')).toBe('🚧 feature-branch');
+		expect(sanitizeDisplayName('my-session')).toBe('my-session');
+	});
+
+	it('should handle empty and whitespace-only strings', () => {
+		expect(sanitizeDisplayName('')).toBe('');
+		expect(sanitizeDisplayName('   ')).toBe('');
 	});
 });

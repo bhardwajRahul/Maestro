@@ -44,6 +44,7 @@ import type {
 	CustomAICommand,
 	LLMProvider,
 	AgentConfig,
+	ToolType,
 } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -2753,7 +2754,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 						const dnSelectedTile = AGENT_TILES.find((t) => t.id === directorNotesSettings.provider);
 						const dnHasCustomization = dnCustomPath || dnCustomArgs || Object.keys(dnCustomEnvVars).length > 0;
 
-						const handleDnAgentChange = (agentId: string) => {
+						const handleDnAgentChange = (agentId: ToolType) => {
 							setDirectorNotesSettings({
 								...directorNotesSettings,
 								provider: agentId,
@@ -2856,7 +2857,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 										<div className="relative flex-1">
 											<select
 												value={directorNotesSettings.provider}
-												onChange={(e) => handleDnAgentChange(e.target.value)}
+												onChange={(e) => handleDnAgentChange(e.target.value as ToolType)}
 												className="w-full px-3 py-2 pr-10 rounded-lg border outline-none appearance-none cursor-pointer text-sm"
 												style={{
 													backgroundColor: theme.colors.bgMain,
