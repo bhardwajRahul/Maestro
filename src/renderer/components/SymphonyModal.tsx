@@ -1897,7 +1897,7 @@ export function SymphonyModal({
 																		: '1px solid transparent',
 															}}
 														>
-															<span>{info?.emoji}</span>
+															<span>{info?.emoji ?? '📦'}</span>
 															<span>{info?.label ?? cat}</span>
 														</button>
 													);
