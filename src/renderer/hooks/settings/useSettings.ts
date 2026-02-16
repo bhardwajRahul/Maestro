@@ -14,11 +14,17 @@ import type {
 	KeyboardMasteryStats,
 	ThinkingMode,
 	DirectorNotesSettings,
+	EncoreFeatureFlags,
 } from '../../types';
 import { DEFAULT_CUSTOM_THEME_COLORS } from '../../constants/themes';
 import { DEFAULT_SHORTCUTS, TAB_SHORTCUTS, FIXED_SHORTCUTS } from '../../constants/shortcuts';
 import { getLevelIndex } from '../../constants/keyboardMastery';
 import { commitCommandPrompt } from '../../../prompts';
+
+// Default Encore Feature flags - all disabled by default
+const DEFAULT_ENCORE_FEATURES: EncoreFeatureFlags = {
+	directorNotes: false,
+};
 
 // Default Director's Notes settings
 const DEFAULT_DIRECTOR_NOTES_SETTINGS: DirectorNotesSettings = {
@@ -366,6 +372,10 @@ export interface UseSettingsReturn {
 	suppressWindowsWarning: boolean;
 	setSuppressWindowsWarning: (value: boolean) => void;
 
+	// Encore Features - optional features disabled by default
+	encoreFeatures: EncoreFeatureFlags;
+	setEncoreFeatures: (value: EncoreFeatureFlags) => void;
+
 	// Director's Notes settings
 	directorNotesSettings: DirectorNotesSettings;
 	setDirectorNotesSettings: (value: DirectorNotesSettings) => void;
@@ -538,6 +548,9 @@ export function useSettings(): UseSettingsReturn {
 
 	// Windows warning suppression
 	const [suppressWindowsWarning, setSuppressWindowsWarningState] = useState(false); // Default: show warning
+
+	// Encore Features
+	const [encoreFeatures, setEncorefeaturesState] = useState<EncoreFeatureFlags>(DEFAULT_ENCORE_FEATURES);
 
 	// Director's Notes settings
 	const [directorNotesSettings, setDirectorNotesSettingsState] = useState<DirectorNotesSettings>(
@@ -1377,6 +1390,12 @@ export function useSettings(): UseSettingsReturn {
 		window.maestro.settings.set('suppressWindowsWarning', value);
 	}, []);
 
+	// Encore Features setter
+	const setEncoreFeatures = useCallback((value: EncoreFeatureFlags) => {
+		setEncorefeaturesState(value);
+		window.maestro.settings.set('encoreFeatures', value);
+	}, []);
+
 	// Director's Notes settings setter
 	const setDirectorNotesSettings = useCallback((value: DirectorNotesSettings) => {
 		setDirectorNotesSettingsState(value);
@@ -1470,6 +1489,7 @@ export function useSettings(): UseSettingsReturn {
 			const savedAutomaticTabNamingEnabled = allSettings['automaticTabNamingEnabled'];
 			const savedFileTabAutoRefreshEnabled = allSettings['fileTabAutoRefreshEnabled'];
 			const savedSuppressWindowsWarning = allSettings['suppressWindowsWarning'];
+			const savedEncoreFeatures = allSettings['encoreFeatures'];
 			const savedDirectorNotesSettings = allSettings['directorNotesSettings'];
 			const savedWakatimeApiKey = allSettings['wakatimeApiKey'];
 			const savedWakatimeEnabled = allSettings['wakatimeEnabled'];
@@ -1867,6 +1887,14 @@ export function useSettings(): UseSettingsReturn {
 				setSuppressWindowsWarningState(savedSuppressWindowsWarning as boolean);
 			}
 
+			// Encore Features
+			if (savedEncoreFeatures !== undefined) {
+				setEncorefeaturesState({
+					...DEFAULT_ENCORE_FEATURES,
+					...(savedEncoreFeatures as Partial<EncoreFeatureFlags>),
+				});
+			}
+
 			// Director's Notes settings
 			if (savedDirectorNotesSettings !== undefined) {
 				setDirectorNotesSettingsState({
@@ -2068,6 +2096,8 @@ export function useSettings(): UseSettingsReturn {
 			setFileTabAutoRefreshEnabled,
 			suppressWindowsWarning,
 			setSuppressWindowsWarning,
+			encoreFeatures,
+			setEncoreFeatures,
 			directorNotesSettings,
 			setDirectorNotesSettings,
 			wakatimeApiKey,
@@ -2224,6 +2254,8 @@ export function useSettings(): UseSettingsReturn {
 			setFileTabAutoRefreshEnabled,
 			suppressWindowsWarning,
 			setSuppressWindowsWarning,
+			encoreFeatures,
+			setEncoreFeatures,
 			directorNotesSettings,
 			setDirectorNotesSettings,
 			wakatimeApiKey,

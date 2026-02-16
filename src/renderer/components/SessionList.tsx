@@ -441,7 +441,7 @@ interface HamburgerMenuContentProps {
 	setProcessMonitorOpen: (open: boolean) => void;
 	setUsageDashboardOpen: (open: boolean) => void;
 	setSymphonyModalOpen: (open: boolean) => void;
-	setDirectorNotesOpen: (open: boolean) => void;
+	setDirectorNotesOpen?: (open: boolean) => void;
 	setUpdateCheckModalOpen: (open: boolean) => void;
 	setAboutModalOpen: (open: boolean) => void;
 	setMenuOpen: (open: boolean) => void;
@@ -701,6 +701,7 @@ function HamburgerMenuContent({
 					{shortcuts.openSymphony ? formatShortcutKeys(shortcuts.openSymphony.keys) : '⇧⌘Y'}
 				</span>
 			</button>
+			{setDirectorNotesOpen && (
 			<button
 				onClick={() => {
 					setDirectorNotesOpen(true);
@@ -726,6 +727,7 @@ function HamburgerMenuContent({
 					</span>
 				)}
 			</button>
+		)}
 			<div className="my-1 border-t" style={{ borderColor: theme.colors.border }} />
 			<button
 				onClick={() => {
@@ -1078,7 +1080,7 @@ interface SessionListProps {
 	setProcessMonitorOpen: (open: boolean) => void;
 	setUsageDashboardOpen: (open: boolean) => void;
 	setSymphonyModalOpen: (open: boolean) => void;
-	setDirectorNotesOpen: (open: boolean) => void;
+	setDirectorNotesOpen?: (open: boolean) => void;
 	setQuickActionOpen: (open: boolean) => void;
 	toggleGroup: (groupId: string) => void;
 	handleDragStart: (sessionId: string) => void;
