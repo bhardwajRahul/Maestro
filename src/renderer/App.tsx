@@ -70,7 +70,7 @@ import type { SymphonyContributionData } from './components/SymphonyModal';
 
 // Group Chat Components
 import { GroupChatPanel } from './components/GroupChatPanel';
-import { GroupChatRightPanel, type GroupChatRightTab } from './components/GroupChatRightPanel';
+import { GroupChatRightPanel } from './components/GroupChatRightPanel';
 
 // Import custom hooks
 import {
@@ -121,6 +121,8 @@ import {
 	useAutoRunHandlers,
 	// Tab handlers
 	useTabHandlers,
+	// Group chat handlers
+	useGroupChatHandlers,
 } from './hooks';
 import type { TabCompletionSuggestion, TabCompletionFilter } from './hooks';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
@@ -133,7 +135,6 @@ import { useModalActions, useModalStore } from './stores/modalStore';
 import { GitStatusProvider } from './contexts/GitStatusContext';
 import { InputProvider, useInputContext } from './contexts/InputContext';
 import { useGroupChatStore } from './stores/groupChatStore';
-import type { GroupChatMessagesHandle } from './components/GroupChatMessages';
 import { useBatchStore } from './stores/batchStore';
 // All session state is read directly from useSessionStore in MaestroConsoleInner.
 import { useSessionStore, selectActiveSession } from './stores/sessionStore';
@@ -372,13 +373,9 @@ function MaestroConsoleInner() {
 		showNewGroupChatModal,
 		setShowNewGroupChatModal,
 		showDeleteGroupChatModal,
-		setShowDeleteGroupChatModal,
 		showRenameGroupChatModal,
-		setShowRenameGroupChatModal,
 		showEditGroupChatModal,
-		setShowEditGroupChatModal,
 		showGroupChatInfo,
-		setShowGroupChatInfo,
 		// Git Diff Viewer
 		gitDiffPreview,
 		setGitDiffPreview,
@@ -729,29 +726,11 @@ function MaestroConsoleInner() {
 	const {
 		setGroupChats,
 		setActiveGroupChatId,
-		setGroupChatMessages,
-		setGroupChatState,
 		setGroupChatStagedImages,
 		setGroupChatReadOnlyMode,
-		setGroupChatExecutionQueue,
 		setGroupChatRightTab,
 		setGroupChatParticipantColors,
-		setModeratorUsage,
-		setParticipantStates,
-		setGroupChatStates,
-		setAllGroupChatParticipantStates,
-		setGroupChatError,
 	} = useGroupChatStore.getState();
-
-	// Refs for focus management (previously in GroupChatContext)
-	const groupChatInputRef = useRef<HTMLTextAreaElement>(null);
-	const groupChatMessagesRef = useRef<GroupChatMessagesHandle>(null);
-
-	// clearGroupChatError: store clears error, we handle the focus side-effect
-	const handleClearGroupChatErrorBase = useCallback(() => {
-		useGroupChatStore.getState().clearGroupChatError();
-		setTimeout(() => groupChatInputRef.current?.focus(), 0);
-	}, []);
 
 	// SSH Remote configs for looking up SSH remote names (used for participant cards in group chat)
 	const [sshRemoteConfigs, setSshRemoteConfigs] = useState<Array<{ id: string; name: string }>>([]);
@@ -1035,23 +1014,6 @@ function MaestroConsoleInner() {
 			}
 		},
 		[setActiveSessionId, setSessions]
-	);
-
-	const handleProcessMonitorNavigateToGroupChat = useCallback(
-		(groupChatId: string) => {
-			// Restore state for this group chat when navigating from ProcessMonitor
-			setActiveGroupChatId(groupChatId);
-			setGroupChatState(groupChatStates.get(groupChatId) ?? 'idle');
-			setParticipantStates(allGroupChatParticipantStates.get(groupChatId) ?? new Map());
-			setProcessMonitorOpen(false);
-		},
-		[
-			setActiveGroupChatId,
-			setGroupChatState,
-			groupChatStates,
-			setParticipantStates,
-			allGroupChatParticipantStates,
-		]
 	);
 
 	// LogViewer shortcut handler
@@ -1935,139 +1897,7 @@ function MaestroConsoleInner() {
 
 	// IPC process event listeners are now in useAgentListeners hook (called after useAgentSessionManagement)
 
-	// --- GROUP CHAT EVENT LISTENERS ---
-	// Listen for real-time updates to group chat messages and state
-	useEffect(() => {
-		const unsubMessage = window.maestro.groupChat.onMessage((id, message) => {
-			if (id === activeGroupChatId) {
-				setGroupChatMessages((prev) => [...prev, message]);
-			}
-		});
-
-		const unsubState = window.maestro.groupChat.onStateChange((id, state) => {
-			// Track state for ALL group chats (for sidebar indicator when not active)
-			setGroupChatStates((prev) => {
-				const next = new Map(prev);
-				next.set(id, state);
-				return next;
-			});
-			// Also update the active group chat's state for immediate UI
-			if (id === activeGroupChatId) {
-				setGroupChatState(state);
-			}
-		});
-
-		const unsubParticipants = window.maestro.groupChat.onParticipantsChanged((id, participants) => {
-			// Update the group chat's participants list
-			setGroupChats((prev) =>
-				prev.map((chat) => (chat.id === id ? { ...chat, participants } : chat))
-			);
-		});
-
-		const unsubModeratorUsage = window.maestro.groupChat.onModeratorUsage?.((id, usage) => {
-			if (id === activeGroupChatId) {
-				// When contextUsage is -1, tokens were accumulated from multi-tool turns.
-				// Preserve previous context/token values; only update cost.
-				if (usage.contextUsage < 0) {
-					setModeratorUsage((prev) =>
-						prev
-							? { ...prev, totalCost: usage.totalCost }
-							: { contextUsage: 0, totalCost: usage.totalCost, tokenCount: 0 }
-					);
-				} else {
-					setModeratorUsage(usage);
-				}
-			}
-		});
-
-		console.log(
-			`[GroupChat:UI] Setting up onParticipantState listener, activeGroupChatId=${activeGroupChatId}`
-		);
-		const unsubParticipantState = window.maestro.groupChat.onParticipantState?.(
-			(id, participantName, state) => {
-				console.log(
-					`[GroupChat:UI] Received participant state: chatId=${id}, participant=${participantName}, state=${state}, activeGroupChatId=${activeGroupChatId}`
-				);
-				// Track participant state for ALL group chats (for sidebar indicator)
-				setAllGroupChatParticipantStates((prev) => {
-					const next = new Map(prev);
-					const chatStates = next.get(id) || new Map();
-					const updatedChatStates = new Map(chatStates);
-					updatedChatStates.set(participantName, state);
-					next.set(id, updatedChatStates);
-					console.log(
-						`[GroupChat:UI] Updated allGroupChatParticipantStates for ${id}: ${JSON.stringify([
-							...updatedChatStates.entries(),
-						])}`
-					);
-					return next;
-				});
-				// Also update the active group chat's participant states for immediate UI
-				if (id === activeGroupChatId) {
-					console.log(
-						`[GroupChat:UI] Updating participantStates for active chat: ${participantName}=${state}`
-					);
-					setParticipantStates((prev) => {
-						const next = new Map(prev);
-						next.set(participantName, state);
-						console.log(
-							`[GroupChat:UI] New participantStates: ${JSON.stringify([...next.entries()])}`
-						);
-						return next;
-					});
-				} else {
-					console.log(
-						`[GroupChat:UI] Skipping participantStates update - not active chat (${id} vs ${activeGroupChatId})`
-					);
-				}
-			}
-		);
-
-		const unsubModeratorSessionId = window.maestro.groupChat.onModeratorSessionIdChanged?.(
-			(id, agentSessionId) => {
-				// Update the group chat's moderator agent session ID (the Claude Code session UUID)
-				setGroupChats((prev) =>
-					prev.map((chat) =>
-						chat.id === id ? { ...chat, moderatorAgentSessionId: agentSessionId } : chat
-					)
-				);
-			}
-		);
-
-		return () => {
-			unsubMessage();
-			unsubState();
-			unsubParticipants();
-			unsubModeratorUsage?.();
-			unsubParticipantState?.();
-			unsubModeratorSessionId?.();
-		};
-	}, [activeGroupChatId]);
-
-	// Process group chat execution queue when state becomes idle
-	useEffect(() => {
-		if (groupChatState === 'idle' && groupChatExecutionQueue.length > 0 && activeGroupChatId) {
-			// Take the first item from the queue
-			const [nextItem, ...remainingQueue] = groupChatExecutionQueue;
-			setGroupChatExecutionQueue(remainingQueue);
-
-			// Send the queued message - update both active state and per-chat state
-			setGroupChatState('moderator-thinking');
-			setGroupChatStates((prev) => {
-				const next = new Map(prev);
-				next.set(activeGroupChatId, 'moderator-thinking');
-				return next;
-			});
-			window.maestro.groupChat.sendToModerator(
-				activeGroupChatId,
-				nextItem.text || '',
-				nextItem.images,
-				nextItem.readOnlyMode
-			);
-		}
-	}, [groupChatState, groupChatExecutionQueue, activeGroupChatId]);
-
-	// Refs (groupChatInputRef and groupChatMessagesRef are now declared above with groupChatStore state)
+	// Group chat event listeners and execution queue are now in useGroupChatHandlers hook
 	const logsEndRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const terminalOutputRef = useRef<HTMLDivElement>(null);
@@ -2299,6 +2129,38 @@ function MaestroConsoleInner() {
 		handleDeleteLog,
 	} = useTabHandlers();
 
+	// --- GROUP CHAT HANDLERS (extracted from App.tsx Phase 2B) ---
+	const {
+		groupChatInputRef,
+		groupChatMessagesRef,
+		handleClearGroupChatError,
+		groupChatRecoveryActions,
+		handleOpenGroupChat,
+		handleCloseGroupChat,
+		handleCreateGroupChat,
+		handleUpdateGroupChat,
+		deleteGroupChatWithConfirmation,
+		handleProcessMonitorNavigateToGroupChat,
+		handleOpenModeratorSession,
+		handleJumpToGroupChatMessage,
+		handleGroupChatRightTabChange,
+		handleSendGroupChatMessage,
+		handleGroupChatDraftChange,
+		handleRemoveGroupChatQueueItem,
+		handleReorderGroupChatQueueItems,
+		handleNewGroupChat,
+		handleEditGroupChat,
+		handleOpenRenameGroupChatModal,
+		handleOpenDeleteGroupChatModal,
+		handleCloseNewGroupChatModal,
+		handleCloseDeleteGroupChatModal,
+		handleConfirmDeleteGroupChat,
+		handleCloseRenameGroupChatModal,
+		handleRenameGroupChatFromModal,
+		handleCloseEditGroupChatModal,
+		handleCloseGroupChatInfo,
+	} = useGroupChatHandlers();
+
 	// --- APP HANDLERS (drag, file, folder operations) ---
 	const {
 		handleImageDragEnter,
@@ -2419,18 +2281,6 @@ function MaestroConsoleInner() {
 		onClearError: errorSession ? () => handleClearAgentError(errorSession.id) : undefined,
 		onRestartAgent: errorSession ? () => handleRestartAgentAfterError(errorSession.id) : undefined,
 		onAuthenticate: errorSession ? () => handleAuthenticateAfterError(errorSession.id) : undefined,
-	});
-
-	// Handler to clear group chat error (now uses context's clearGroupChatError)
-	const handleClearGroupChatError = handleClearGroupChatErrorBase;
-
-	// Use the agent error recovery hook for group chat errors
-	const { recoveryActions: groupChatRecoveryActions } = useAgentErrorRecovery({
-		error: groupChatError?.error,
-		agentId: 'claude-code', // Group chat moderator is always claude-code for now
-		sessionId: groupChatError?.groupChatId || '',
-		onRetry: handleClearGroupChatError,
-		onClearError: handleClearGroupChatError,
 	});
 
 	// Tab completion hook for terminal mode
@@ -3531,22 +3381,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 	const handleStartTour = useCallback(() => {
 		setTourFromWizard(false);
 		setTourOpen(true);
-	}, []);
-
-	const handleNewGroupChat = useCallback(() => {
-		setShowNewGroupChatModal(true);
-	}, []);
-
-	const handleEditGroupChat = useCallback((id: string) => {
-		setShowEditGroupChatModal(id);
-	}, []);
-
-	const handleOpenRenameGroupChatModal = useCallback((id: string) => {
-		setShowRenameGroupChatModal(id);
-	}, []);
-
-	const handleOpenDeleteGroupChatModal = useCallback((id: string) => {
-		setShowDeleteGroupChatModal(id);
 	}, []);
 
 	// PERF: Memoized callbacks for MainPanel file preview navigation
@@ -5512,267 +5346,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 		]
 	);
 
-	// --- GROUP CHAT HANDLERS ---
-
-	const handleOpenGroupChat = useCallback(
-		async (id: string) => {
-			const chat = await window.maestro.groupChat.load(id);
-			if (chat) {
-				setActiveGroupChatId(id);
-				const messages = await window.maestro.groupChat.getMessages(id);
-				setGroupChatMessages(messages);
-
-				// Restore the state for this specific chat from the per-chat state map
-				// This prevents state from one chat bleeding into another when switching
-				setGroupChatState((_prev) => {
-					const savedState = groupChatStates.get(id);
-					return savedState ?? 'idle';
-				});
-
-				// Restore participant states for this chat
-				const savedParticipantStates = allGroupChatParticipantStates.get(id);
-				console.log(
-					`[GroupChat:UI] handleOpenGroupChat: restoring participantStates for ${id}: ${
-						savedParticipantStates ? JSON.stringify([...savedParticipantStates.entries()]) : 'none'
-					}`
-				);
-				setParticipantStates(savedParticipantStates ?? new Map());
-
-				// Load saved right tab preference for this group chat
-				const savedTab = await window.maestro.settings.get(`groupChatRightTab:${id}`);
-				if (savedTab === 'participants' || savedTab === 'history') {
-					setGroupChatRightTab(savedTab);
-				} else {
-					setGroupChatRightTab('participants'); // Default
-				}
-
-				// Start moderator if not running - this initializes the session ID prefix
-				const moderatorSessionId = await window.maestro.groupChat.startModerator(id);
-				// Update the group chat state with the moderator session ID
-				if (moderatorSessionId) {
-					setGroupChats((prev) =>
-						prev.map((c) => (c.id === id ? { ...c, moderatorSessionId } : c))
-					);
-				}
-
-				// Focus the input after the component renders
-				setTimeout(() => {
-					setActiveFocus('main');
-					groupChatInputRef.current?.focus();
-				}, 100);
-			}
-		},
-		[groupChatStates, allGroupChatParticipantStates]
-	);
-
-	const handleCloseGroupChat = useCallback(() => {
-		setActiveGroupChatId(null);
-		setGroupChatMessages([]);
-		setGroupChatState('idle');
-		setParticipantStates(new Map());
-		setGroupChatError(null);
-	}, []);
-
-	// Handle right panel tab change with persistence
-	const handleGroupChatRightTabChange = useCallback(
-		(tab: GroupChatRightTab) => {
-			setGroupChatRightTab(tab);
-			if (activeGroupChatId) {
-				window.maestro.settings.set(`groupChatRightTab:${activeGroupChatId}`, tab);
-			}
-		},
-		[activeGroupChatId]
-	);
-
-	// Jump to a message in the group chat by timestamp
-	const handleJumpToGroupChatMessage = useCallback((timestamp: number) => {
-		// Use the messages ref to scroll to the target message
-		groupChatMessagesRef.current?.scrollToMessage(timestamp);
-	}, []);
-
-	// Open the moderator session in the direct agent view
-	const handleOpenModeratorSession = useCallback(
-		(moderatorSessionId: string) => {
-			// Find the session that has this agent session ID
-			const session = sessions.find((s) =>
-				s.aiTabs?.some((tab) => tab.agentSessionId === moderatorSessionId)
-			);
-
-			if (session) {
-				// Close group chat
-				setActiveGroupChatId(null);
-				setGroupChatMessages([]);
-				setGroupChatState('idle');
-				setParticipantStates(new Map());
-
-				// Set the session as active
-				setActiveSessionId(session.id);
-
-				// Find and activate the tab with this agent session ID
-				const tab = session.aiTabs?.find((t) => t.agentSessionId === moderatorSessionId);
-				if (tab) {
-					setSessions((prev) =>
-						prev.map((s) => (s.id === session.id ? { ...s, activeTabId: tab.id } : s))
-					);
-				}
-			}
-		},
-		[sessions, setActiveSessionId]
-	);
-
-	const handleCreateGroupChat = useCallback(
-		async (
-			name: string,
-			moderatorAgentId: string,
-			moderatorConfig?: {
-				customPath?: string;
-				customArgs?: string;
-				customEnvVars?: Record<string, string>;
-				customModel?: string;
-			}
-		) => {
-			try {
-				const chat = await window.maestro.groupChat.create(name, moderatorAgentId, moderatorConfig);
-				setGroupChats((prev) => [chat, ...prev]);
-				setShowNewGroupChatModal(false);
-				handleOpenGroupChat(chat.id);
-			} catch (err) {
-				setShowNewGroupChatModal(false);
-				const message = err instanceof Error ? err.message : '';
-				const isValidationError = message.includes('Invalid moderator agent ID');
-				notifyToast({
-					type: 'error',
-					title: 'Group Chat',
-					message: isValidationError
-						? message.replace(/^Error invoking remote method '[^']+': /, '')
-						: 'Failed to create group chat',
-				});
-				if (!isValidationError) {
-					throw err; // Unexpected — let Sentry capture via unhandledrejection
-				}
-			}
-		},
-		[handleOpenGroupChat]
-	);
-
-	const handleDeleteGroupChat = useCallback(
-		async (id: string) => {
-			await window.maestro.groupChat.delete(id);
-			setGroupChats((prev) => prev.filter((c) => c.id !== id));
-			if (activeGroupChatId === id) {
-				handleCloseGroupChat();
-			}
-			setShowDeleteGroupChatModal(null);
-		},
-		[activeGroupChatId, handleCloseGroupChat]
-	);
-
-	const handleRenameGroupChat = useCallback(async (id: string, newName: string) => {
-		await window.maestro.groupChat.rename(id, newName);
-		setGroupChats((prev) => prev.map((c) => (c.id === id ? { ...c, name: newName } : c)));
-		setShowRenameGroupChatModal(null);
-	}, []);
-
-	const handleUpdateGroupChat = useCallback(
-		async (
-			id: string,
-			name: string,
-			moderatorAgentId: string,
-			moderatorConfig?: {
-				customPath?: string;
-				customArgs?: string;
-				customEnvVars?: Record<string, string>;
-			}
-		) => {
-			const updated = await window.maestro.groupChat.update(id, {
-				name,
-				moderatorAgentId,
-				moderatorConfig,
-			});
-			setGroupChats((prev) => prev.map((c) => (c.id === id ? updated : c)));
-			setShowEditGroupChatModal(null);
-		},
-		[]
-	);
-
-	// --- GROUP CHAT MODAL HANDLERS ---
-	// Stable callback handlers for AppGroupChatModals component
-	const handleCloseNewGroupChatModal = useCallback(() => setShowNewGroupChatModal(false), []);
-	const handleCloseDeleteGroupChatModal = useCallback(() => setShowDeleteGroupChatModal(null), []);
-	const handleConfirmDeleteGroupChat = useCallback(() => {
-		if (showDeleteGroupChatModal) {
-			handleDeleteGroupChat(showDeleteGroupChatModal);
-		}
-	}, [showDeleteGroupChatModal, handleDeleteGroupChat]);
-	const handleCloseRenameGroupChatModal = useCallback(() => setShowRenameGroupChatModal(null), []);
-	const handleRenameGroupChatFromModal = useCallback(
-		(newName: string) => {
-			if (showRenameGroupChatModal) {
-				handleRenameGroupChat(showRenameGroupChatModal, newName);
-			}
-		},
-		[showRenameGroupChatModal, handleRenameGroupChat]
-	);
-	const handleCloseEditGroupChatModal = useCallback(() => setShowEditGroupChatModal(null), []);
-	const handleCloseGroupChatInfo = useCallback(() => setShowGroupChatInfo(false), []);
-
-	const handleSendGroupChatMessage = useCallback(
-		async (content: string, images?: string[], readOnly?: boolean) => {
-			if (!activeGroupChatId) return;
-
-			// If group chat is busy, queue the message instead of sending immediately
-			if (groupChatState !== 'idle') {
-				const queuedItem: QueuedItem = {
-					id: generateId(),
-					timestamp: Date.now(),
-					tabId: activeGroupChatId, // Use group chat ID as tab ID
-					type: 'message',
-					text: content,
-					images: images ? [...images] : undefined,
-					tabName: groupChats.find((c) => c.id === activeGroupChatId)?.name || 'Group Chat',
-					readOnlyMode: readOnly,
-				};
-				setGroupChatExecutionQueue((prev) => [...prev, queuedItem]);
-				return;
-			}
-
-			setGroupChatState('moderator-thinking');
-			setGroupChatStates((prev) => {
-				const next = new Map(prev);
-				next.set(activeGroupChatId, 'moderator-thinking');
-				return next;
-			});
-			await window.maestro.groupChat.sendToModerator(activeGroupChatId, content, images, readOnly);
-		},
-		[activeGroupChatId, groupChatState, groupChats]
-	);
-
-	// Handle draft message changes - update local state (persisted on switch/close)
-	const handleGroupChatDraftChange = useCallback(
-		(draft: string) => {
-			if (!activeGroupChatId) return;
-			setGroupChats((prev) =>
-				prev.map((c) => (c.id === activeGroupChatId ? { ...c, draftMessage: draft } : c))
-			);
-		},
-		[activeGroupChatId]
-	);
-
-	// Handle removing an item from the group chat execution queue
-	const handleRemoveGroupChatQueueItem = useCallback((itemId: string) => {
-		setGroupChatExecutionQueue((prev) => prev.filter((item) => item.id !== itemId));
-	}, []);
-
-	// Handle reordering items in the group chat execution queue
-	const handleReorderGroupChatQueueItems = useCallback((fromIndex: number, toIndex: number) => {
-		setGroupChatExecutionQueue((prev) => {
-			const queue = [...prev];
-			const [removed] = queue.splice(fromIndex, 1);
-			queue.splice(toIndex, 0, removed);
-			return queue;
-		});
-	}, []);
-
 	// --- SESSION SORTING ---
 	// Extracted hook for sorted and visible session lists (ignores leading emojis for alphabetization)
 	const { sortedSessions, visibleSessions } = useSortedSessions({
@@ -6345,26 +5918,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 		// updateModalData fails because the modal hasn't been opened yet (no existing data)
 		useModalStore.getState().openModal('confirm', { message, onConfirm });
 	}, []);
-
-	// Delete group chat with confirmation dialog (for keyboard shortcut and CMD+K)
-	const deleteGroupChatWithConfirmation = useCallback(
-		(id: string) => {
-			const chat = groupChats.find((c) => c.id === id);
-			if (!chat) return;
-
-			showConfirmation(
-				`Are you sure you want to delete the group chat "${chat.name}"? This action cannot be undone.`,
-				async () => {
-					await window.maestro.groupChat.delete(id);
-					setGroupChats((prev) => prev.filter((c) => c.id !== id));
-					if (activeGroupChatId === id) {
-						handleCloseGroupChat();
-					}
-				}
-			);
-		},
-		[groupChats, activeGroupChatId, handleCloseGroupChat]
-	);
 
 	const deleteSession = (id: string) => {
 		const session = sessions.find((s) => s.id === id);
@@ -9276,7 +8829,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 	const handleQuickActionsEditAgent = useCallback((session: Session) => {
 		setEditAgentSession(session);
 	}, []);
-	const handleQuickActionsNewGroupChat = useCallback(() => setShowNewGroupChatModal(true), []);
 	const handleQuickActionsOpenMergeSession = useCallback(() => setMergeSessionModalOpen(true), []);
 	const handleQuickActionsOpenSendToAgent = useCallback(() => setSendToAgentModalOpen(true), []);
 	const handleQuickActionsOpenCreatePR = useCallback((session: Session) => {
@@ -10554,7 +10106,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 					startTour={handleQuickActionsStartTour}
 					setFuzzyFileSearchOpen={setFuzzyFileSearchOpen}
 					onEditAgent={handleQuickActionsEditAgent}
-					onNewGroupChat={handleQuickActionsNewGroupChat}
+					onNewGroupChat={handleNewGroupChat}
 					onOpenGroupChat={handleOpenGroupChat}
 					onCloseGroupChat={handleCloseGroupChat}
 					onDeleteGroupChat={deleteGroupChatWithConfirmation}
@@ -11206,8 +10758,10 @@ You are taking over this conversation. Based on the context above, provide a bri
 									})()}
 									onSendMessage={handleSendGroupChatMessage}
 									onClose={handleCloseGroupChat}
-									onRename={() => setShowRenameGroupChatModal(activeGroupChatId)}
-									onShowInfo={() => setShowGroupChatInfo(true)}
+									onRename={() =>
+										activeGroupChatId && handleOpenRenameGroupChatModal(activeGroupChatId)
+									}
+									onShowInfo={() => useModalStore.getState().openModal('groupChatInfo')}
 									rightPanelOpen={rightPanelOpen}
 									onToggleRightPanel={() => setRightPanelOpen(!rightPanelOpen)}
 									shortcuts={shortcuts}
