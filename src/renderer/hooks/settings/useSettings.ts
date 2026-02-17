@@ -26,6 +26,7 @@ import type {
 	KeyboardMasteryStats,
 	ThinkingMode,
 	DirectorNotesSettings,
+	EncoreFeatureFlags,
 } from '../../types';
 import {
 	useSettingsStore,
@@ -273,6 +274,10 @@ export interface UseSettingsReturn {
 	// Auto-scroll in AI mode
 	autoScrollAiMode: boolean;
 	setAutoScrollAiMode: (value: boolean) => void;
+
+	// Encore Features - optional features disabled by default
+	encoreFeatures: EncoreFeatureFlags;
+	setEncoreFeatures: (value: EncoreFeatureFlags) => void;
 
 	// Director's Notes settings
 	directorNotesSettings: DirectorNotesSettings;

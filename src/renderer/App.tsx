@@ -554,6 +554,10 @@ function MaestroConsoleInner() {
 		// Windows warning suppression
 		suppressWindowsWarning,
 		setSuppressWindowsWarning,
+
+		// Encore Features
+		encoreFeatures,
+		setEncoreFeatures,
 	} = settings;
 
 	// --- KEYBOARD SHORTCUT HELPERS ---
@@ -10788,6 +10792,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		setMarketplaceModalOpen,
 		setSymphonyModalOpen,
 		setDirectorNotesOpen,
+		encoreFeatures,
 		setShowNewGroupChatModal,
 		deleteGroupChatWithConfirmation,
 		// Group chat context
@@ -11500,7 +11505,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		setProcessMonitorOpen,
 		setUsageDashboardOpen,
 		setSymphonyModalOpen,
-		setDirectorNotesOpen,
+		setDirectorNotesOpen: encoreFeatures.directorNotes ? setDirectorNotesOpen : undefined,
 		setGroups,
 		setSessions,
 		setRenameInstanceModalOpen,
@@ -11951,7 +11956,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 					onAutoRunRefresh={handleAutoRunRefresh}
 					onOpenMarketplace={handleOpenMarketplace}
 					onOpenSymphony={() => setSymphonyModalOpen(true)}
-					onOpenDirectorNotes={() => setDirectorNotesOpen(true)}
+					onOpenDirectorNotes={encoreFeatures.directorNotes ? () => setDirectorNotesOpen(true) : undefined}
 					autoScrollAiMode={autoScrollAiMode}
 					setAutoScrollAiMode={setAutoScrollAiMode}
 					tabSwitcherOpen={tabSwitcherOpen}
@@ -12333,8 +12338,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 					</Suspense>
 				)}
 
-				{/* --- DIRECTOR'S NOTES MODAL (lazy-loaded) --- */}
-				{directorNotesOpen && (
+				{/* --- DIRECTOR'S NOTES MODAL (lazy-loaded, Encore Feature) --- */}
+				{encoreFeatures.directorNotes && directorNotesOpen && (
 					<Suspense fallback={null}>
 						<DirectorNotesModal
 							theme={theme}
@@ -12718,6 +12723,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 							setCustomAICommands={setCustomAICommands}
 							autoScrollAiMode={autoScrollAiMode}
 							setAutoScrollAiMode={setAutoScrollAiMode}
+							encoreFeatures={encoreFeatures}
+							setEncoreFeatures={setEncoreFeatures}
 							initialTab={settingsTab}
 							hasNoAgents={hasNoAgents}
 							onThemeImportError={(msg) => setFlashNotification(msg)}

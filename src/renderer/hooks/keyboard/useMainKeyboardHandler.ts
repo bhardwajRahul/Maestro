@@ -408,9 +408,9 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 				e.preventDefault();
 				ctx.setAutoScrollAiMode(!ctx.autoScrollAiMode);
 				trackShortcut('toggleAutoScroll');
-			} else if (ctx.isShortcut(e, 'directorNotes')) {
+			} else if (ctx.isShortcut(e, 'directorNotes') && ctx.encoreFeatures?.directorNotes) {
 				e.preventDefault();
-				ctx.setDirectorNotesOpen(true);
+				ctx.setDirectorNotesOpen?.(true);
 				trackShortcut('directorNotes');
 			} else if (ctx.isShortcut(e, 'jumpToBottom')) {
 				e.preventDefault();
