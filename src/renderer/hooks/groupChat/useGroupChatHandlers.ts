@@ -94,6 +94,26 @@ export interface GroupChatHandlersReturn {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resets group chat UI to idle state. Shared by handleCloseGroupChat and handleOpenModeratorSession. */
+function resetGroupChatUI(): void {
+	const {
+		setActiveGroupChatId,
+		setGroupChatMessages,
+		setGroupChatState,
+		setParticipantStates,
+		setGroupChatError,
+	} = useGroupChatStore.getState();
+	setActiveGroupChatId(null);
+	setGroupChatMessages([]);
+	setGroupChatState('idle');
+	setParticipantStates(new Map());
+	setGroupChatError(null);
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -119,7 +139,9 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 
 	const { recoveryActions: groupChatRecoveryActions } = useAgentErrorRecovery({
 		error: groupChatError?.error,
-		agentId: 'claude-code', // Group chat moderator is always claude-code for now
+		// TODO: Read actual moderator agent type from the active group chat config
+		// instead of hardcoding. Error recovery suggestions will be wrong for non-Claude moderators.
+		agentId: 'claude-code',
 		sessionId: groupChatError?.groupChatId || '',
 		onRetry: handleClearGroupChatError,
 		onClearError: handleClearGroupChatError,
@@ -181,14 +203,8 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 			}
 		});
 
-		console.log(
-			`[GroupChat:UI] Setting up onParticipantState listener, activeGroupChatId=${activeGroupChatId}`
-		);
 		const unsubParticipantState = window.maestro.groupChat.onParticipantState?.(
 			(id, participantName, state) => {
-				console.log(
-					`[GroupChat:UI] Received participant state: chatId=${id}, participant=${participantName}, state=${state}, activeGroupChatId=${activeGroupChatId}`
-				);
 				// Track participant state for ALL group chats (for sidebar indicator)
 				setAllGroupChatParticipantStates((prev) => {
 					const next = new Map(prev);
@@ -196,30 +212,15 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 					const updatedChatStates = new Map(chatStates);
 					updatedChatStates.set(participantName, state);
 					next.set(id, updatedChatStates);
-					console.log(
-						`[GroupChat:UI] Updated allGroupChatParticipantStates for ${id}: ${JSON.stringify([
-							...updatedChatStates.entries(),
-						])}`
-					);
 					return next;
 				});
 				// Also update the active group chat's participant states for immediate UI
 				if (id === activeGroupChatId) {
-					console.log(
-						`[GroupChat:UI] Updating participantStates for active chat: ${participantName}=${state}`
-					);
 					setParticipantStates((prev) => {
 						const next = new Map(prev);
 						next.set(participantName, state);
-						console.log(
-							`[GroupChat:UI] New participantStates: ${JSON.stringify([...next.entries()])}`
-						);
 						return next;
 					});
-				} else {
-					console.log(
-						`[GroupChat:UI] Skipping participantStates update - not active chat (${id} vs ${activeGroupChatId})`
-					);
 				}
 			}
 		);
@@ -317,19 +318,10 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 			setGroupChatMessages(messages);
 
 			// Restore the state for this specific chat from the per-chat state map
-			setGroupChatState((_prev) => {
-				const savedState = groupChatStates.get(id);
-				return savedState ?? 'idle';
-			});
+			setGroupChatState(groupChatStates.get(id) ?? 'idle');
 
 			// Restore participant states for this chat
-			const savedParticipantStates = allGroupChatParticipantStates.get(id);
-			console.log(
-				`[GroupChat:UI] handleOpenGroupChat: restoring participantStates for ${id}: ${
-					savedParticipantStates ? JSON.stringify([...savedParticipantStates.entries()]) : 'none'
-				}`
-			);
-			setParticipantStates(savedParticipantStates ?? new Map());
+			setParticipantStates(allGroupChatParticipantStates.get(id) ?? new Map());
 
 			// Load saved right tab preference for this group chat
 			const savedTab = await window.maestro.settings.get(`groupChatRightTab:${id}`);
@@ -354,18 +346,7 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 	}, []);
 
 	const handleCloseGroupChat = useCallback(() => {
-		const {
-			setActiveGroupChatId,
-			setGroupChatMessages,
-			setGroupChatState,
-			setParticipantStates,
-			setGroupChatError,
-		} = useGroupChatStore.getState();
-		setActiveGroupChatId(null);
-		setGroupChatMessages([]);
-		setGroupChatState('idle');
-		setParticipantStates(new Map());
-		setGroupChatError(null);
+		resetGroupChatUI();
 	}, []);
 
 	const handleGroupChatRightTabChange = useCallback((tab: GroupChatRightTab) => {
@@ -387,17 +368,7 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 		);
 
 		if (session) {
-			// Close group chat
-			const {
-				setActiveGroupChatId,
-				setGroupChatMessages,
-				setGroupChatState,
-				setParticipantStates,
-			} = useGroupChatStore.getState();
-			setActiveGroupChatId(null);
-			setGroupChatMessages([]);
-			setGroupChatState('idle');
-			setParticipantStates(new Map());
+			resetGroupChatUI();
 
 			// Set the session as active
 			const { setActiveSessionId, setSessions } = useSessionStore.getState();

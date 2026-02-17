@@ -7,6 +7,10 @@
  *
  * Reads from: useModalStore, useSettingsStore, useSessionStore,
  *             useGroupChatStore, useAgentStore
+ *
+ * NOTE: getModalActions() calls are a legacy shim that wraps modalStore methods
+ * for backward compatibility. New code should prefer useModalStore.getState()
+ * directly. These will be migrated in a future cleanup pass.
  */
 
 import { useCallback, useEffect, useMemo } from 'react';

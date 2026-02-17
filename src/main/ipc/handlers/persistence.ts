@@ -20,7 +20,8 @@ import { WebServer } from '../../web-server';
 
 // Re-export types from canonical source so existing imports from './persistence' still work
 export type { MaestroSettings, SessionsData, GroupsData } from '../../stores/types';
-import type { MaestroSettings, SessionsData, GroupsData } from '../../stores/types';
+import type { MaestroSettings, SessionsData, GroupsData, StoredSession } from '../../stores/types';
+import type { Group } from '../../../shared/types';
 
 /**
  * Dependencies required for persistence handlers
@@ -91,17 +92,15 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
 	// Sessions persistence
 	ipcMain.handle('sessions:getAll', async () => {
 		const sessions = sessionsStore.get('sessions', []);
-		console.log(
-			`[sessions:getAll] Loaded ${sessions.length} sessions from store path: ${(sessionsStore as any).path}`
-		);
+		logger.debug(`Loaded ${sessions.length} sessions from store`, 'Sessions');
 		return sessions;
 	});
 
-	ipcMain.handle('sessions:setAll', async (_, sessions: any[]) => {
+	ipcMain.handle('sessions:setAll', async (_, sessions: StoredSession[]) => {
 		// Get previous sessions to detect changes
 		const previousSessions = sessionsStore.get('sessions', []);
-		const previousSessionMap = new Map(previousSessions.map((s: any) => [s.id, s]));
-		const currentSessionMap = new Map(sessions.map((s: any) => [s.id, s]));
+		const previousSessionMap = new Map(previousSessions.map((s) => [s.id, s]));
+		const currentSessionMap = new Map(sessions.map((s) => [s.id, s]));
 
 		// Log session lifecycle events at DEBUG level
 		for (const session of sessions) {
@@ -194,7 +193,7 @@ export function registerPersistenceHandlers(deps: PersistenceHandlerDependencies
 		return groupsStore.get('groups', []);
 	});
 
-	ipcMain.handle('groups:setAll', async (_, groups: any[]) => {
+	ipcMain.handle('groups:setAll', async (_, groups: Group[]) => {
 		try {
 			groupsStore.set('groups', groups);
 		} catch (err) {

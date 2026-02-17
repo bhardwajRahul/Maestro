@@ -203,6 +203,9 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 	// ---------------------------------------------------------------------------
 	// Reactive subscriptions
 	// ---------------------------------------------------------------------------
+	// Full sessions array is needed here: worktreeConfigKey derives from all sessions'
+	// worktreeConfig fields, and the git info effect iterates parent sessions. A narrower
+	// selector would require a custom equality fn that's more complex than the current approach.
 	const sessions = useSessionStore((s) => s.sessions);
 	const sessionsLoaded = useSessionStore((s) => s.sessionsLoaded);
 	const defaultSaveToHistory = useSettingsStore((s) => s.defaultSaveToHistory);
@@ -215,6 +218,8 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 	// ---------------------------------------------------------------------------
 	// Memoized values
 	// ---------------------------------------------------------------------------
+	// Stable dependency key for the worktree file-watcher effect below — only re-runs
+	// when a session's worktreeConfig actually changes (not on every sessions array mutation).
 	const worktreeConfigKey = useMemo(
 		() =>
 			sessions
@@ -393,7 +398,6 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 				useSettingsStore.getState();
 
 			const worktreePath = `${basePath}/${branchName}`;
-			console.log('[WorktreeConfig] Create worktree:', branchName, 'at', worktreePath);
 
 			// Get SSH remote ID for remote worktree operations
 			// Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
@@ -430,14 +434,13 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 				recentlyCreatedWorktreePathsRef.current.add(worktreePath);
 				setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(worktreePath), 10000);
 
-				useSessionStore.getState().setSessions((prev) => [...prev, worktreeSession]);
-
-				// Expand parent's worktrees
+				// Single setSessions call: add child + expand parent (avoids transient state + extra IPC write)
 				useSessionStore
 					.getState()
-					.setSessions((prev) =>
-						prev.map((s) => (s.id === activeSession.id ? { ...s, worktreesExpanded: true } : s))
-					);
+					.setSessions((prev) => [
+						...prev.map((s) => (s.id === activeSession.id ? { ...s, worktreesExpanded: true } : s)),
+						worktreeSession,
+					]);
 
 				notifyToast({
 					type: 'success',
@@ -474,7 +477,6 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 			createWtSession.cwd.replace(/\/[^/]+$/, '') + '/worktrees';
 
 		const worktreePath = `${basePath}/${branchName}`;
-		console.log('[CreateWorktree] Create worktree:', branchName, 'at', worktreePath);
 
 		// Get SSH remote ID for remote worktree operations
 		// Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
@@ -510,27 +512,19 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 		recentlyCreatedWorktreePathsRef.current.add(worktreePath);
 		setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(worktreePath), 10000);
 
-		useSessionStore.getState().setSessions((prev) => [...prev, worktreeSession]);
-
-		// Expand parent's worktrees
-		useSessionStore
-			.getState()
-			.setSessions((prev) =>
-				prev.map((s) => (s.id === createWtSession.id ? { ...s, worktreesExpanded: true } : s))
-			);
-
-		// Save worktree config if not already configured
-		if (!createWtSession.worktreeConfig?.basePath) {
-			useSessionStore
-				.getState()
-				.setSessions((prev) =>
-					prev.map((s) =>
-						s.id === createWtSession.id
-							? { ...s, worktreeConfig: { basePath, watchEnabled: true } }
-							: s
-					)
-				);
-		}
+		// Single setSessions call: add child + expand parent + save config (avoids transient state + extra IPC writes)
+		const needsConfig = !createWtSession.worktreeConfig?.basePath;
+		useSessionStore.getState().setSessions((prev) => [
+			...prev.map((s) => {
+				if (s.id !== createWtSession.id) return s;
+				const updates: Partial<Session> = { worktreesExpanded: true };
+				if (needsConfig) {
+					updates.worktreeConfig = { basePath, watchEnabled: true };
+				}
+				return { ...s, ...updates };
+			}),
+			worktreeSession,
+		]);
 
 		notifyToast({
 			type: 'success',
