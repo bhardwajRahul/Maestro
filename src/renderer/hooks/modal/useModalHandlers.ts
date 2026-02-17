@@ -217,7 +217,8 @@ export function useModalHandlers(
 	// ====================================================================
 
 	const handleCloseDeleteAgentModal = useCallback(() => {
-		getModalActions().setDeleteAgentModalOpen(false);
+		// setDeleteAgentSession(null) calls closeModal('deleteAgent') which clears both
+		// the open state and the session data — no separate setDeleteAgentModalOpen needed.
 		getModalActions().setDeleteAgentSession(null);
 	}, []);
 
@@ -227,7 +228,8 @@ export function useModalHandlers(
 	}, []);
 
 	const handleCloseEditAgentModal = useCallback(() => {
-		getModalActions().setEditAgentModalOpen(false);
+		// setEditAgentSession(null) calls closeModal('editAgent') which clears both
+		// the open state and the session data — no separate setEditAgentModalOpen needed.
 		getModalActions().setEditAgentSession(null);
 	}, []);
 

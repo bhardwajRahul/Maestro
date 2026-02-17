@@ -914,25 +914,38 @@ describe('useGroupChatHandlers', () => {
 	// IPC event listeners
 	// -----------------------------------------------------------------------
 	describe('IPC event listeners', () => {
-		it('registers all 6 listeners on mount', () => {
+		it('registers global listeners on mount (without activeGroupChatId)', () => {
+			renderHook(() => useGroupChatHandlers());
+
+			// Global listeners registered unconditionally
+			expect(mockGroupChat.onStateChange).toHaveBeenCalled();
+			expect(mockGroupChat.onParticipantsChanged).toHaveBeenCalled();
+			expect(mockGroupChat.onParticipantState).toHaveBeenCalled();
+			expect(mockGroupChat.onModeratorSessionIdChanged).toHaveBeenCalled();
+
+			// Active-chat listeners NOT registered when no activeGroupChatId
+			expect(mockGroupChat.onMessage).not.toHaveBeenCalled();
+			expect(mockGroupChat.onModeratorUsage).not.toHaveBeenCalled();
+		});
+
+		it('registers active-chat listeners when activeGroupChatId is set', () => {
+			useGroupChatStore.setState({ activeGroupChatId: 'gc-1' });
 			renderHook(() => useGroupChatHandlers());
 
 			expect(mockGroupChat.onMessage).toHaveBeenCalled();
-			expect(mockGroupChat.onStateChange).toHaveBeenCalled();
-			expect(mockGroupChat.onParticipantsChanged).toHaveBeenCalled();
 			expect(mockGroupChat.onModeratorUsage).toHaveBeenCalled();
-			expect(mockGroupChat.onParticipantState).toHaveBeenCalled();
-			expect(mockGroupChat.onModeratorSessionIdChanged).toHaveBeenCalled();
 		});
 
-		it('calls cleanup functions on unmount', () => {
+		it('calls all cleanup functions on unmount', () => {
+			useGroupChatStore.setState({ activeGroupChatId: 'gc-1' });
+
 			const cleanups = Array.from({ length: 6 }, () => vi.fn());
-			mockGroupChat.onMessage.mockReturnValueOnce(cleanups[0]);
-			mockGroupChat.onStateChange.mockReturnValueOnce(cleanups[1]);
-			mockGroupChat.onParticipantsChanged.mockReturnValueOnce(cleanups[2]);
-			mockGroupChat.onModeratorUsage.mockReturnValueOnce(cleanups[3]);
-			mockGroupChat.onParticipantState.mockReturnValueOnce(cleanups[4]);
-			mockGroupChat.onModeratorSessionIdChanged.mockReturnValueOnce(cleanups[5]);
+			mockGroupChat.onStateChange.mockReturnValueOnce(cleanups[0]);
+			mockGroupChat.onParticipantsChanged.mockReturnValueOnce(cleanups[1]);
+			mockGroupChat.onParticipantState.mockReturnValueOnce(cleanups[2]);
+			mockGroupChat.onModeratorSessionIdChanged.mockReturnValueOnce(cleanups[3]);
+			mockGroupChat.onMessage.mockReturnValueOnce(cleanups[4]);
+			mockGroupChat.onModeratorUsage.mockReturnValueOnce(cleanups[5]);
 
 			const { unmount } = renderHook(() => useGroupChatHandlers());
 			unmount();
@@ -947,7 +960,7 @@ describe('useGroupChatHandlers', () => {
 			});
 
 			let messageCallback: any;
-			mockGroupChat.onMessage.mockImplementationOnce((cb: any) => {
+			mockGroupChat.onMessage.mockImplementation((cb: any) => {
 				messageCallback = cb;
 				return () => {};
 			});
@@ -967,7 +980,7 @@ describe('useGroupChatHandlers', () => {
 			});
 
 			let messageCallback: any;
-			mockGroupChat.onMessage.mockImplementationOnce((cb: any) => {
+			mockGroupChat.onMessage.mockImplementation((cb: any) => {
 				messageCallback = cb;
 				return () => {};
 			});

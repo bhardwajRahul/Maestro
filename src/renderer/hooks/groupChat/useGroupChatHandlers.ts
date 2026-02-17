@@ -148,25 +148,17 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 	});
 
 	// =======================================================================
-	// IPC Event Listeners
+	// IPC Event Listeners — Global (session-agnostic, registered once)
 	// =======================================================================
 
 	useEffect(() => {
 		const {
-			setGroupChatMessages,
 			setGroupChatState,
 			setGroupChatStates,
 			setGroupChats,
-			setModeratorUsage,
 			setAllGroupChatParticipantStates,
 			setParticipantStates,
 		} = useGroupChatStore.getState();
-
-		const unsubMessage = window.maestro.groupChat.onMessage((id, message) => {
-			if (id === activeGroupChatId) {
-				setGroupChatMessages((prev) => [...prev, message]);
-			}
-		});
 
 		const unsubState = window.maestro.groupChat.onStateChange((id, state) => {
 			// Track state for ALL group chats (for sidebar indicator when not active)
@@ -176,7 +168,7 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 				return next;
 			});
 			// Also update the active group chat's state for immediate UI
-			if (id === activeGroupChatId) {
+			if (id === useGroupChatStore.getState().activeGroupChatId) {
 				setGroupChatState(state);
 			}
 		});
@@ -185,22 +177,6 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 			setGroupChats((prev) =>
 				prev.map((chat) => (chat.id === id ? { ...chat, participants } : chat))
 			);
-		});
-
-		const unsubModeratorUsage = window.maestro.groupChat.onModeratorUsage?.((id, usage) => {
-			if (id === activeGroupChatId) {
-				// When contextUsage is -1, tokens were accumulated from multi-tool turns.
-				// Preserve previous context/token values; only update cost.
-				if (usage.contextUsage < 0) {
-					setModeratorUsage((prev) =>
-						prev
-							? { ...prev, totalCost: usage.totalCost }
-							: { contextUsage: 0, totalCost: usage.totalCost, tokenCount: 0 }
-					);
-				} else {
-					setModeratorUsage(usage);
-				}
-			}
 		});
 
 		const unsubParticipantState = window.maestro.groupChat.onParticipantState?.(
@@ -215,7 +191,7 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 					return next;
 				});
 				// Also update the active group chat's participant states for immediate UI
-				if (id === activeGroupChatId) {
+				if (id === useGroupChatStore.getState().activeGroupChatId) {
 					setParticipantStates((prev) => {
 						const next = new Map(prev);
 						next.set(participantName, state);
@@ -236,12 +212,47 @@ export function useGroupChatHandlers(): GroupChatHandlersReturn {
 		);
 
 		return () => {
-			unsubMessage();
 			unsubState();
 			unsubParticipants();
-			unsubModeratorUsage?.();
 			unsubParticipantState?.();
 			unsubModeratorSessionId?.();
+		};
+	}, []); // Mount once — global listeners read activeGroupChatId from store at call time
+
+	// =======================================================================
+	// IPC Event Listeners — Active chat (re-registered on chat switch)
+	// =======================================================================
+
+	useEffect(() => {
+		if (!activeGroupChatId) return;
+
+		const { setGroupChatMessages, setModeratorUsage } = useGroupChatStore.getState();
+
+		const unsubMessage = window.maestro.groupChat.onMessage((id, message) => {
+			if (id === activeGroupChatId) {
+				setGroupChatMessages((prev) => [...prev, message]);
+			}
+		});
+
+		const unsubModeratorUsage = window.maestro.groupChat.onModeratorUsage?.((id, usage) => {
+			if (id === activeGroupChatId) {
+				// When contextUsage is -1, tokens were accumulated from multi-tool turns.
+				// Preserve previous context/token values; only update cost.
+				if (usage.contextUsage < 0) {
+					setModeratorUsage((prev) =>
+						prev
+							? { ...prev, totalCost: usage.totalCost }
+							: { contextUsage: 0, totalCost: usage.totalCost, tokenCount: 0 }
+					);
+				} else {
+					setModeratorUsage(usage);
+				}
+			}
+		});
+
+		return () => {
+			unsubMessage();
+			unsubModeratorUsage?.();
 		};
 	}, [activeGroupChatId]);
 

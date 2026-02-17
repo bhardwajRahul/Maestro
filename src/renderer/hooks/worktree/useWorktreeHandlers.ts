@@ -220,11 +220,18 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 	// ---------------------------------------------------------------------------
 	// Stable dependency key for the worktree file-watcher effect below — only re-runs
 	// when a session's worktreeConfig actually changes (not on every sessions array mutation).
+	// Uses | delimiter to avoid false collisions (session IDs are UUIDs, paths don't contain |).
 	const worktreeConfigKey = useMemo(
 		() =>
 			sessions
-				.map((s) => `${s.id}:${s.worktreeConfig?.basePath}:${s.worktreeConfig?.watchEnabled}`)
-				.join(','),
+				.map((s) => `${s.id}|${s.worktreeConfig?.basePath}|${s.worktreeConfig?.watchEnabled}`)
+				.join('\n'),
+		[sessions]
+	);
+
+	// Whether any sessions still use the legacy worktreeParentPath model (for legacy scanner effect).
+	const hasLegacyWorktreeSessions = useMemo(
+		() => sessions.some((s) => s.worktreeParentPath),
 		[sessions]
 	);
 
@@ -766,8 +773,6 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 	// PERFORMANCE: Only scan on app focus (visibility change) instead of continuous polling
 	// This avoids blocking the main thread every 30 seconds during active use
 	useEffect(() => {
-		// Check if any sessions use the legacy worktreeParentPath model
-		const hasLegacyWorktreeSessions = sessions.some((s) => s.worktreeParentPath);
 		if (!hasLegacyWorktreeSessions) return;
 
 		// Track if we're currently scanning to avoid overlapping scans
@@ -886,7 +891,7 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 		return () => {
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		};
-	}, [sessions.some((s) => s.worktreeParentPath), defaultSaveToHistory]); // Only re-run when legacy sessions exist/don't exist
+	}, [hasLegacyWorktreeSessions, defaultSaveToHistory]);
 
 	// ---------------------------------------------------------------------------
 	// Return
