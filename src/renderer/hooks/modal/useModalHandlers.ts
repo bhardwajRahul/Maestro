@@ -459,9 +459,11 @@ export function useModalHandlers(
 		(image: string | null, contextImages?: string[], source: 'staged' | 'history' = 'history') => {
 			const { activeGroupChatId } = useGroupChatStore.getState();
 			const actions = getModalActions();
+			// setLightboxImage opens the modal — must be called first so that
+			// subsequent updateModalData calls (isGroupChat, allowDelete) find an active modal.
+			actions.setLightboxImage(image);
 			actions.setLightboxIsGroupChat(activeGroupChatId !== null);
 			actions.setLightboxAllowDelete(source === 'staged');
-			actions.setLightboxImage(image);
 			actions.setLightboxImages(contextImages || []);
 			actions.setLightboxSource(source);
 		},
