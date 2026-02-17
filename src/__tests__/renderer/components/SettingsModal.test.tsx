@@ -98,11 +98,6 @@ vi.mock('../../../renderer/hooks/settings/useSettings', () => ({
 		setSshRemoteIgnorePatterns: vi.fn(),
 		sshRemoteHonorGitignore: false,
 		setSshRemoteHonorGitignore: vi.fn(),
-		// Encore Features
-		encoreFeatures: {
-			directorNotes: false,
-		},
-		setEncoreFeatures: mockSetEncoreFeatures,
 		// Director's Notes settings
 		directorNotesSettings: {
 			provider: 'claude-code',
@@ -261,6 +256,8 @@ const createDefaultProps = (overrides = {}) => ({
 	setCrashReportingEnabled: vi.fn(),
 	customAICommands: [],
 	setCustomAICommands: vi.fn(),
+	encoreFeatures: { directorNotes: false },
+	setEncoreFeatures: mockSetEncoreFeatures,
 	...overrides,
 });
 
@@ -2177,7 +2174,8 @@ describe('SettingsModal', () => {
 				await vi.advanceTimersByTimeAsync(50);
 			});
 
-			expect(screen.getByText(/Optional features that extend Maestro/)).toBeInTheDocument();
+			expect(screen.getByText(/Optional features that extend Maestro's capabilities/)).toBeInTheDocument();
+			expect(screen.getByText(/Contributors building new features should consider gating them here/)).toBeInTheDocument();
 		});
 
 		it('should show Director\'s Notes feature toggle defaulting to off', async () => {
@@ -2224,12 +2222,10 @@ describe('SettingsModal', () => {
 		});
 
 		describe('with Director\'s Notes enabled', () => {
-			beforeEach(() => {
-				mockUseSettingsOverrides = { encoreFeatures: { directorNotes: true } };
-			});
+			const dnEnabledProps = { encoreFeatures: { directorNotes: true } };
 
 			it('should render provider dropdown with detected available agents', async () => {
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2254,7 +2250,7 @@ describe('SettingsModal', () => {
 			});
 
 			it('should render Customize button for provider configuration', async () => {
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2272,7 +2268,7 @@ describe('SettingsModal', () => {
 			});
 
 			it('should render default lookback period slider with range 1-90', async () => {
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2294,7 +2290,7 @@ describe('SettingsModal', () => {
 			});
 
 			it('should show DN description text when enabled', async () => {
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2314,7 +2310,7 @@ describe('SettingsModal', () => {
 			it('should call setDirectorNotesSettings when provider is changed', async () => {
 				mockSetDirectorNotesSettings.mockClear();
 
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2338,7 +2334,7 @@ describe('SettingsModal', () => {
 			it('should call setDirectorNotesSettings when lookback slider is changed', async () => {
 				mockSetDirectorNotesSettings.mockClear();
 
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);
@@ -2360,7 +2356,7 @@ describe('SettingsModal', () => {
 			});
 
 			it('should render lookback scale markers', async () => {
-				render(<SettingsModal {...createDefaultProps()} />);
+				render(<SettingsModal {...createDefaultProps(dnEnabledProps)} />);
 
 				await act(async () => {
 					await vi.advanceTimersByTimeAsync(50);

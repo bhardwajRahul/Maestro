@@ -561,6 +561,7 @@ function MaestroConsoleInner() {
 
 		// Encore Features
 		encoreFeatures,
+		setEncoreFeatures,
 	} = settings;
 
 	// --- KEYBOARD SHORTCUT HELPERS ---
@@ -12686,6 +12687,8 @@ You are taking over this conversation. Based on the context above, provide a bri
 							setCrashReportingEnabled={setCrashReportingEnabled}
 							customAICommands={customAICommands}
 							setCustomAICommands={setCustomAICommands}
+							encoreFeatures={encoreFeatures}
+							setEncoreFeatures={setEncoreFeatures}
 							initialTab={settingsTab}
 							hasNoAgents={hasNoAgents}
 							onThemeImportError={(msg) => setFlashNotification(msg)}

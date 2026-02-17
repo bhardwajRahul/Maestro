@@ -46,6 +46,7 @@ import type {
 	LLMProvider,
 	AgentConfig,
 	ToolType,
+	EncoreFeatureFlags,
 } from '../types';
 import { CustomThemeBuilder } from './CustomThemeBuilder';
 import { useLayerStack } from '../contexts/LayerStackContext';
@@ -279,6 +280,8 @@ interface SettingsModalProps {
 	setCrashReportingEnabled: (value: boolean) => void;
 	customAICommands: CustomAICommand[];
 	setCustomAICommands: (commands: CustomAICommand[]) => void;
+	encoreFeatures: EncoreFeatureFlags;
+	setEncoreFeatures: (value: EncoreFeatureFlags) => void;
 	initialTab?:
 		| 'general'
 		| 'display'
@@ -287,14 +290,15 @@ interface SettingsModalProps {
 		| 'theme'
 		| 'notifications'
 		| 'aicommands'
-		| 'ssh';
+		| 'ssh'
+		| 'encore';
 	hasNoAgents?: boolean;
 	onThemeImportError?: (message: string) => void;
 	onThemeImportSuccess?: (message: string) => void;
 }
 
 export const SettingsModal = memo(function SettingsModal(props: SettingsModalProps) {
-	const { isOpen, onClose, theme, themes, initialTab } = props;
+	const { isOpen, onClose, theme, themes, initialTab, encoreFeatures, setEncoreFeatures } = props;
 
 	// Context management settings from useSettings hook
 	const {
@@ -329,9 +333,6 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 		// Automatic tab naming settings
 		automaticTabNamingEnabled,
 		setAutomaticTabNamingEnabled,
-		// Encore Features
-		encoreFeatures,
-		setEncoreFeatures,
 		// Director's Notes settings
 		directorNotesSettings,
 		setDirectorNotesSettings,
@@ -1092,7 +1093,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 						title="Encore Features"
 					>
 						<FlaskConical className="w-4 h-4" />
-						{activeTab === 'encore' && <span>Encore</span>}
+						{activeTab === 'encore' && <span>Encore Features</span>}
 					</button>
 					<div className="flex-1 flex justify-end items-center pr-4">
 						<button onClick={onClose} tabIndex={-1}>
@@ -2904,8 +2905,9 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 									Encore Features
 								</h3>
 								<p className="text-xs" style={{ color: theme.colors.textDim }}>
-									Optional features that extend Maestro's capabilities. Enable the ones you want — disabled features
-									are completely hidden from shortcuts, menus, and the command palette.
+									Optional features that extend Maestro's capabilities. Enable the ones you want. Disabled features
+									are completely hidden from shortcuts, menus, and the command palette. Contributors building new
+									features should consider gating them here to keep the core experience focused.
 								</p>
 							</div>
 
