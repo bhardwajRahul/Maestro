@@ -4,7 +4,7 @@ import { stripControlSequences } from '../../utils/terminalFilter';
 import { logger } from '../../utils/logger';
 import type { ProcessConfig, ManagedProcess, SpawnResult } from '../types';
 import type { DataBufferManager } from '../handlers/DataBufferManager';
-import { buildPtyTerminalEnv } from '../utils/envBuilder';
+import { buildPtyTerminalEnv, buildChildProcessEnv } from '../utils/envBuilder';
 
 /**
  * Handles spawning of PTY (pseudo-terminal) processes.
@@ -85,9 +85,10 @@ export class PtySpawner {
 					);
 				}
 			} else {
-				// For AI agents in PTY mode: merge global shell env vars with process env
-				// This ensures agents receive both system env vars (NODE_PATH, etc.) and global env vars
-				ptyEnv = shellEnvVars ? { ...process.env, ...shellEnvVars } : process.env;
+				// For AI agents in PTY mode: use same env building logic as child processes
+				// This ensures tilde expansion (~/ paths), Electron var stripping, and consistent
+				// global shell environment variable handling across all spawner types
+				ptyEnv = buildChildProcessEnv(undefined, false, shellEnvVars);
 			}
 
 			const ptyProcess = pty.spawn(ptyCommand, ptyArgs, {
