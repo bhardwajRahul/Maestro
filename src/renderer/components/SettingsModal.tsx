@@ -119,15 +119,22 @@ function EnvVarsEditor({ envVars, setEnvVars, theme }: EnvVarsEditorProps) {
 	const commitChanges = (newEntries: EnvVarEntry[]) => {
 		const newEnvVars: Record<string, string> = {};
 		const errors: Record<number, string> = {};
+
+		// Collect all errors first
 		newEntries.forEach((entry) => {
 			const error = validateEntry(entry);
 			if (error) {
 				errors[entry.id] = error;
 			}
-			if (entry.key.trim()) {
+		});
+
+		// Only add valid entries to newEnvVars
+		newEntries.forEach((entry) => {
+			if (!errors[entry.id] && entry.key.trim()) {
 				newEnvVars[entry.key] = entry.value;
 			}
 		});
+
 		setValidationErrors(errors);
 		setEnvVars(newEnvVars);
 	};
