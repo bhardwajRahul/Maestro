@@ -1493,14 +1493,15 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 												</p>
 											</div>
 											<div
-												className="group relative flex-shrink-0 mt-0.5"
+												className="group relative flex-shrink-0 mt-0.5 outline-none"
+												tabIndex={0}
 												title="Environment variables configured here are available to all terminal sessions, all AI agent processes (Claude, OpenCode, etc.), and any spawned child processes. Agent-specific settings can override these values."
 											>
 												<HelpCircle
 													className="w-4 h-4 cursor-help"
 													style={{ color: theme.colors.textDim }}
 												/>
-												<div className="absolute hidden group-hover:block bg-black/80 text-white text-xs rounded p-2 z-50 w-60 -right-2 top-5 whitespace-normal">
+												<div className="absolute hidden group-hover:block group-focus-visible:block bg-black/80 text-white text-xs rounded p-2 z-50 w-60 -right-2 top-5 whitespace-normal">
 													<p className="mb-1 font-semibold">Environment variables apply to:</p>
 													<ul className="list-disc list-inside space-y-0.5">
 														<li>All terminal sessions</li>
