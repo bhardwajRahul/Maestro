@@ -314,7 +314,6 @@ export function AIOverviewTab({ theme, onSynopsisReady }: AIOverviewTabProps) {
 							content={synopsis}
 							theme={theme}
 							onCopy={(text) => navigator.clipboard.writeText(text)}
-							allowRawHtml
 						/>
 					</div>
 				) : isGenerating ? (
