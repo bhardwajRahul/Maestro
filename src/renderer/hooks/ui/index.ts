@@ -46,3 +46,7 @@ export type { UseResizablePanelOptions, UseResizablePanelReturn } from './useRes
 // App-level handlers (drag, file, folder operations)
 export { useAppHandlers } from './useAppHandlers';
 export type { UseAppHandlersDeps, UseAppHandlersReturn } from './useAppHandlers';
+
+// App initialization effects (startup, splash screen, platform checks, command loading)
+export { useAppInitialization } from './useAppInitialization';
+export type { AppInitializationReturn } from './useAppInitialization';

@@ -29,11 +29,8 @@ import { AppOverlays } from './components/AppOverlays';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
 import { DebugWizardModal } from './components/DebugWizardModal';
 import { DebugPackageModal } from './components/DebugPackageModal';
-import {
-	WindowsWarningModal,
-	exposeWindowsWarningModalDebug,
-} from './components/WindowsWarningModal';
-import { GistPublishModal, type GistInfo } from './components/GistPublishModal';
+import { WindowsWarningModal } from './components/WindowsWarningModal';
+import { GistPublishModal } from './components/GistPublishModal';
 import {
 	MaestroWizard,
 	useWizard,
@@ -130,6 +127,8 @@ import {
 	useSessionRestoration,
 	// Input keyboard handling
 	useInputKeyDown,
+	// App initialization effects
+	useAppInitialization,
 } from './hooks';
 import type { TabCompletionSuggestion } from './hooks';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
@@ -137,7 +136,7 @@ import { useAgentListeners } from './hooks/agent/useAgentListeners';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
-import { useNotificationStore, notifyToast } from './stores/notificationStore';
+import { notifyToast } from './stores/notificationStore';
 import { useModalActions, useModalStore } from './stores/modalStore';
 import { GitStatusProvider } from './contexts/GitStatusContext';
 import { InputProvider, useInputContext } from './contexts/InputContext';
@@ -151,8 +150,6 @@ import { ToastContainer } from './components/Toast';
 
 // Import services
 import { gitService } from './services/git';
-import { getSpeckitCommands } from './services/speckit';
-import { getOpenSpecCommands } from './services/openspec';
 
 // Import prompts and synopsis parsing
 import { autorunSynopsisPrompt, maestroSystemPrompt } from '../prompts';
@@ -172,8 +169,6 @@ import type {
 	BatchRunConfig,
 	AgentError,
 	BatchRunState,
-	SpecKitCommand,
-	OpenSpecCommand,
 	CustomAICommand,
 	ThinkingMode,
 } from './types';
@@ -407,7 +402,6 @@ function MaestroConsoleInner() {
 	// --- SETTINGS (from useSettings hook) ---
 	const settings = useSettings();
 	const {
-		settingsLoaded,
 		conductorProfile,
 		llmProvider,
 		setLlmProvider,
@@ -533,7 +527,6 @@ function MaestroConsoleInner() {
 		setAutoScrollAiMode,
 
 		// Windows warning suppression
-		suppressWindowsWarning,
 		setSuppressWindowsWarning,
 
 		// Encore Features
@@ -621,12 +614,6 @@ function MaestroConsoleInner() {
 		});
 	}, []) as React.MutableRefObject<number>;
 
-	// Spec Kit commands (loaded from bundled prompts)
-	const [speckitCommands, setSpeckitCommands] = useState<SpecKitCommand[]>([]);
-
-	// OpenSpec commands (loaded from bundled prompts)
-	const [openspecCommands, setOpenspecCommands] = useState<OpenSpecCommand[]>([]);
-
 	// --- UI LAYOUT STATE (from uiStore, replaces UILayoutContext) ---
 	// State: individual selectors for granular re-render control
 	const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
@@ -698,44 +685,9 @@ function MaestroConsoleInner() {
 		setGroupChatParticipantColors,
 	} = useGroupChatStore.getState();
 
-	// SSH Remote configs for looking up SSH remote names (used for participant cards in group chat)
-	const [sshRemoteConfigs, setSshRemoteConfigs] = useState<Array<{ id: string; name: string }>>([]);
-
-	// Load SSH configs once on mount
-	useEffect(() => {
-		window.maestro?.sshRemote
-			?.getConfigs()
-			.then((result) => {
-				if (result.success && result.configs) {
-					setSshRemoteConfigs(
-						result.configs.map((c: { id: string; name: string }) => ({
-							id: c.id,
-							name: c.name,
-						}))
-					);
-				}
-			})
-			.catch(console.error);
-	}, []);
-
-	// Check for stats database initialization issues (corruption, reset, etc.) on mount
-	useEffect(() => {
-		window.maestro?.stats
-			?.getInitializationResult()
-			.then((result) => {
-				if (result?.userMessage) {
-					notifyToast({
-						type: 'warning',
-						title: 'Statistics Database',
-						message: result.userMessage,
-						duration: 10000, // Show for 10 seconds since this is important info
-					});
-					// Clear the result so we don't show it again
-					window.maestro?.stats?.clearInitializationResult();
-				}
-			})
-			.catch(console.error);
-	}, []);
+	// --- APP INITIALIZATION (extracted hook, Phase 2G) ---
+	const { ghCliAvailable, sshRemoteConfigs, speckitCommands, openspecCommands, saveFileGistUrl } =
+		useAppInitialization();
 
 	// Compute map of session names to SSH remote names (for group chat participant cards)
 	const sessionSshRemoteNames = useMemo(() => {
@@ -812,8 +764,6 @@ function MaestroConsoleInner() {
 	const graphFocusFilePath = useFileExplorerStore((s) => s.graphFocusFilePath);
 	const lastGraphFocusFilePath = useFileExplorerStore((s) => s.lastGraphFocusFilePath);
 
-	// GitHub CLI availability (for gist publishing)
-	const [ghCliAvailable, setGhCliAvailable] = useState(false);
 	const [gistPublishModalOpen, setGistPublishModalOpen] = useState(false);
 	// Tab context gist publishing - now backed by tabStore (Zustand)
 	const tabGistContent = useTabStore((s) => s.tabGistContent);
@@ -875,119 +825,9 @@ function MaestroConsoleInner() {
 		[setActiveSessionId, setSessions]
 	);
 
-	// Sync toast settings to notificationStore
-	useEffect(() => {
-		useNotificationStore.getState().setDefaultDuration(toastDuration);
-	}, [toastDuration]);
-
-	useEffect(() => {
-		useNotificationStore.getState().setAudioFeedback(audioFeedbackEnabled, audioFeedbackCommand);
-	}, [audioFeedbackEnabled, audioFeedbackCommand]);
-
-	useEffect(() => {
-		useNotificationStore.getState().setOsNotifications(osNotificationsEnabled);
-	}, [osNotificationsEnabled]);
-
-	// Expose playground() function for developer console
-	useEffect(() => {
-		(window as unknown as { playground: () => void }).playground = () => {
-			setPlaygroundOpen(true);
-		};
-		return () => {
-			delete (window as unknown as { playground?: () => void }).playground;
-		};
-	}, []);
-
-	// fetchGitInfoInBackground — provided by useSessionRestoration hook
-
-	// restoreSession — provided by useSessionRestoration hook
-
-	// Session & group loading on mount — handled by useSessionRestoration hook
-
-	// Hide splash screen only when both settings and sessions have fully loaded
-	// This prevents theme flash on initial render
-	useEffect(() => {
-		console.log(
-			'[App] Splash check - settingsLoaded:',
-			settingsLoaded,
-			'sessionsLoaded:',
-			sessionsLoaded
-		);
-		if (settingsLoaded && sessionsLoaded) {
-			console.log('[App] Both loaded, hiding splash');
-			if (typeof window.__hideSplash === 'function') {
-				window.__hideSplash();
-			}
-		}
-	}, [settingsLoaded, sessionsLoaded]);
-
-	// Check GitHub CLI availability for gist publishing
-	useEffect(() => {
-		window.maestro.git
-			.checkGhCli()
-			.then((status) => {
-				setGhCliAvailable(status.installed && status.authenticated);
-			})
-			.catch(() => {
-				setGhCliAvailable(false);
-			});
-	}, []);
-
-	// Track if Windows warning has been shown this session to prevent re-showing
-	const windowsWarningShownRef = useRef(false);
-
-	// Show Windows warning modal on startup for Windows users (if not suppressed)
-	// Also expose a debug function to trigger the modal from console for testing
-	useEffect(() => {
-		// Expose debug function regardless of platform (for testing)
-		exposeWindowsWarningModalDebug(setWindowsWarningModalOpen);
-
-		// Only check platform when settings have loaded (so we know suppress preference)
-		if (!settingsLoaded) return;
-
-		// Skip if user has suppressed the warning
-		if (suppressWindowsWarning) return;
-
-		// Skip if already shown this session (prevents re-showing when suppressWindowsWarning
-		// is set to false by the close handler without checking "don't show again")
-		if (windowsWarningShownRef.current) return;
-
-		// Check if running on Windows using the power API (has platform info)
-		window.maestro.power
-			.getStatus()
-			.then((status) => {
-				if (status.platform === 'win32') {
-					windowsWarningShownRef.current = true;
-					setWindowsWarningModalOpen(true);
-				}
-			})
-			.catch((error) => {
-				console.error('[App] Failed to detect platform for Windows warning:', error);
-			});
-	}, [settingsLoaded, suppressWindowsWarning, setWindowsWarningModalOpen]);
-
-	// Load file gist URLs from settings on startup
-	useEffect(() => {
-		window.maestro.settings
-			.get('fileGistUrls')
-			.then((savedUrls) => {
-				if (savedUrls && typeof savedUrls === 'object') {
-					useTabStore.getState().setFileGistUrls(savedUrls as Record<string, GistInfo>);
-				}
-			})
-			.catch(() => {
-				// Ignore errors loading gist URLs
-			});
-	}, []);
-
-	// Helper to save a gist URL for a file path
-	const saveFileGistUrl = useCallback((filePath: string, gistInfo: GistInfo) => {
-		const { fileGistUrls: current } = useTabStore.getState();
-		const updated = { ...current, [filePath]: gistInfo };
-		useTabStore.getState().setFileGistUrls(updated);
-		// Persist to settings
-		window.maestro.settings.set('fileGistUrls', updated);
-	}, []);
+	// Startup effects (splash, GitHub CLI, Windows warning, gist URLs, beta updates,
+	// update check, leaderboard sync, SpecKit/OpenSpec loading, SSH configs, stats DB check,
+	// notification settings sync, playground debug) — provided by useAppInitialization hook
 
 	// Expose debug helpers to window for console access
 	// No dependency array - always keep functions fresh
@@ -999,104 +839,6 @@ function MaestroConsoleInner() {
 	};
 
 	// Note: Standing ovation and keyboard mastery startup checks are now in useModalHandlers
-
-	// Sync beta updates setting to electron-updater when it changes
-	useEffect(() => {
-		if (settingsLoaded) {
-			window.maestro.updates.setAllowPrerelease(enableBetaUpdates);
-		}
-	}, [settingsLoaded, enableBetaUpdates]);
-
-	// Check for updates on startup if enabled
-	useEffect(() => {
-		if (settingsLoaded && checkForUpdatesOnStartup) {
-			// Delay to let the app fully initialize
-			const timer = setTimeout(async () => {
-				try {
-					const result = await window.maestro.updates.check(enableBetaUpdates);
-					if (result.updateAvailable && !result.error) {
-						setUpdateCheckModalOpen(true);
-					}
-				} catch (error) {
-					console.error('Failed to check for updates on startup:', error);
-				}
-			}, 2000);
-			return () => clearTimeout(timer);
-		}
-	}, [settingsLoaded, checkForUpdatesOnStartup, enableBetaUpdates]);
-
-	// Sync leaderboard stats from server on startup (Gap 2 fix for multi-device aggregation)
-	// This ensures a new device installation gets the aggregated stats from all devices
-	useEffect(() => {
-		if (!settingsLoaded) return;
-		const authToken = leaderboardRegistration?.authToken;
-		const email = leaderboardRegistration?.email;
-		if (!authToken || !email) return;
-
-		// Delay to let the app fully initialize
-		const timer = setTimeout(async () => {
-			try {
-				const result = await window.maestro.leaderboard.sync({
-					email,
-					authToken,
-				});
-
-				if (result.success && result.found && result.data) {
-					// Only update if server has more data than local
-					if (result.data.cumulativeTimeMs > autoRunStats.cumulativeTimeMs) {
-						const longestRunTimestamp = result.data.longestRunDate
-							? new Date(result.data.longestRunDate).getTime()
-							: autoRunStats.longestRunTimestamp;
-
-						handleSyncAutoRunStats({
-							cumulativeTimeMs: result.data.cumulativeTimeMs,
-							totalRuns: result.data.totalRuns,
-							currentBadgeLevel: result.data.badgeLevel,
-							longestRunMs: result.data.longestRunMs ?? autoRunStats.longestRunMs,
-							longestRunTimestamp,
-						});
-
-						console.log('[Leaderboard] Startup sync: updated local stats from server', {
-							serverCumulativeMs: result.data.cumulativeTimeMs,
-							localCumulativeMs: autoRunStats.cumulativeTimeMs,
-						});
-					}
-				}
-				// Silent failure - startup sync is not critical
-			} catch (error) {
-				console.debug('[Leaderboard] Startup sync failed (non-critical):', error);
-			}
-		}, 3000); // Slightly longer delay than update check
-
-		return () => clearTimeout(timer);
-		// Deps intentionally limited - we only want this to run once on startup when user is registered
-	}, [settingsLoaded, leaderboardRegistration?.authToken]);
-
-	// Load spec-kit commands on startup
-	useEffect(() => {
-		const loadSpeckitCommands = async () => {
-			try {
-				const commands = await getSpeckitCommands();
-				setSpeckitCommands(commands);
-			} catch (error) {
-				console.error('[SpecKit] Failed to load commands:', error);
-			}
-		};
-		loadSpeckitCommands();
-	}, []);
-
-	// Load OpenSpec commands on startup
-	useEffect(() => {
-		const loadOpenspecCommands = async () => {
-			try {
-				const commands = await getOpenSpecCommands();
-				setOpenspecCommands(commands);
-			} catch (error) {
-				console.error('[OpenSpec] Failed to load commands:', error);
-			}
-		};
-		loadOpenspecCommands();
-	}, []);
 
 	// IPC process event listeners are now in useAgentListeners hook (called after useAgentSessionManagement)
 
