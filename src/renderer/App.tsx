@@ -29,11 +29,8 @@ import { AppOverlays } from './components/AppOverlays';
 import { PlaygroundPanel } from './components/PlaygroundPanel';
 import { DebugWizardModal } from './components/DebugWizardModal';
 import { DebugPackageModal } from './components/DebugPackageModal';
-import {
-	WindowsWarningModal,
-	exposeWindowsWarningModalDebug,
-} from './components/WindowsWarningModal';
-import { GistPublishModal, type GistInfo } from './components/GistPublishModal';
+import { WindowsWarningModal } from './components/WindowsWarningModal';
+import { GistPublishModal } from './components/GistPublishModal';
 import {
 	MaestroWizard,
 	useWizard,
@@ -126,14 +123,20 @@ import {
 	useModalHandlers,
 	// Worktree handlers
 	useWorktreeHandlers,
+	// Session restoration
+	useSessionRestoration,
+	// Input keyboard handling
+	useInputKeyDown,
+	// App initialization effects
+	useAppInitialization,
 } from './hooks';
-import type { TabCompletionSuggestion, TabCompletionFilter } from './hooks';
+import type { TabCompletionSuggestion } from './hooks';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
 import { useAgentListeners } from './hooks/agent/useAgentListeners';
 
 // Import contexts
 import { useLayerStack } from './contexts/LayerStackContext';
-import { useNotificationStore, notifyToast } from './stores/notificationStore';
+import { notifyToast } from './stores/notificationStore';
 import { useModalActions, useModalStore } from './stores/modalStore';
 import { GitStatusProvider } from './contexts/GitStatusContext';
 import { InputProvider, useInputContext } from './contexts/InputContext';
@@ -147,8 +150,6 @@ import { ToastContainer } from './components/Toast';
 
 // Import services
 import { gitService } from './services/git';
-import { getSpeckitCommands } from './services/speckit';
-import { getOpenSpecCommands } from './services/openspec';
 
 // Import prompts and synopsis parsing
 import { autorunSynopsisPrompt, maestroSystemPrompt } from '../prompts';
@@ -168,8 +169,6 @@ import type {
 	BatchRunConfig,
 	AgentError,
 	BatchRunState,
-	SpecKitCommand,
-	OpenSpecCommand,
 	CustomAICommand,
 	ThinkingMode,
 } from './types';
@@ -403,7 +402,6 @@ function MaestroConsoleInner() {
 	// --- SETTINGS (from useSettings hook) ---
 	const settings = useSettings();
 	const {
-		settingsLoaded,
 		conductorProfile,
 		llmProvider,
 		setLlmProvider,
@@ -533,7 +531,6 @@ function MaestroConsoleInner() {
 		setUserMessageAlignment,
 
 		// Windows warning suppression
-		suppressWindowsWarning,
 		setSuppressWindowsWarning,
 
 		// Encore Features
@@ -561,7 +558,6 @@ function MaestroConsoleInner() {
 		setGroups,
 		setActiveSessionId: storeSetActiveSessionId,
 		setActiveSessionIdInternal,
-		setSessionsLoaded,
 		setRemovedWorktreePaths,
 	} = useMemo(() => useSessionStore.getState(), []);
 
@@ -599,26 +595,7 @@ function MaestroConsoleInner() {
 		[]
 	) as React.MutableRefObject<string>;
 
-	// initialLoadComplete — Proxy bridges ref API (.current = true) to store boolean
-	const initialLoadComplete = useMemo(() => {
-		const ref = { current: useSessionStore.getState().initialLoadComplete };
-		return new Proxy(ref, {
-			set(_target, prop, value) {
-				if (prop === 'current') {
-					ref.current = value;
-					useSessionStore.getState().setInitialLoadComplete(value);
-					return true;
-				}
-				return false;
-			},
-			get(target, prop) {
-				if (prop === 'current') {
-					return useSessionStore.getState().initialLoadComplete;
-				}
-				return (target as Record<string | symbol, unknown>)[prop];
-			},
-		});
-	}, []) as React.MutableRefObject<boolean>;
+	// initialLoadComplete — provided by useSessionRestoration hook
 
 	// cyclePositionRef — Proxy bridges ref API to store number
 	const cyclePositionRef = useMemo(() => {
@@ -640,12 +617,6 @@ function MaestroConsoleInner() {
 			},
 		});
 	}, []) as React.MutableRefObject<number>;
-
-	// Spec Kit commands (loaded from bundled prompts)
-	const [speckitCommands, setSpeckitCommands] = useState<SpecKitCommand[]>([]);
-
-	// OpenSpec commands (loaded from bundled prompts)
-	const [openspecCommands, setOpenspecCommands] = useState<OpenSpecCommand[]>([]);
 
 	// --- UI LAYOUT STATE (from uiStore, replaces UILayoutContext) ---
 	// State: individual selectors for granular re-render control
@@ -718,44 +689,9 @@ function MaestroConsoleInner() {
 		setGroupChatParticipantColors,
 	} = useGroupChatStore.getState();
 
-	// SSH Remote configs for looking up SSH remote names (used for participant cards in group chat)
-	const [sshRemoteConfigs, setSshRemoteConfigs] = useState<Array<{ id: string; name: string }>>([]);
-
-	// Load SSH configs once on mount
-	useEffect(() => {
-		window.maestro?.sshRemote
-			?.getConfigs()
-			.then((result) => {
-				if (result.success && result.configs) {
-					setSshRemoteConfigs(
-						result.configs.map((c: { id: string; name: string }) => ({
-							id: c.id,
-							name: c.name,
-						}))
-					);
-				}
-			})
-			.catch(console.error);
-	}, []);
-
-	// Check for stats database initialization issues (corruption, reset, etc.) on mount
-	useEffect(() => {
-		window.maestro?.stats
-			?.getInitializationResult()
-			.then((result) => {
-				if (result?.userMessage) {
-					notifyToast({
-						type: 'warning',
-						title: 'Statistics Database',
-						message: result.userMessage,
-						duration: 10000, // Show for 10 seconds since this is important info
-					});
-					// Clear the result so we don't show it again
-					window.maestro?.stats?.clearInitializationResult();
-				}
-			})
-			.catch(console.error);
-	}, []);
+	// --- APP INITIALIZATION (extracted hook, Phase 2G) ---
+	const { ghCliAvailable, sshRemoteConfigs, speckitCommands, openspecCommands, saveFileGistUrl } =
+		useAppInitialization();
 
 	// Compute map of session names to SSH remote names (for group chat participant cards)
 	const sessionSshRemoteNames = useMemo(() => {
@@ -832,8 +768,6 @@ function MaestroConsoleInner() {
 	const graphFocusFilePath = useFileExplorerStore((s) => s.graphFocusFilePath);
 	const lastGraphFocusFilePath = useFileExplorerStore((s) => s.lastGraphFocusFilePath);
 
-	// GitHub CLI availability (for gist publishing)
-	const [ghCliAvailable, setGhCliAvailable] = useState(false);
 	const [gistPublishModalOpen, setGistPublishModalOpen] = useState(false);
 	// Tab context gist publishing - now backed by tabStore (Zustand)
 	const tabGistContent = useTabStore((s) => s.tabGistContent);
@@ -895,469 +829,9 @@ function MaestroConsoleInner() {
 		[setActiveSessionId, setSessions]
 	);
 
-	// Sync toast settings to notificationStore
-	useEffect(() => {
-		useNotificationStore.getState().setDefaultDuration(toastDuration);
-	}, [toastDuration]);
-
-	useEffect(() => {
-		useNotificationStore.getState().setAudioFeedback(audioFeedbackEnabled, audioFeedbackCommand);
-	}, [audioFeedbackEnabled, audioFeedbackCommand]);
-
-	useEffect(() => {
-		useNotificationStore.getState().setOsNotifications(osNotificationsEnabled);
-	}, [osNotificationsEnabled]);
-
-	// Expose playground() function for developer console
-	useEffect(() => {
-		(window as unknown as { playground: () => void }).playground = () => {
-			setPlaygroundOpen(true);
-		};
-		return () => {
-			delete (window as unknown as { playground?: () => void }).playground;
-		};
-	}, []);
-
-	// Restore a persisted session by respawning its process
-	/**
-	 * Fetch git info (isRepo, branches, tags) for a session in the background.
-	 * This is called after initial session restore to avoid blocking app startup
-	 * on SSH timeouts for remote sessions.
-	 */
-	const fetchGitInfoInBackground = useCallback(
-		async (sessionId: string, cwd: string, sshRemoteId: string | undefined) => {
-			try {
-				// Check if the working directory is a Git repository (via SSH for remote sessions)
-				const isGitRepo = await gitService.isRepo(cwd, sshRemoteId);
-
-				// Fetch git branches and tags if it's a git repo
-				let gitBranches: string[] | undefined;
-				let gitTags: string[] | undefined;
-				let gitRefsCacheTime: number | undefined;
-				if (isGitRepo) {
-					[gitBranches, gitTags] = await Promise.all([
-						gitService.getBranches(cwd, sshRemoteId),
-						gitService.getTags(cwd, sshRemoteId),
-					]);
-					gitRefsCacheTime = Date.now();
-				}
-
-				// Update the session with git info and mark SSH as connected
-				setSessions((prev) =>
-					prev.map((s) =>
-						s.id === sessionId
-							? {
-									...s,
-									isGitRepo,
-									gitBranches,
-									gitTags,
-									gitRefsCacheTime,
-									sshConnectionFailed: false,
-								}
-							: s
-					)
-				);
-			} catch (error) {
-				console.warn(
-					`[fetchGitInfoInBackground] Failed to fetch git info for session ${sessionId}:`,
-					error
-				);
-				// Mark SSH connection as failed so UI can show error state
-				setSessions((prev) =>
-					prev.map((s) => (s.id === sessionId ? { ...s, sshConnectionFailed: true } : s))
-				);
-			}
-		},
-		[]
-	);
-
-	const restoreSession = async (session: Session): Promise<Session> => {
-		try {
-			// Migration: ensure projectRoot is set (for sessions created before this field was added)
-			if (!session.projectRoot) {
-				session = { ...session, projectRoot: session.cwd };
-			}
-
-			// Migration: default autoRunFolderPath for sessions that don't have one
-			if (!session.autoRunFolderPath && session.projectRoot) {
-				session = {
-					...session,
-					autoRunFolderPath: `${session.projectRoot}/${AUTO_RUN_FOLDER_NAME}`,
-				};
-			}
-
-			// Migration: ensure fileTreeAutoRefreshInterval is set (default 180s for legacy sessions)
-			if (session.fileTreeAutoRefreshInterval == null) {
-				console.warn(
-					`[restoreSession] Session missing fileTreeAutoRefreshInterval, defaulting to 180s`
-				);
-				session = { ...session, fileTreeAutoRefreshInterval: 180 };
-			}
-
-			// Sessions must have aiTabs - if missing, this is a data corruption issue
-			// Create a default tab to prevent crashes when code calls .find() on aiTabs
-			if (!session.aiTabs || session.aiTabs.length === 0) {
-				console.error(
-					'[restoreSession] Session has no aiTabs - data corruption, creating default tab:',
-					session.id
-				);
-				const defaultTabId = generateId();
-				return {
-					...session,
-					aiPid: -1,
-					terminalPid: 0,
-					state: 'error' as SessionState,
-					isLive: false,
-					liveUrl: undefined,
-					aiTabs: [
-						{
-							id: defaultTabId,
-							agentSessionId: null,
-							name: null,
-							state: 'idle' as const,
-							logs: [
-								{
-									id: generateId(),
-									timestamp: Date.now(),
-									source: 'system' as const,
-									text: '⚠️ Session data was corrupted and has been recovered with a new tab.',
-								},
-							],
-							starred: false,
-							inputValue: '',
-							stagedImages: [],
-							createdAt: Date.now(),
-						},
-					],
-					activeTabId: defaultTabId,
-					filePreviewTabs: [],
-					activeFileTabId: null,
-					unifiedTabOrder: [{ type: 'ai' as const, id: defaultTabId }],
-					unifiedClosedTabHistory: [],
-				};
-			}
-
-			// Detect and fix inputMode/toolType mismatch
-			// The AI agent should never use 'terminal' as toolType
-			let correctedSession = { ...session };
-			let aiAgentType = correctedSession.toolType;
-
-			// If toolType is 'terminal', migrate to claude-code
-			// This fixes legacy sessions that were incorrectly saved with toolType='terminal'
-			if (aiAgentType === 'terminal') {
-				console.warn(`[restoreSession] Session has toolType='terminal', migrating to claude-code`);
-				aiAgentType = 'claude-code' as ToolType;
-				correctedSession = {
-					...correctedSession,
-					toolType: 'claude-code' as ToolType,
-				};
-
-				// Add warning to the active tab's logs
-				const warningLog: LogEntry = {
-					id: generateId(),
-					timestamp: Date.now(),
-					source: 'system',
-					text: '⚠️ Session migrated to use Claude Code agent.',
-				};
-				const activeTabIndex = correctedSession.aiTabs.findIndex(
-					(tab) => tab.id === correctedSession.activeTabId
-				);
-				if (activeTabIndex >= 0) {
-					correctedSession.aiTabs = correctedSession.aiTabs.map((tab, i) =>
-						i === activeTabIndex ? { ...tab, logs: [...tab.logs, warningLog] } : tab
-					);
-				}
-			}
-
-			// Get agent definitions for both processes
-			const agent = await window.maestro.agents.get(aiAgentType);
-			if (!agent) {
-				console.error(`Agent not found for toolType: ${correctedSession.toolType}`);
-				return {
-					...correctedSession,
-					aiPid: -1,
-					terminalPid: 0,
-					state: 'error' as SessionState,
-					isLive: false,
-					liveUrl: undefined,
-				};
-			}
-
-			// Don't eagerly spawn AI processes on session restore:
-			// - Batch mode agents (Claude Code, OpenCode, Codex) spawn per message in useInputProcessing
-			// - Terminal uses runCommand (fresh shells per command)
-			// This prevents 20+ idle processes when app starts with many saved sessions
-			// aiPid stays at 0 until user sends their first message
-			const aiSpawnResult = { pid: 0, success: true };
-			const aiSuccess = true;
-
-			if (aiSuccess) {
-				// Get SSH remote ID for remote git operations
-				// Note: sshRemoteId is only set after AI agent spawns. For terminal-only SSH sessions,
-				// we must fall back to sessionSshRemoteConfig.remoteId. See CLAUDE.md "SSH Remote Sessions".
-				const sshRemoteId =
-					correctedSession.sshRemoteId ||
-					(correctedSession.sessionSshRemoteConfig?.enabled
-						? correctedSession.sessionSshRemoteConfig.remoteId
-						: undefined) ||
-					undefined;
-
-				// For SSH remote sessions, defer git operations to background to avoid blocking
-				// app startup on SSH connection timeouts (which can be 10+ seconds per session)
-				const isRemoteSession = !!sshRemoteId;
-
-				// For local sessions, check git status synchronously (fast, sub-100ms)
-				// For remote sessions, use persisted value or default to false, then update in background
-				let isGitRepo = correctedSession.isGitRepo ?? false;
-				let gitBranches = correctedSession.gitBranches;
-				let gitTags = correctedSession.gitTags;
-				let gitRefsCacheTime = correctedSession.gitRefsCacheTime;
-
-				if (!isRemoteSession) {
-					// Local session - check git status synchronously (fast)
-					isGitRepo = await gitService.isRepo(correctedSession.cwd, undefined);
-					if (isGitRepo) {
-						[gitBranches, gitTags] = await Promise.all([
-							gitService.getBranches(correctedSession.cwd, undefined),
-							gitService.getTags(correctedSession.cwd, undefined),
-						]);
-						gitRefsCacheTime = Date.now();
-					}
-				}
-				// For remote sessions, we'll fetch git info in background after session restore
-
-				// Reset all tab states to idle - processes don't survive app restart
-				const resetAiTabs = correctedSession.aiTabs.map((tab) => ({
-					...tab,
-					state: 'idle' as const,
-					thinkingStartTime: undefined,
-				}));
-
-				// Session restored - no superfluous messages added to AI Terminal or Command Terminal
-				return {
-					...correctedSession,
-					aiPid: aiSpawnResult.pid,
-					terminalPid: 0, // Terminal uses runCommand (fresh shells per command)
-					state: 'idle' as SessionState,
-					// Reset runtime-only busy state - processes don't survive app restart
-					busySource: undefined,
-					thinkingStartTime: undefined,
-					currentCycleTokens: undefined,
-					currentCycleBytes: undefined,
-					statusMessage: undefined,
-					isGitRepo, // Update Git status (or use persisted value for remote)
-					gitBranches,
-					gitTags,
-					gitRefsCacheTime,
-					isLive: false, // Always start offline on app restart
-					liveUrl: undefined, // Clear any stale URL
-					aiLogs: [], // Deprecated - logs are now in aiTabs
-					aiTabs: resetAiTabs, // Reset tab states
-					shellLogs: correctedSession.shellLogs, // Preserve existing Command Terminal logs
-					executionQueue: correctedSession.executionQueue || [], // Ensure backwards compatibility
-					activeTimeMs: correctedSession.activeTimeMs || 0, // Ensure backwards compatibility
-					// Clear runtime-only error state - no agent is running yet so there can't be an error
-					agentError: undefined,
-					agentErrorPaused: false,
-					closedTabHistory: [], // Runtime-only, reset on load
-					// File preview tabs - initialize from persisted data or empty
-					filePreviewTabs: correctedSession.filePreviewTabs || [],
-					activeFileTabId: correctedSession.activeFileTabId ?? null,
-					unifiedTabOrder:
-						correctedSession.unifiedTabOrder ||
-						resetAiTabs.map((tab) => ({ type: 'ai' as const, id: tab.id })),
-				};
-			} else {
-				// Process spawn failed
-				console.error(`Failed to restore session ${session.id}`);
-				return {
-					...session,
-					aiPid: -1,
-					terminalPid: 0,
-					state: 'error' as SessionState,
-					isLive: false,
-					liveUrl: undefined,
-				};
-			}
-		} catch (error) {
-			console.error(`Error restoring session ${session.id}:`, error);
-			return {
-				...session,
-				aiPid: -1,
-				terminalPid: 0,
-				state: 'error' as SessionState,
-				isLive: false,
-				liveUrl: undefined,
-			};
-		}
-	};
-
-	// Load sessions and groups from electron-store on mount
-	// Use a ref to prevent duplicate execution in React Strict Mode
-	const sessionLoadStarted = useRef(false);
-	useEffect(() => {
-		console.log('[App] Session load useEffect triggered');
-		// Guard against duplicate execution in React Strict Mode
-		if (sessionLoadStarted.current) {
-			console.log('[App] Session load already started, skipping');
-			return;
-		}
-		sessionLoadStarted.current = true;
-		console.log('[App] Starting loadSessionsAndGroups');
-
-		const loadSessionsAndGroups = async () => {
-			try {
-				console.log('[App] About to call sessions.getAll()');
-				const savedSessions = await window.maestro.sessions.getAll();
-				console.log('[App] Got sessions:', savedSessions?.length ?? 0);
-				const savedGroups = await window.maestro.groups.getAll();
-
-				// Handle sessions
-				if (savedSessions && savedSessions.length > 0) {
-					const restoredSessions = await Promise.all(savedSessions.map((s) => restoreSession(s)));
-					setSessions(restoredSessions);
-					// Set active session to first session if current activeSessionId is invalid
-					if (
-						restoredSessions.length > 0 &&
-						!restoredSessions.find((s) => s.id === activeSessionId)
-					) {
-						setActiveSessionId(restoredSessions[0].id);
-					}
-
-					// For remote (SSH) sessions, fetch git info in background to avoid blocking
-					// startup on SSH connection timeouts. This runs after UI is shown.
-					for (const session of restoredSessions) {
-						const sshRemoteId =
-							session.sshRemoteId ||
-							(session.sessionSshRemoteConfig?.enabled
-								? session.sessionSshRemoteConfig.remoteId
-								: undefined);
-						if (sshRemoteId) {
-							// Fire and forget - don't await, let it update sessions when done
-							fetchGitInfoInBackground(session.id, session.cwd, sshRemoteId);
-						}
-					}
-				} else {
-					setSessions([]);
-				}
-
-				// Handle groups
-				if (savedGroups && savedGroups.length > 0) {
-					setGroups(savedGroups);
-				} else {
-					setGroups([]);
-				}
-
-				// Load group chats
-				try {
-					const savedGroupChats = await window.maestro.groupChat.list();
-					setGroupChats(savedGroupChats || []);
-				} catch (gcError) {
-					console.error('Failed to load group chats:', gcError);
-					setGroupChats([]);
-				}
-			} catch (e) {
-				console.error('Failed to load sessions/groups:', e);
-				setSessions([]);
-				setGroups([]);
-			} finally {
-				// Mark initial load as complete to enable persistence
-				initialLoadComplete.current = true;
-
-				// Mark sessions as loaded for splash screen coordination
-				setSessionsLoaded(true);
-
-				// When no sessions exist, we show EmptyStateView which lets users
-				// choose between "New Agent" or "Wizard" - no auto-opening wizard
-			}
-		};
-		loadSessionsAndGroups();
-	}, []);
-
-	// Hide splash screen only when both settings and sessions have fully loaded
-	// This prevents theme flash on initial render
-	useEffect(() => {
-		console.log(
-			'[App] Splash check - settingsLoaded:',
-			settingsLoaded,
-			'sessionsLoaded:',
-			sessionsLoaded
-		);
-		if (settingsLoaded && sessionsLoaded) {
-			console.log('[App] Both loaded, hiding splash');
-			if (typeof window.__hideSplash === 'function') {
-				window.__hideSplash();
-			}
-		}
-	}, [settingsLoaded, sessionsLoaded]);
-
-	// Check GitHub CLI availability for gist publishing
-	useEffect(() => {
-		window.maestro.git
-			.checkGhCli()
-			.then((status) => {
-				setGhCliAvailable(status.installed && status.authenticated);
-			})
-			.catch(() => {
-				setGhCliAvailable(false);
-			});
-	}, []);
-
-	// Track if Windows warning has been shown this session to prevent re-showing
-	const windowsWarningShownRef = useRef(false);
-
-	// Show Windows warning modal on startup for Windows users (if not suppressed)
-	// Also expose a debug function to trigger the modal from console for testing
-	useEffect(() => {
-		// Expose debug function regardless of platform (for testing)
-		exposeWindowsWarningModalDebug(setWindowsWarningModalOpen);
-
-		// Only check platform when settings have loaded (so we know suppress preference)
-		if (!settingsLoaded) return;
-
-		// Skip if user has suppressed the warning
-		if (suppressWindowsWarning) return;
-
-		// Skip if already shown this session (prevents re-showing when suppressWindowsWarning
-		// is set to false by the close handler without checking "don't show again")
-		if (windowsWarningShownRef.current) return;
-
-		// Check if running on Windows using the power API (has platform info)
-		window.maestro.power
-			.getStatus()
-			.then((status) => {
-				if (status.platform === 'win32') {
-					windowsWarningShownRef.current = true;
-					setWindowsWarningModalOpen(true);
-				}
-			})
-			.catch((error) => {
-				console.error('[App] Failed to detect platform for Windows warning:', error);
-			});
-	}, [settingsLoaded, suppressWindowsWarning, setWindowsWarningModalOpen]);
-
-	// Load file gist URLs from settings on startup
-	useEffect(() => {
-		window.maestro.settings
-			.get('fileGistUrls')
-			.then((savedUrls) => {
-				if (savedUrls && typeof savedUrls === 'object') {
-					useTabStore.getState().setFileGistUrls(savedUrls as Record<string, GistInfo>);
-				}
-			})
-			.catch(() => {
-				// Ignore errors loading gist URLs
-			});
-	}, []);
-
-	// Helper to save a gist URL for a file path
-	const saveFileGistUrl = useCallback((filePath: string, gistInfo: GistInfo) => {
-		const { fileGistUrls: current } = useTabStore.getState();
-		const updated = { ...current, [filePath]: gistInfo };
-		useTabStore.getState().setFileGistUrls(updated);
-		// Persist to settings
-		window.maestro.settings.set('fileGistUrls', updated);
-	}, []);
+	// Startup effects (splash, GitHub CLI, Windows warning, gist URLs, beta updates,
+	// update check, leaderboard sync, SpecKit/OpenSpec loading, SSH configs, stats DB check,
+	// notification settings sync, playground debug) — provided by useAppInitialization hook
 
 	// Expose debug helpers to window for console access
 	// No dependency array - always keep functions fresh
@@ -1369,104 +843,6 @@ function MaestroConsoleInner() {
 	};
 
 	// Note: Standing ovation and keyboard mastery startup checks are now in useModalHandlers
-
-	// Sync beta updates setting to electron-updater when it changes
-	useEffect(() => {
-		if (settingsLoaded) {
-			window.maestro.updates.setAllowPrerelease(enableBetaUpdates);
-		}
-	}, [settingsLoaded, enableBetaUpdates]);
-
-	// Check for updates on startup if enabled
-	useEffect(() => {
-		if (settingsLoaded && checkForUpdatesOnStartup) {
-			// Delay to let the app fully initialize
-			const timer = setTimeout(async () => {
-				try {
-					const result = await window.maestro.updates.check(enableBetaUpdates);
-					if (result.updateAvailable && !result.error) {
-						setUpdateCheckModalOpen(true);
-					}
-				} catch (error) {
-					console.error('Failed to check for updates on startup:', error);
-				}
-			}, 2000);
-			return () => clearTimeout(timer);
-		}
-	}, [settingsLoaded, checkForUpdatesOnStartup, enableBetaUpdates]);
-
-	// Sync leaderboard stats from server on startup (Gap 2 fix for multi-device aggregation)
-	// This ensures a new device installation gets the aggregated stats from all devices
-	useEffect(() => {
-		if (!settingsLoaded) return;
-		const authToken = leaderboardRegistration?.authToken;
-		const email = leaderboardRegistration?.email;
-		if (!authToken || !email) return;
-
-		// Delay to let the app fully initialize
-		const timer = setTimeout(async () => {
-			try {
-				const result = await window.maestro.leaderboard.sync({
-					email,
-					authToken,
-				});
-
-				if (result.success && result.found && result.data) {
-					// Only update if server has more data than local
-					if (result.data.cumulativeTimeMs > autoRunStats.cumulativeTimeMs) {
-						const longestRunTimestamp = result.data.longestRunDate
-							? new Date(result.data.longestRunDate).getTime()
-							: autoRunStats.longestRunTimestamp;
-
-						handleSyncAutoRunStats({
-							cumulativeTimeMs: result.data.cumulativeTimeMs,
-							totalRuns: result.data.totalRuns,
-							currentBadgeLevel: result.data.badgeLevel,
-							longestRunMs: result.data.longestRunMs ?? autoRunStats.longestRunMs,
-							longestRunTimestamp,
-						});
-
-						console.log('[Leaderboard] Startup sync: updated local stats from server', {
-							serverCumulativeMs: result.data.cumulativeTimeMs,
-							localCumulativeMs: autoRunStats.cumulativeTimeMs,
-						});
-					}
-				}
-				// Silent failure - startup sync is not critical
-			} catch (error) {
-				console.debug('[Leaderboard] Startup sync failed (non-critical):', error);
-			}
-		}, 3000); // Slightly longer delay than update check
-
-		return () => clearTimeout(timer);
-		// Deps intentionally limited - we only want this to run once on startup when user is registered
-	}, [settingsLoaded, leaderboardRegistration?.authToken]);
-
-	// Load spec-kit commands on startup
-	useEffect(() => {
-		const loadSpeckitCommands = async () => {
-			try {
-				const commands = await getSpeckitCommands();
-				setSpeckitCommands(commands);
-			} catch (error) {
-				console.error('[SpecKit] Failed to load commands:', error);
-			}
-		};
-		loadSpeckitCommands();
-	}, []);
-
-	// Load OpenSpec commands on startup
-	useEffect(() => {
-		const loadOpenspecCommands = async () => {
-			try {
-				const commands = await getOpenSpecCommands();
-				setOpenspecCommands(commands);
-			} catch (error) {
-				console.error('[OpenSpec] Failed to load commands:', error);
-			}
-		};
-		loadOpenspecCommands();
-	}, []);
 
 	// IPC process event listeners are now in useAgentListeners hook (called after useAgentSessionManagement)
 
@@ -1653,6 +1029,9 @@ function MaestroConsoleInner() {
 		activeSession?.agentCommands,
 		activeSession?.projectRoot,
 	]);
+
+	// --- SESSION RESTORATION (extracted hook, Phase 2E) ---
+	const { initialLoadComplete } = useSessionRestoration();
 
 	// --- TAB HANDLERS (extracted hook) ---
 	const {
@@ -6630,194 +6009,19 @@ You are taking over this conversation. Based on the context above, provide a bri
 		}
 	};
 
-	const handleInputKeyDown = (e: React.KeyboardEvent) => {
-		// Cmd+F opens output search from input field - handle first, before any modal logic
-		if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
-			e.preventDefault();
-			setOutputSearchOpen(true);
-			return;
-		}
-
-		// Handle command history modal
-		if (commandHistoryOpen) {
-			return; // Let the modal handle keys
-		}
-
-		// Handle tab completion dropdown (terminal mode only)
-		if (tabCompletionOpen && activeSession?.inputMode === 'terminal') {
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				const newIndex = Math.min(
-					selectedTabCompletionIndex + 1,
-					tabCompletionSuggestions.length - 1
-				);
-				setSelectedTabCompletionIndex(newIndex);
-				// Sync file tree to highlight the corresponding file/folder
-				syncFileTreeToTabCompletion(tabCompletionSuggestions[newIndex]);
-				return;
-			} else if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				const newIndex = Math.max(selectedTabCompletionIndex - 1, 0);
-				setSelectedTabCompletionIndex(newIndex);
-				// Sync file tree to highlight the corresponding file/folder
-				syncFileTreeToTabCompletion(tabCompletionSuggestions[newIndex]);
-				return;
-			} else if (e.key === 'Tab') {
-				e.preventDefault();
-				// Tab cycles through filter types (only in git repos, otherwise just accept)
-				if (activeSession?.isGitRepo) {
-					const filters: TabCompletionFilter[] = ['all', 'history', 'branch', 'tag', 'file'];
-					const currentIndex = filters.indexOf(tabCompletionFilter);
-					// Shift+Tab goes backwards, Tab goes forwards
-					const nextIndex = e.shiftKey
-						? (currentIndex - 1 + filters.length) % filters.length
-						: (currentIndex + 1) % filters.length;
-					setTabCompletionFilter(filters[nextIndex]);
-					setSelectedTabCompletionIndex(0);
-				} else {
-					// In non-git repos, Tab accepts the selection (like Enter)
-					if (tabCompletionSuggestions[selectedTabCompletionIndex]) {
-						setInputValue(tabCompletionSuggestions[selectedTabCompletionIndex].value);
-						syncFileTreeToTabCompletion(tabCompletionSuggestions[selectedTabCompletionIndex]);
-					}
-					setTabCompletionOpen(false);
-				}
-				return;
-			} else if (e.key === 'Enter') {
-				e.preventDefault();
-				if (tabCompletionSuggestions[selectedTabCompletionIndex]) {
-					setInputValue(tabCompletionSuggestions[selectedTabCompletionIndex].value);
-					// Final sync on acceptance
-					syncFileTreeToTabCompletion(tabCompletionSuggestions[selectedTabCompletionIndex]);
-				}
-				setTabCompletionOpen(false);
-				return;
-			} else if (e.key === 'Escape') {
-				e.preventDefault();
-				setTabCompletionOpen(false);
-				inputRef.current?.focus();
-				return;
-			}
-		}
-
-		// Handle @ mention completion dropdown (AI mode only)
-		if (atMentionOpen && activeSession?.inputMode === 'ai') {
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				setSelectedAtMentionIndex((prev) => Math.min(prev + 1, atMentionSuggestions.length - 1));
-				return;
-			} else if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				setSelectedAtMentionIndex((prev) => Math.max(prev - 1, 0));
-				return;
-			} else if (e.key === 'Tab' || e.key === 'Enter') {
-				e.preventDefault();
-				const selected = atMentionSuggestions[selectedAtMentionIndex];
-				if (selected) {
-					// Replace the @filter with the selected file path
-					const beforeAt = inputValue.substring(0, atMentionStartIndex);
-					const afterFilter = inputValue.substring(
-						atMentionStartIndex + 1 + atMentionFilter.length
-					);
-					setInputValue(beforeAt + '@' + selected.value + ' ' + afterFilter);
-				}
-				setAtMentionOpen(false);
-				setAtMentionFilter('');
-				setAtMentionStartIndex(-1);
-				return;
-			} else if (e.key === 'Escape') {
-				e.preventDefault();
-				setAtMentionOpen(false);
-				setAtMentionFilter('');
-				setAtMentionStartIndex(-1);
-				inputRef.current?.focus();
-				return;
-			}
-		}
-
-		// Handle slash command autocomplete
-		if (slashCommandOpen) {
-			const isTerminalMode = activeSession?.inputMode === 'terminal';
-			const filteredCommands = allSlashCommands.filter((cmd) => {
-				// Check if command is only available in terminal mode
-				if ('terminalOnly' in cmd && cmd.terminalOnly && !isTerminalMode) return false;
-				// Check if command is only available in AI mode
-				if ('aiOnly' in cmd && cmd.aiOnly && isTerminalMode) return false;
-				// Check if command matches input
-				return cmd.command.toLowerCase().startsWith(inputValue.toLowerCase());
-			});
-
-			if (e.key === 'ArrowDown') {
-				e.preventDefault();
-				setSelectedSlashCommandIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
-			} else if (e.key === 'ArrowUp') {
-				e.preventDefault();
-				setSelectedSlashCommandIndex((prev) => Math.max(prev - 1, 0));
-			} else if (e.key === 'Tab' || e.key === 'Enter') {
-				// Tab or Enter fills in the command text (user can then press Enter again to execute)
-				e.preventDefault();
-				if (filteredCommands[selectedSlashCommandIndex]) {
-					setInputValue(filteredCommands[selectedSlashCommandIndex].command);
-					setSlashCommandOpen(false);
-					inputRef.current?.focus();
-				}
-			} else if (e.key === 'Escape') {
-				e.preventDefault();
-				setSlashCommandOpen(false);
-			}
-			return;
-		}
-
-		if (e.key === 'Enter') {
-			// Use the appropriate setting based on input mode
-			const currentEnterToSend =
-				activeSession?.inputMode === 'terminal' ? enterToSendTerminal : enterToSendAI;
-
-			if (currentEnterToSend && !e.shiftKey && !e.metaKey) {
-				e.preventDefault();
-				processInput();
-			} else if (!currentEnterToSend && (e.metaKey || e.ctrlKey)) {
-				e.preventDefault();
-				processInput();
-			}
-		} else if (e.key === 'Escape') {
-			e.preventDefault();
-			inputRef.current?.blur();
-			terminalOutputRef.current?.focus();
-		} else if (e.key === 'ArrowUp') {
-			// Only show command history in terminal mode, not AI mode
-			if (activeSession?.inputMode === 'terminal') {
-				e.preventDefault();
-				setCommandHistoryOpen(true);
-				setCommandHistoryFilter(inputValue);
-				setCommandHistorySelectedIndex(0);
-			}
-		} else if (e.key === 'Tab') {
-			// Always prevent default Tab behavior to avoid focus change
-			e.preventDefault();
-
-			// Tab completion in terminal mode when not showing slash commands
-			if (activeSession?.inputMode === 'terminal' && !slashCommandOpen) {
-				// Only show suggestions if there's input
-				if (inputValue.trim()) {
-					const suggestions = getTabCompletionSuggestions(inputValue);
-					if (suggestions.length > 0) {
-						// If only one suggestion, auto-complete it
-						if (suggestions.length === 1) {
-							setInputValue(suggestions[0].value);
-						} else {
-							// Show dropdown for multiple suggestions
-							setSelectedTabCompletionIndex(0);
-							setTabCompletionFilter('all'); // Reset filter when opening
-							setTabCompletionOpen(true);
-						}
-					}
-				}
-			}
-			// In AI mode, Tab is already handled by @ mention completion above
-			// We just need to prevent default here
-		}
-	};
+	// handleInputKeyDown — provided by useInputKeyDown hook (Phase 2F)
+	const { handleInputKeyDown } = useInputKeyDown({
+		inputValue,
+		setInputValue,
+		tabCompletionSuggestions,
+		atMentionSuggestions,
+		allSlashCommands,
+		syncFileTreeToTabCompletion,
+		processInput,
+		getTabCompletionSuggestions,
+		inputRef,
+		terminalOutputRef,
+	});
 
 	// Image Handlers
 	const handlePaste = (e: React.ClipboardEvent) => {

@@ -39,3 +39,7 @@ export type { UseActivityTrackerReturn } from './useActivityTracker';
 
 // Global hands-on time tracking (persists to settings)
 export { useHandsOnTimeTracker } from './useHandsOnTimeTracker';
+
+// Session restoration, migration, and corruption recovery
+export { useSessionRestoration } from './useSessionRestoration';
+export type { SessionRestorationReturn } from './useSessionRestoration';
