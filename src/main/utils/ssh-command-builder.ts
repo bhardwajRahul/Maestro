@@ -55,7 +55,7 @@ function buildNodeVersionManagerPathLines(): string[] {
 		'if [ -d "$_nvm_dir" ]; then',
 		'  [ -d "$_nvm_dir/current/bin" ] && PATH="$_nvm_dir/current/bin:$PATH"',
 		'  if [ -d "$_nvm_dir/versions/node" ]; then',
-		'    for _v in $(ls -r "$_nvm_dir/versions/node/" 2>/dev/null); do',
+		'    for _v in $(ls "$_nvm_dir/versions/node/" 2>/dev/null | sort -V | tac); do',
 		'      [ -d "$_nvm_dir/versions/node/$_v/bin" ] && PATH="$_nvm_dir/versions/node/$_v/bin:$PATH"',
 		'    done',
 		'  fi',
@@ -104,23 +104,23 @@ function buildNodeVersionManagerPathSnippet(): string {
 		'if [ -d "$_nvm_dir" ]; then ' +
 			'[ -d "$_nvm_dir/current/bin" ] && PATH="$_nvm_dir/current/bin:$PATH"; ' +
 			'if [ -d "$_nvm_dir/versions/node" ]; then ' +
-				'for _v in $(ls -r "$_nvm_dir/versions/node/" 2>/dev/null); do ' +
-					'[ -d "$_nvm_dir/versions/node/$_v/bin" ] && PATH="$_nvm_dir/versions/node/$_v/bin:$PATH"; ' +
-				'done; ' +
+			'for _v in $(ls "$_nvm_dir/versions/node/" 2>/dev/null | sort -V | tac); do ' +
+			'[ -d "$_nvm_dir/versions/node/$_v/bin" ] && PATH="$_nvm_dir/versions/node/$_v/bin:$PATH"; ' +
+			'done; ' +
 			'fi; ' +
-		'fi',
+			'fi',
 		// fnm
 		'for _fnm_dir in "$HOME/Library/Application Support/fnm" "$HOME/.local/share/fnm" "$HOME/.fnm"; do ' +
 			'if [ -d "$_fnm_dir" ]; then ' +
-				'[ -d "$_fnm_dir/aliases/default/bin" ] && PATH="$_fnm_dir/aliases/default/bin:$PATH"; ' +
-				'if [ -d "$_fnm_dir/node-versions" ]; then ' +
-					'for _v in $(ls -r "$_fnm_dir/node-versions/" 2>/dev/null); do ' +
-						'[ -d "$_fnm_dir/node-versions/$_v/installation/bin" ] && PATH="$_fnm_dir/node-versions/$_v/installation/bin:$PATH"; ' +
-					'done; ' +
-				'fi; ' +
-				'break; ' +
+			'[ -d "$_fnm_dir/aliases/default/bin" ] && PATH="$_fnm_dir/aliases/default/bin:$PATH"; ' +
+			'if [ -d "$_fnm_dir/node-versions" ]; then ' +
+			'for _v in $(ls -r "$_fnm_dir/node-versions/" 2>/dev/null); do ' +
+			'[ -d "$_fnm_dir/node-versions/$_v/installation/bin" ] && PATH="$_fnm_dir/node-versions/$_v/installation/bin:$PATH"; ' +
+			'done; ' +
 			'fi; ' +
-		'done',
+			'break; ' +
+			'fi; ' +
+			'done',
 		// volta, mise, asdf
 		'[ -d "$HOME/.volta/bin" ] && PATH="$HOME/.volta/bin:$PATH"',
 		'[ -d "$HOME/.local/share/mise/shims" ] && PATH="$HOME/.local/share/mise/shims:$PATH"',
@@ -342,12 +342,9 @@ export async function buildSshCommandWithStdin(
 	const scriptLines: string[] = [];
 
 	// PATH setup - base directories + dynamic Node version manager detection
-	scriptLines.push(
-		`export PATH="${BASE_SSH_PATH_DIRS.join(':')}:$PATH"`
-	);
+	scriptLines.push(`export PATH="${BASE_SSH_PATH_DIRS.join(':')}:$PATH"`);
 	// Dynamically detect Node version manager paths (nvm, fnm, volta, etc.)
 	scriptLines.push(...buildNodeVersionManagerPathLines());
-	scriptLines.push('export PATH');
 
 	// Change directory if specified
 	if (remoteOptions.cwd) {
@@ -641,10 +638,9 @@ export async function buildSshCommand(
 	// Single quotes are parsed literally by zsh - it just passes the content to bash as-is.
 	//
 	// The inner command uses shellEscape() which handles embedded single quotes via '\'' pattern.
-	const pathSetup =
-		`export PATH="${BASE_SSH_PATH_DIRS.join(':')}:$PATH"`;
+	const pathSetup = `export PATH="${BASE_SSH_PATH_DIRS.join(':')}:$PATH"`;
 	const versionManagerSetup = buildNodeVersionManagerPathSnippet();
-	const fullBashCommand = `${pathSetup}; ${versionManagerSetup}; export PATH; ${remoteCommand}`;
+	const fullBashCommand = `${pathSetup}; ${versionManagerSetup}; ${remoteCommand}`;
 	const wrappedCommand = `/bin/bash --norc --noprofile -c ${shellEscape(fullBashCommand)}`;
 	args.push(wrappedCommand);
 
