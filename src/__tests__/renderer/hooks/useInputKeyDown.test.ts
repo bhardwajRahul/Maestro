@@ -168,6 +168,7 @@ describe('Cmd+F output search', () => {
 		});
 
 		expect(e.preventDefault).toHaveBeenCalled();
+		expect(useUIStore.getState().outputSearchOpen).toBe(true);
 	});
 });
 

@@ -44,6 +44,10 @@ export interface SessionRestorationReturn {
 
 export function useSessionRestoration(): SessionRestorationReturn {
 	// --- Store actions (stable, non-reactive) ---
+	// Extract action references once via useMemo so they can be called inside
+	// useCallback/useEffect without appearing in dependency arrays. Zustand
+	// store actions returned by getState() are stable singletons that never
+	// change, so the empty deps array is intentional.
 	const { setSessions, setGroups, setActiveSessionId, setSessionsLoaded } = useMemo(
 		() => useSessionStore.getState(),
 		[]
@@ -227,90 +231,76 @@ export function useSessionRestoration(): SessionRestorationReturn {
 				};
 			}
 
-			// Don't eagerly spawn AI processes on session restore:
+			// Deferred spawn: AI processes are NOT started during session restore.
 			// - Batch mode agents spawn per message in useInputProcessing
 			// - Terminal uses runCommand (fresh shells per command)
-			// aiPid stays at 0 until user sends their first message
-			const aiSpawnResult = { pid: 0, success: true };
-			const aiSuccess = true;
+			// aiPid stays at 0 until the user sends their first message.
 
-			if (aiSuccess) {
-				// Get SSH remote ID for remote git operations
-				const sshRemoteId =
-					correctedSession.sshRemoteId ||
-					(correctedSession.sessionSshRemoteConfig?.enabled
-						? correctedSession.sessionSshRemoteConfig.remoteId
-						: undefined) ||
-					undefined;
+			// Get SSH remote ID for remote git operations
+			const sshRemoteId =
+				correctedSession.sshRemoteId ||
+				(correctedSession.sessionSshRemoteConfig?.enabled
+					? correctedSession.sessionSshRemoteConfig.remoteId
+					: undefined) ||
+				undefined;
 
-				const isRemoteSession = !!sshRemoteId;
+			const isRemoteSession = !!sshRemoteId;
 
-				// For local sessions, check git status synchronously (fast, sub-100ms)
-				// For remote sessions, use persisted value or default, then update in background
-				let isGitRepo = correctedSession.isGitRepo ?? false;
-				let gitBranches = correctedSession.gitBranches;
-				let gitTags = correctedSession.gitTags;
-				let gitRefsCacheTime = correctedSession.gitRefsCacheTime;
+			// For local sessions, check git status synchronously (fast, sub-100ms)
+			// For remote sessions, use persisted value or default, then update in background
+			let isGitRepo = correctedSession.isGitRepo ?? false;
+			let gitBranches = correctedSession.gitBranches;
+			let gitTags = correctedSession.gitTags;
+			let gitRefsCacheTime = correctedSession.gitRefsCacheTime;
 
-				if (!isRemoteSession) {
-					isGitRepo = await gitService.isRepo(correctedSession.cwd, undefined);
-					if (isGitRepo) {
-						[gitBranches, gitTags] = await Promise.all([
-							gitService.getBranches(correctedSession.cwd, undefined),
-							gitService.getTags(correctedSession.cwd, undefined),
-						]);
-						gitRefsCacheTime = Date.now();
-					}
+			if (!isRemoteSession) {
+				isGitRepo = await gitService.isRepo(correctedSession.cwd, undefined);
+				if (isGitRepo) {
+					[gitBranches, gitTags] = await Promise.all([
+						gitService.getBranches(correctedSession.cwd, undefined),
+						gitService.getTags(correctedSession.cwd, undefined),
+					]);
+					gitRefsCacheTime = Date.now();
 				}
-
-				// Reset all tab states to idle - processes don't survive app restart
-				const resetAiTabs = correctedSession.aiTabs.map((tab) => ({
-					...tab,
-					state: 'idle' as const,
-					thinkingStartTime: undefined,
-				}));
-
-				return {
-					...correctedSession,
-					aiPid: aiSpawnResult.pid,
-					terminalPid: 0,
-					state: 'idle' as SessionState,
-					busySource: undefined,
-					thinkingStartTime: undefined,
-					currentCycleTokens: undefined,
-					currentCycleBytes: undefined,
-					statusMessage: undefined,
-					isGitRepo,
-					gitBranches,
-					gitTags,
-					gitRefsCacheTime,
-					isLive: false,
-					liveUrl: undefined,
-					aiLogs: [],
-					aiTabs: resetAiTabs,
-					shellLogs: correctedSession.shellLogs,
-					executionQueue: correctedSession.executionQueue || [],
-					activeTimeMs: correctedSession.activeTimeMs || 0,
-					agentError: undefined,
-					agentErrorPaused: false,
-					closedTabHistory: [],
-					filePreviewTabs: correctedSession.filePreviewTabs || [],
-					activeFileTabId: correctedSession.activeFileTabId ?? null,
-					unifiedTabOrder:
-						correctedSession.unifiedTabOrder ||
-						resetAiTabs.map((tab) => ({ type: 'ai' as const, id: tab.id })),
-				};
-			} else {
-				console.error(`Failed to restore session ${session.id}`);
-				return {
-					...session,
-					aiPid: -1,
-					terminalPid: 0,
-					state: 'error' as SessionState,
-					isLive: false,
-					liveUrl: undefined,
-				};
 			}
+
+			// Reset all tab states to idle - processes don't survive app restart
+			const resetAiTabs = correctedSession.aiTabs.map((tab) => ({
+				...tab,
+				state: 'idle' as const,
+				thinkingStartTime: undefined,
+			}));
+
+			return {
+				...correctedSession,
+				aiPid: 0,
+				terminalPid: 0,
+				state: 'idle' as SessionState,
+				busySource: undefined,
+				thinkingStartTime: undefined,
+				currentCycleTokens: undefined,
+				currentCycleBytes: undefined,
+				statusMessage: undefined,
+				isGitRepo,
+				gitBranches,
+				gitTags,
+				gitRefsCacheTime,
+				isLive: false,
+				liveUrl: undefined,
+				aiLogs: [],
+				aiTabs: resetAiTabs,
+				shellLogs: correctedSession.shellLogs,
+				executionQueue: correctedSession.executionQueue || [],
+				activeTimeMs: correctedSession.activeTimeMs || 0,
+				agentError: undefined,
+				agentErrorPaused: false,
+				closedTabHistory: [],
+				filePreviewTabs: correctedSession.filePreviewTabs || [],
+				activeFileTabId: correctedSession.activeFileTabId ?? null,
+				unifiedTabOrder:
+					correctedSession.unifiedTabOrder ||
+					resetAiTabs.map((tab) => ({ type: 'ai' as const, id: tab.id })),
+			};
 		} catch (error) {
 			console.error(`Error restoring session ${session.id}:`, error);
 			return {

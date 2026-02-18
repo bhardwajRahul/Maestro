@@ -124,7 +124,9 @@ export function useAppInitialization(): AppInitializationReturn {
 					useTabStore.getState().setFileGistUrls(savedUrls as Record<string, GistInfo>);
 				}
 			})
-			.catch(() => {});
+			.catch((error) => {
+				console.debug('[useAppInitialization] Failed to load fileGistUrls:', error);
+			});
 	}, []);
 
 	// --- Save file gist URL helper ---
@@ -224,6 +226,8 @@ export function useAppInitialization(): AppInitializationReturn {
 	}, []);
 
 	// --- SSH remote configs loading ---
+	// Non-critical: SSH may not be configured. Failures are logged but not
+	// reported to Sentry since the app functions fully without SSH remotes.
 	useEffect(() => {
 		window.maestro?.sshRemote
 			?.getConfigs()
@@ -237,7 +241,9 @@ export function useAppInitialization(): AppInitializationReturn {
 					);
 				}
 			})
-			.catch(console.error);
+			.catch((error) => {
+				console.warn('[useAppInitialization] Failed to load SSH remote configs:', error);
+			});
 	}, []);
 
 	// --- Stats DB corruption check ---
