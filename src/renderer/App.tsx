@@ -171,6 +171,7 @@ import type {
 	BatchRunState,
 	CustomAICommand,
 	ThinkingMode,
+	ThinkingItem,
 } from './types';
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
@@ -2035,13 +2036,27 @@ You are taking over this conversation. Based on the context above, provide a bri
 		[activeSession?.inputMode]
 	);
 
-	// PERF: Memoize thinkingSessions at App level to avoid passing full sessions array to children.
+	// PERF: Memoize thinkingItems at App level to avoid passing full sessions array to children.
 	// This prevents InputArea from re-rendering on unrelated session updates (e.g., terminal output).
-	// The computation is O(n) but only runs when sessions array changes, not on every keystroke.
-	const thinkingSessions = useMemo(
-		() => sessions.filter((s) => s.state === 'busy' && s.busySource === 'ai'),
-		[sessions]
-	);
+	// Flat list of (session, tab) pairs — one entry per busy tab across all sessions.
+	// This allows the ThinkingStatusPill to show all active work, even when multiple tabs
+	// within the same agent are busy in parallel.
+	const thinkingItems: ThinkingItem[] = useMemo(() => {
+		const items: ThinkingItem[] = [];
+		for (const session of sessions) {
+			if (session.state !== 'busy' || session.busySource !== 'ai') continue;
+			const busyTabs = session.aiTabs?.filter((t) => t.state === 'busy');
+			if (busyTabs && busyTabs.length > 0) {
+				for (const tab of busyTabs) {
+					items.push({ session, tab });
+				}
+			} else {
+				// Legacy: session is busy but no individual tab-level tracking
+				items.push({ session, tab: null });
+			}
+		}
+		return items;
+	}, [sessions]);
 
 	// Images are stored per-tab and only used in AI mode
 	// Get staged images from the active tab
@@ -7079,7 +7094,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		agentSessionsOpen,
 		activeAgentSessionId,
 		activeSession,
-		thinkingSessions,
+		thinkingItems,
 		theme,
 		fontFamily,
 		isMobileLandscape,

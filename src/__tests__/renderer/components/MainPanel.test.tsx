@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import type { Theme, Session, Shortcut, FocusArea, BatchRunState } from '../../../renderer/types';
+import type { Theme, Session, Shortcut, FocusArea, BatchRunState, ThinkingItem } from '../../../renderer/types';
 import { gitService } from '../../../renderer/services/git';
 import {
 	clearCapabilitiesCache,
@@ -330,7 +330,7 @@ describe('MainPanel', () => {
 		agentSessionsOpen: false,
 		activeAgentSessionId: null,
 		activeSession: createSession(),
-		thinkingSessions: [] as Session[],
+		thinkingItems: [] as ThinkingItem[],
 		theme,
 		fontFamily: 'monospace',
 		isMobileLandscape: false,

@@ -17,7 +17,7 @@ import {
 	Wand2,
 	Pin,
 } from 'lucide-react';
-import type { Session, Theme, BatchRunState, Shortcut, ThinkingMode } from '../types';
+import type { Session, Theme, BatchRunState, Shortcut, ThinkingMode, ThinkingItem } from '../types';
 import {
 	formatShortcutKeys,
 	formatEnterToSend,
@@ -106,9 +106,9 @@ interface InputAreaProps {
 	}>;
 	selectedAtMentionIndex?: number;
 	setSelectedAtMentionIndex?: (index: number) => void;
-	// ThinkingStatusPill props - PERF: receive pre-filtered thinkingSessions instead of full sessions
+	// ThinkingStatusPill props - PERF: receive pre-filtered thinkingItems instead of full sessions
 	// This prevents re-renders when unrelated session updates occur (e.g., terminal output)
-	thinkingSessions?: Session[];
+	thinkingItems?: ThinkingItem[];
 	namedSessions?: Record<string, string>;
 	onSessionClick?: (sessionId: string, tabId?: string) => void;
 	autoRunState?: BatchRunState;
@@ -206,7 +206,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 		atMentionSuggestions = [],
 		selectedAtMentionIndex = 0,
 		setSelectedAtMentionIndex,
-		thinkingSessions = [],
+		thinkingItems = [],
 		namedSessions,
 		onSessionClick,
 		autoRunState,
@@ -292,7 +292,7 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 	// Filter slash commands based on input and current mode
 	const isTerminalMode = session.inputMode === 'terminal';
 
-	// thinkingSessions is now passed directly from App.tsx (pre-filtered) for better performance
+	// thinkingItems is now passed directly from App.tsx (pre-filtered) for better performance
 
 	// Get the appropriate command history based on current mode
 	// Fall back to legacy commandHistory for sessions created before the split
@@ -433,10 +433,10 @@ export const InputArea = React.memo(function InputArea(props: InputAreaProps) {
 			className="relative p-4 border-t"
 			style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
 		>
-			{/* ThinkingStatusPill - only show in AI mode when there are thinking sessions or AutoRun */}
-			{session.inputMode === 'ai' && (thinkingSessions.length > 0 || autoRunState?.isRunning) && (
+			{/* ThinkingStatusPill - only show in AI mode when there are thinking items or AutoRun */}
+			{session.inputMode === 'ai' && (thinkingItems.length > 0 || autoRunState?.isRunning) && (
 				<ThinkingStatusPill
-					thinkingSessions={thinkingSessions}
+					thinkingItems={thinkingItems}
 					theme={theme}
 					onSessionClick={onSessionClick}
 					namedSessions={namedSessions}

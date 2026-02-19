@@ -47,6 +47,7 @@ import type {
 	BatchRunState,
 	UnifiedTab,
 	FilePreviewTab,
+	ThinkingItem,
 } from '../types';
 
 interface SlashCommand {
@@ -70,9 +71,9 @@ interface MainPanelProps {
 	agentSessionsOpen: boolean;
 	activeAgentSessionId: string | null;
 	activeSession: Session | null;
-	// PERF: Receive pre-filtered thinkingSessions instead of full sessions array.
+	// PERF: Receive pre-filtered thinkingItems instead of full sessions array.
 	// This prevents cascade re-renders when unrelated session updates occur.
-	thinkingSessions: Session[];
+	thinkingItems: ThinkingItem[];
 	theme: Theme;
 	fontFamily: string;
 	isMobileLandscape?: boolean;
@@ -362,7 +363,7 @@ export const MainPanel = React.memo(
 			agentSessionsOpen,
 			activeAgentSessionId,
 			activeSession,
-			thinkingSessions,
+			thinkingItems,
 			theme,
 			activeFocus,
 			outputSearchOpen,
@@ -1867,7 +1868,7 @@ export const MainPanel = React.memo(
 											onInputFocus={handleInputFocus}
 											onInputBlur={props.onInputBlur}
 											isAutoModeActive={isCurrentSessionAutoMode}
-											thinkingSessions={thinkingSessions}
+											thinkingItems={thinkingItems}
 											onSessionClick={handleSessionClick}
 											autoRunState={currentSessionBatchState || undefined}
 											onStopAutoRun={() => onStopBatchRun?.(activeSession.id)}

@@ -434,6 +434,13 @@ export interface AITab {
 	isGeneratingName?: boolean; // True while automatic tab naming is in progress
 }
 
+// A single "thinking item" — one busy tab within a session.
+// Used by ThinkingStatusPill to show all active work across all agents.
+export interface ThinkingItem {
+	session: Session;
+	tab: AITab | null; // null for legacy sessions without tab-level tracking
+}
+
 // Closed tab entry for undo functionality (Cmd+Shift+T)
 // Stores tab data with original position for restoration
 // This is the legacy interface for AI tabs only - kept for backwards compatibility
