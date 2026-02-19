@@ -535,6 +535,8 @@ const mockMaestro = {
 		checkCli: vi.fn().mockResolvedValue({ available: false }),
 		validateApiKey: vi.fn().mockResolvedValue({ valid: false }),
 	},
+	// Synchronous platform string (replaces async os.getPlatform IPC)
+	platform: 'darwin',
 };
 
 // Only mock window.maestro if window exists (jsdom environment)

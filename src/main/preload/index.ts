@@ -29,7 +29,6 @@ import {
 	createPowerApi,
 	createUpdatesApi,
 	createAppApi,
-	createOsApi,
 } from './system';
 import { createSshRemoteApi } from './sshRemote';
 import { createLoggerApi } from './logger';
@@ -172,6 +171,9 @@ contextBridge.exposeInMainWorld('maestro', {
 	// App lifecycle API
 	app: createAppApi(),
 
+	// Synchronous platform string — process.platform never changes at runtime
+	platform: process.platform,
+
 	// Stats API
 	stats: createStatsApi(),
 
@@ -189,9 +191,6 @@ contextBridge.exposeInMainWorld('maestro', {
 
 	// WakaTime API (CLI check, API key validation)
 	wakatime: createWakatimeApi(),
-
-	// OS API (platform and arch info)
-	os: createOsApi(),
 });
 
 // Re-export factory functions for external consumers (e.g., tests)
@@ -218,7 +217,6 @@ export {
 	createPowerApi,
 	createUpdatesApi,
 	createAppApi,
-	createOsApi,
 	// SSH Remote
 	createSshRemoteApi,
 	// Logger
@@ -302,7 +300,6 @@ export type {
 	PowerApi,
 	UpdatesApi,
 	AppApi,
-	OsApi,
 	ShellInfo,
 	UpdateStatus,
 } from './system';

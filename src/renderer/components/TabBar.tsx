@@ -25,7 +25,7 @@ import type { AITab, Theme, FilePreviewTab, UnifiedTab } from '../types';
 import { hasDraft } from '../utils/tabHelpers';
 import { formatShortcutKeys } from '../utils/shortcutFormatter';
 import { getColorBlindExtensionColor } from '../constants/colorblindPalettes';
-import { useOsPlatform } from '../hooks/useOsPlatform';
+import { getRevealLabel } from '../utils/platformUtils';
 
 interface TabBarProps {
 	tabs: AITab[];
@@ -1086,7 +1086,6 @@ const FileTab = memo(function FileTab({
 	const [isHovered, setIsHovered] = useState(false);
 	const [overlayOpen, setOverlayOpen] = useState(false);
 	const [showCopied, setShowCopied] = useState<'path' | 'name' | null>(null);
-	const platform = useOsPlatform();
 	const [overlayPosition, setOverlayPosition] = useState<{
 		top: number;
 		left: number;
@@ -1283,14 +1282,6 @@ const FileTab = memo(function FileTab({
 		[tab.extension, theme, colorBlindMode]
 	);
 
-	// Get platform-specific label for reveal action
-	const revealLabel = useMemo(() => {
-		if (platform === 'win32') {
-			return 'Reveal in Explorer';
-		}
-		return 'Reveal in Finder';
-	}, [platform]);
-
 	// Hover background varies by theme mode for proper contrast
 	const hoverBgColor = theme.mode === 'light' ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)';
 
@@ -1469,7 +1460,7 @@ const FileTab = memo(function FileTab({
 									style={{ color: theme.colors.textMain }}
 								>
 									<FolderOpen className="w-3.5 h-3.5" style={{ color: theme.colors.textDim }} />
-									{revealLabel}
+									{getRevealLabel(window.maestro.platform)}
 								</button>
 
 								{/* Tab Move Actions Section - divider and move options */}
