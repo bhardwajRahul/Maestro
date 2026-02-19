@@ -43,3 +43,7 @@ export { useHandsOnTimeTracker } from './useHandsOnTimeTracker';
 // Session restoration, migration, and corruption recovery
 export { useSessionRestoration } from './useSessionRestoration';
 export type { SessionRestorationReturn } from './useSessionRestoration';
+
+// Session lifecycle operations (rename, delete, star, unread, groups persistence)
+export { useSessionLifecycle } from './useSessionLifecycle';
+export type { SessionLifecycleDeps, SessionLifecycleReturn } from './useSessionLifecycle';

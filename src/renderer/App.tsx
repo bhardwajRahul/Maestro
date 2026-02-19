@@ -129,6 +129,8 @@ import {
 	useInputKeyDown,
 	// App initialization effects
 	useAppInitialization,
+	// Session lifecycle operations
+	useSessionLifecycle,
 } from './hooks';
 import type { TabCompletionSuggestion } from './hooks';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
@@ -385,7 +387,7 @@ function MaestroConsoleInner() {
 	const isMobileLandscape = useMobileLandscape();
 
 	// --- NAVIGATION HISTORY (back/forward through sessions and tabs) ---
-	const { pushNavigation, navigateBack, navigateForward } = useNavigationHistory();
+	const { navigateBack, navigateForward } = useNavigationHistory();
 
 	// --- WIZARD (onboarding wizard for new users) ---
 	const {
@@ -647,7 +649,6 @@ function MaestroConsoleInner() {
 		setActiveFocus,
 		setBookmarksCollapsed,
 		setGroupChatsExpanded,
-		setShowUnreadOnly,
 		setEditingGroupId,
 		setEditingSessionId,
 		setDraggingSessionId,
@@ -3857,147 +3858,20 @@ You are taking over this conversation. Based on the context above, provide a bri
 		initialLoadComplete
 	);
 
-	// AppSessionModals handlers that depend on flushSessionPersistence
-	const handleSaveEditAgent = useCallback(
-		(
-			sessionId: string,
-			name: string,
-			nudgeMessage?: string,
-			customPath?: string,
-			customArgs?: string,
-			customEnvVars?: Record<string, string>,
-			customModel?: string,
-			customContextWindow?: number,
-			sessionSshRemoteConfig?: {
-				enabled: boolean;
-				remoteId: string | null;
-				workingDirOverride?: string;
-			}
-		) => {
-			setSessions((prev) =>
-				prev.map((s) => {
-					if (s.id !== sessionId) return s;
-					return {
-						...s,
-						name,
-						nudgeMessage,
-						customPath,
-						customArgs,
-						customEnvVars,
-						customModel,
-						customContextWindow,
-						sessionSshRemoteConfig,
-					};
-				})
-			);
-		},
-		[]
-	);
-
-	const handleRenameTab = useCallback(
-		(newName: string) => {
-			if (!activeSession || !renameTabId) return;
-			setSessions((prev) =>
-				prev.map((s) => {
-					if (s.id !== activeSession.id) return s;
-					// Find the tab to get its agentSessionId for persistence
-					const tab = s.aiTabs.find((t) => t.id === renameTabId);
-					const oldName = tab?.name;
-
-					window.maestro.logger.log(
-						'info',
-						`Tab renamed: "${oldName || '(auto)'}" → "${newName || '(cleared)'}"`,
-						'TabNaming',
-						{
-							tabId: renameTabId,
-							sessionId: activeSession.id,
-							agentSessionId: tab?.agentSessionId,
-							oldName,
-							newName: newName || null,
-						}
-					);
-
-					if (tab?.agentSessionId) {
-						// Persist name to agent session metadata (async, fire and forget)
-						// Use projectRoot (not cwd) for consistent session storage access
-						const agentId = s.toolType || 'claude-code';
-						if (agentId === 'claude-code') {
-							window.maestro.claude
-								.updateSessionName(s.projectRoot, tab.agentSessionId, newName || '')
-								.catch((err) => {
-									window.maestro.logger.log(
-										'error',
-										'Failed to persist tab name to Claude session storage',
-										'TabNaming',
-										{
-											tabId: renameTabId,
-											agentSessionId: tab.agentSessionId,
-											error: String(err),
-										}
-									);
-								});
-						} else {
-							window.maestro.agentSessions
-								.setSessionName(agentId, s.projectRoot, tab.agentSessionId, newName || null)
-								.catch((err) => {
-									window.maestro.logger.log(
-										'error',
-										'Failed to persist tab name to agent session storage',
-										'TabNaming',
-										{
-											tabId: renameTabId,
-											agentSessionId: tab.agentSessionId,
-											agentType: agentId,
-											error: String(err),
-										}
-									);
-								});
-						}
-						// Also update past history entries with this agentSessionId
-						window.maestro.history
-							.updateSessionName(tab.agentSessionId, newName || '')
-							.catch((err) => {
-								window.maestro.logger.log(
-									'warn',
-									'Failed to update history session names',
-									'TabNaming',
-									{
-										agentSessionId: tab.agentSessionId,
-										error: String(err),
-									}
-								);
-							});
-					} else {
-						window.maestro.logger.log(
-							'info',
-							'Tab renamed (no agentSessionId, skipping persistence)',
-							'TabNaming',
-							{
-								tabId: renameTabId,
-							}
-						);
-					}
-					return {
-						...s,
-						aiTabs: s.aiTabs.map((tab) =>
-							// Clear isGeneratingName to cancel any in-progress automatic naming
-							tab.id === renameTabId
-								? { ...tab, name: newName || null, isGeneratingName: false }
-								: tab
-						),
-					};
-				})
-			);
-		},
-		[activeSession, renameTabId]
-	);
-
-	// Persist groups directly (groups change infrequently, no need to debounce)
-	useEffect(() => {
-		if (initialLoadComplete.current) {
-			window.maestro.groups.setAll(groups);
-		}
-	}, [groups]);
+	// Session lifecycle operations (rename, delete, star, unread, groups persistence, nav tracking)
+	// — provided by useSessionLifecycle hook (Phase 2H)
+	const {
+		handleSaveEditAgent,
+		handleRenameTab,
+		performDeleteSession,
+		showConfirmation,
+		toggleTabStar,
+		toggleTabUnread,
+		toggleUnreadFilter,
+	} = useSessionLifecycle({
+		flushSessionPersistence,
+		setRemovedWorktreePaths,
+	});
 
 	// NOTE: Theme CSS variables and scrollbar fade animations are now handled by useThemeStyles hook
 	// NOTE: Main keyboard handler is now provided by useMainKeyboardHandler hook
@@ -4014,18 +3888,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		}
 	}, [activeSessionId]); // Only restore on session switch, not on scroll position changes
 
-	// Track navigation history when session or AI tab changes
-	useEffect(() => {
-		if (activeSession) {
-			pushNavigation({
-				sessionId: activeSession.id,
-				tabId:
-					activeSession.inputMode === 'ai' && activeSession.aiTabs?.length > 0
-						? activeSession.activeTabId
-						: undefined,
-			});
-		}
-	}, [activeSessionId, activeSession?.activeTabId]); // Track session and tab changes
+	// Navigation history tracking — provided by useSessionLifecycle hook (Phase 2H)
 
 	// Helper to count tasks in document content
 	const countTasksInContent = useCallback(
@@ -4374,12 +4237,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		}
 	};
 
-	// PERF: Memoize to prevent breaking React.memo on MainPanel
-	const showConfirmation = useCallback((message: string, onConfirm: () => void) => {
-		// Use openModal with data in a single call to avoid race condition where
-		// updateModalData fails because the modal hasn't been opened yet (no existing data)
-		useModalStore.getState().openModal('confirm', { message, onConfirm });
-	}, []);
+	// showConfirmation, performDeleteSession — provided by useSessionLifecycle hook (Phase 2H)
 
 	const deleteSession = (id: string) => {
 		const session = sessions.find((s) => s.id === id);
@@ -4388,68 +4246,6 @@ You are taking over this conversation. Based on the context above, provide a bri
 		// Open the delete agent modal (setDeleteAgentSession opens the modal with session data)
 		setDeleteAgentSession(session);
 	};
-
-	// Internal function to perform the actual session deletion
-	const performDeleteSession = useCallback(
-		async (session: Session, eraseWorkingDirectory: boolean) => {
-			const id = session.id;
-
-			// Record session closure for Usage Dashboard (before cleanup)
-			window.maestro.stats.recordSessionClosed(id, Date.now());
-
-			// Kill both processes for this session
-			try {
-				await window.maestro.process.kill(`${id}-ai`);
-			} catch (error) {
-				console.error('Failed to kill AI process:', error);
-			}
-
-			try {
-				await window.maestro.process.kill(`${id}-terminal`);
-			} catch (error) {
-				console.error('Failed to kill terminal process:', error);
-			}
-
-			// Delete associated playbooks
-			try {
-				await window.maestro.playbooks.deleteAll(id);
-			} catch (error) {
-				console.error('Failed to delete playbooks:', error);
-			}
-
-			// If this is a worktree session, track its path to prevent re-discovery
-			if (session.worktreeParentPath && session.cwd) {
-				setRemovedWorktreePaths((prev) => new Set([...prev, session.cwd]));
-			}
-
-			// Optionally erase the working directory (move to trash)
-			if (eraseWorkingDirectory && session.cwd) {
-				try {
-					await window.maestro.shell.trashItem(session.cwd);
-				} catch (error) {
-					console.error('Failed to move working directory to trash:', error);
-					// Show a toast notification about the failure
-					notifyToast({
-						title: 'Failed to Erase Directory',
-						message: error instanceof Error ? error.message : 'Unknown error',
-						type: 'error',
-					});
-				}
-			}
-
-			const newSessions = sessions.filter((s) => s.id !== id);
-			setSessions(newSessions);
-			// Flush immediately for critical operation (session deletion)
-			// Note: flushSessionPersistence will pick up the latest state via ref
-			setTimeout(() => flushSessionPersistence(), 0);
-			if (newSessions.length > 0) {
-				setActiveSessionId(newSessions[0].id);
-			} else {
-				setActiveSessionId('');
-			}
-		},
-		[sessions, setSessions, setActiveSessionId, flushSessionPersistence, setRemovedWorktreePaths]
-	);
 
 	// Delete an entire worktree group and all its agents
 	const deleteWorktreeGroup = (groupId: string) => {
@@ -4951,78 +4747,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 		setSlashCommandOpen(false);
 	};
 
-	// Toggle unread tabs filter with save/restore of active tab
-	const toggleUnreadFilter = useCallback(() => {
-		if (!showUnreadOnly) {
-			// Entering filter mode: save current active tab
-			useUIStore.getState().setPreFilterActiveTabId(activeSession?.activeTabId || null);
-		} else {
-			// Exiting filter mode: restore previous active tab if it still exists
-			const preFilterActiveTabId = useUIStore.getState().preFilterActiveTabId;
-			if (preFilterActiveTabId && activeSession) {
-				const tabStillExists = activeSession.aiTabs.some((t) => t.id === preFilterActiveTabId);
-				if (tabStillExists) {
-					setSessions((prev) =>
-						prev.map((s) => {
-							if (s.id !== activeSession.id) return s;
-							return { ...s, activeTabId: preFilterActiveTabId };
-						})
-					);
-				}
-				useUIStore.getState().setPreFilterActiveTabId(null);
-			}
-		}
-		setShowUnreadOnly((prev: boolean) => !prev);
-	}, [showUnreadOnly, activeSession]);
-
-	// Toggle star on the current active tab
-	const toggleTabStar = useCallback(() => {
-		if (!activeSession) return;
-		const tab = getActiveTab(activeSession);
-		if (!tab) return;
-
-		const newStarred = !tab.starred;
-		setSessions((prev) =>
-			prev.map((s) => {
-				if (s.id !== activeSession.id) return s;
-				// Persist starred status to session metadata (async, fire and forget)
-				// Use projectRoot (not cwd) for consistent session storage access
-				if (tab.agentSessionId) {
-					const agentId = s.toolType || 'claude-code';
-					if (agentId === 'claude-code') {
-						window.maestro.claude
-							.updateSessionStarred(s.projectRoot, tab.agentSessionId, newStarred)
-							.catch((err) => console.error('Failed to persist tab starred:', err));
-					} else {
-						window.maestro.agentSessions
-							.setSessionStarred(agentId, s.projectRoot, tab.agentSessionId, newStarred)
-							.catch((err) => console.error('Failed to persist tab starred:', err));
-					}
-				}
-				return {
-					...s,
-					aiTabs: s.aiTabs.map((t) => (t.id === tab.id ? { ...t, starred: newStarred } : t)),
-				};
-			})
-		);
-	}, [activeSession]);
-
-	// Toggle unread status on the current active tab
-	const toggleTabUnread = useCallback(() => {
-		if (!activeSession) return;
-		const tab = getActiveTab(activeSession);
-		if (!tab) return;
-
-		setSessions((prev) =>
-			prev.map((s) => {
-				if (s.id !== activeSession.id) return s;
-				return {
-					...s,
-					aiTabs: s.aiTabs.map((t) => (t.id === tab.id ? { ...t, hasUnread: !t.hasUnread } : t)),
-				};
-			})
-		);
-	}, [activeSession]);
+	// toggleUnreadFilter, toggleTabStar, toggleTabUnread — provided by useSessionLifecycle hook (Phase 2H)
 
 	// Toggle global live mode (enables web interface for all sessions)
 	const toggleGlobalLive = async () => {
