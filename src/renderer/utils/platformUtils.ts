@@ -1,6 +1,6 @@
 /**
  * Returns the platform-appropriate label for the "reveal in file manager" action.
- *   darwin / linux-unknown → "Reveal in Finder" (macOS)
+ *   darwin (and other/unknown) → "Reveal in Finder" (macOS default)
  *   win32               → "Reveal in Explorer" (Windows)
  *   linux               → "Reveal in File Manager" (Linux)
  */
