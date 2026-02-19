@@ -1978,14 +1978,15 @@ function TabBarInner({
 							: false;
 
 						// Get original index in the FULL unified list (not filtered)
-						const originalIndex = unifiedTabs!.findIndex((ut) => ut.id === unifiedTab.id);
+						const allTabs = unifiedTabs ?? [];
+						const originalIndex = allTabs.findIndex((ut) => ut.id === unifiedTab.id);
 
 						// Show separator between inactive tabs
 						const showSeparator = index > 0 && !isActive && !isPrevActive;
 
 						// Position info for move actions
 						const isFirstTab = originalIndex === 0;
-						const isLastTab = originalIndex === unifiedTabs!.length - 1;
+						const isLastTab = originalIndex === allTabs.length - 1;
 
 						if (unifiedTab.type === 'ai') {
 							const tab = unifiedTab.data;
@@ -2045,7 +2046,7 @@ function TabBarInner({
 										onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
 										onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
 										onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
-										totalTabs={unifiedTabs!.length}
+										totalTabs={allTabs.length}
 										tabIndex={originalIndex}
 									/>
 								</React.Fragment>
@@ -2083,7 +2084,7 @@ function TabBarInner({
 										onCloseOtherTabs={onCloseOtherTabs ? handleTabCloseOther : undefined}
 										onCloseTabsLeft={onCloseTabsLeft ? handleTabCloseLeft : undefined}
 										onCloseTabsRight={onCloseTabsRight ? handleTabCloseRight : undefined}
-										totalTabs={unifiedTabs!.length}
+										totalTabs={allTabs.length}
 										tabIndex={originalIndex}
 										colorBlindMode={colorBlindMode}
 									/>
