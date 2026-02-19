@@ -468,6 +468,7 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 					message: branchName,
 				});
 			} catch (err) {
+				recentlyCreatedWorktreePathsRef.current.delete(normalizedCreatedPath);
 				console.error('[WorktreeConfig] Failed to create worktree:', err);
 				notifyToast({
 					type: 'error',
@@ -510,52 +511,55 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 		recentlyCreatedWorktreePathsRef.current.add(normalizedCreatedPath);
 		setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(normalizedCreatedPath), 10000);
 
-		// Create the worktree via git (pass SSH remote ID for remote sessions)
-		const result = await window.maestro.git.worktreeSetup(
-			createWtSession.cwd,
-			worktreePath,
-			branchName,
-			sshRemoteId
-		);
+		try {
+			// Create the worktree via git (pass SSH remote ID for remote sessions)
+			const result = await window.maestro.git.worktreeSetup(
+				createWtSession.cwd,
+				worktreePath,
+				branchName,
+				sshRemoteId
+			);
 
-		if (!result.success) {
-			// Creation failed — remove from ref so the path isn't permanently blocked
+			if (!result.success) {
+				throw new Error(result.error || 'Failed to create worktree');
+			}
+
+			// Fetch git info for the worktree (pass SSH remote ID for remote sessions)
+			const gitInfo = await fetchGitInfo(worktreePath, sshRemoteId);
+
+			const worktreeSession = buildWorktreeSession({
+				parentSession: createWtSession,
+				path: worktreePath,
+				branch: branchName,
+				name: branchName,
+				defaultSaveToHistory: savToHist,
+				defaultShowThinking: showThink,
+				...gitInfo,
+			});
+
+			// Single setSessions call: add child + expand parent + save config (avoids transient state + extra IPC writes)
+			const needsConfig = !createWtSession.worktreeConfig?.basePath;
+			useSessionStore.getState().setSessions((prev) => [
+				...prev.map((s) => {
+					if (s.id !== createWtSession.id) return s;
+					const updates: Partial<Session> = { worktreesExpanded: true };
+					if (needsConfig) {
+						updates.worktreeConfig = { basePath, watchEnabled: true };
+					}
+					return { ...s, ...updates };
+				}),
+				worktreeSession,
+			]);
+
+			notifyToast({
+				type: 'success',
+				title: 'Worktree Created',
+				message: branchName,
+			});
+		} catch (err) {
 			recentlyCreatedWorktreePathsRef.current.delete(normalizedCreatedPath);
-			throw new Error(result.error || 'Failed to create worktree');
+			throw err;
 		}
-
-		// Fetch git info for the worktree (pass SSH remote ID for remote sessions)
-		const gitInfo = await fetchGitInfo(worktreePath, sshRemoteId);
-
-		const worktreeSession = buildWorktreeSession({
-			parentSession: createWtSession,
-			path: worktreePath,
-			branch: branchName,
-			name: branchName,
-			defaultSaveToHistory: savToHist,
-			defaultShowThinking: showThink,
-			...gitInfo,
-		});
-
-		// Single setSessions call: add child + expand parent + save config (avoids transient state + extra IPC writes)
-		const needsConfig = !createWtSession.worktreeConfig?.basePath;
-		useSessionStore.getState().setSessions((prev) => [
-			...prev.map((s) => {
-				if (s.id !== createWtSession.id) return s;
-				const updates: Partial<Session> = { worktreesExpanded: true };
-				if (needsConfig) {
-					updates.worktreeConfig = { basePath, watchEnabled: true };
-				}
-				return { ...s, ...updates };
-			}),
-			worktreeSession,
-		]);
-
-		notifyToast({
-			type: 'success',
-			title: 'Worktree Created',
-			message: branchName,
-		});
 	}, []);
 
 	const handleCloseDeleteWorktreeModal = useCallback(() => {
