@@ -19,7 +19,7 @@ import { getActiveTab } from '../../utils/tabHelpers';
 import { generateId } from '../../utils/ids';
 import { substituteTemplateVariables } from '../../utils/templateVariables';
 import { gitService } from '../../services/git';
-import * as Sentry from '@sentry/electron/renderer';
+import { captureException } from '../../utils/sentry';
 
 // ============================================================================
 // Dependencies interface
@@ -180,7 +180,7 @@ export function useRemoteHandlers(deps: UseRemoteHandlersDeps): UseRemoteHandler
 					});
 					console.log('[Remote] Terminal command completed successfully');
 				} catch (error: unknown) {
-					Sentry.captureException(error, {
+					captureException(error, {
 						extra: {
 							sessionId,
 							toolType: session.toolType,
@@ -265,8 +265,15 @@ export function useRemoteHandlers(deps: UseRemoteHandlersDeps): UseRemoteHandler
 						try {
 							const status = await gitService.getStatus(session.cwd);
 							gitBranch = status.branch;
-						} catch {
-							// Ignore git errors
+						} catch (error) {
+							captureException(error, {
+								extra: {
+									cwd: session.cwd,
+									sessionId: session.id,
+									sessionName: session.name,
+									operation: 'git-status-for-remote-command',
+								},
+							});
 						}
 					}
 
@@ -408,7 +415,7 @@ export function useRemoteHandlers(deps: UseRemoteHandlersDeps): UseRemoteHandler
 
 				console.log(`[Remote] ${session.toolType} spawn initiated successfully`);
 			} catch (error: unknown) {
-				Sentry.captureException(error, {
+				captureException(error, {
 					extra: { sessionId, toolType: session.toolType, mode: 'ai', operation: 'remote-spawn' },
 				});
 				const errorMessage = error instanceof Error ? error.message : String(error);

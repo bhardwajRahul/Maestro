@@ -27,7 +27,7 @@ import { maestroSystemPrompt } from '../../../prompts';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMergeSessionWithSessions } from './useMergeSession';
 import { useSendToAgentWithSessions } from './useSendToAgent';
-import * as Sentry from '@sentry/electron/renderer';
+import { captureException } from '../../utils/sentry';
 
 // ============================================================================
 // Dependencies interface
@@ -252,10 +252,14 @@ export function useMergeTransferHandlers(
 			// Close the modal - merge will show in the input area overlay
 			getModalActions().setMergeSessionModalOpen(false);
 
+			if (!activeSession) {
+				return { success: false as const, error: 'No active session' };
+			}
+
 			// Execute merge using the hook (callbacks handle toasts and navigation)
 			const result = await executeMerge(
-				activeSession!,
-				activeSession!.activeTabId,
+				activeSession,
+				activeSession.activeTabId,
 				targetSessionId,
 				targetTabId,
 				options
@@ -445,8 +449,15 @@ You are taking over this conversation. Based on the context above, provide a bri
 						try {
 							const status = await gitService.getStatus(targetSession.cwd);
 							gitBranch = status.branch;
-						} catch {
-							// Ignore git errors
+						} catch (error) {
+							captureException(error, {
+								extra: {
+									cwd: targetSession.cwd,
+									sessionId: targetSessionId,
+									isGitRepo: targetSession.isGitRepo,
+									operation: 'git-status-for-transfer',
+								},
+							});
 						}
 					}
 
@@ -481,7 +492,7 @@ You are taking over this conversation. Based on the context above, provide a bri
 						sessionSshRemoteConfig: targetSession.sessionSshRemoteConfig,
 					});
 				} catch (error) {
-					Sentry.captureException(error, {
+					captureException(error, {
 						extra: {
 							targetSessionId,
 							toolType: targetSession.toolType,

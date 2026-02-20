@@ -22,7 +22,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useFileExplorerStore } from '../../stores/fileExplorerStore';
 import { shouldOpenExternally, flattenTree, type FlatTreeNode } from '../../utils/fileExplorer';
 import { useLayerStack } from '../../contexts/LayerStackContext';
-import * as Sentry from '@sentry/electron/renderer';
+import { captureException } from '../../utils/sentry';
 
 // ============================================================================
 // Dependencies interface
@@ -143,7 +143,14 @@ export function useFileExplorerEffects(
 				// Fetch content and stat in parallel for efficiency
 				const [content, stat] = await Promise.all([
 					window.maestro.fs.readFile(fullPath, sshRemoteId),
-					window.maestro.fs.stat(fullPath, sshRemoteId).catch(() => null),
+					window.maestro.fs.stat(fullPath, sshRemoteId).catch((err) => {
+						// ENOENT is expected (file may have been deleted between listing and open)
+						if (err?.code === 'ENOENT') return null;
+						captureException(err, {
+							extra: { fullPath, operation: 'file-stat', sshRemoteId },
+						});
+						return null;
+					}),
 				]);
 				const lastModified = stat?.modifiedAt ? new Date(stat.modifiedAt).getTime() : undefined;
 				handleOpenFileTab(
@@ -158,7 +165,7 @@ export function useFileExplorerEffects(
 				);
 				setActiveFocus('main');
 			} catch (error) {
-				Sentry.captureException(error, {
+				captureException(error, {
 					extra: {
 						fullPath: `${currentSession.fullPath}/${relativePath}`,
 						filename,

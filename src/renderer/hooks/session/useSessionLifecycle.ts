@@ -23,7 +23,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { notifyToast } from '../../stores/notificationStore';
 import { getActiveTab } from '../../utils/tabHelpers';
 import { useNavigationHistory } from './useNavigationHistory';
-import * as Sentry from '@sentry/electron/renderer';
+import { captureException } from '../../utils/sentry';
 
 // ============================================================================
 // Dependencies interface
@@ -246,20 +246,24 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 			try {
 				await window.maestro.process.kill(`${id}-ai`);
 			} catch (error) {
-				console.error('Failed to kill AI process:', error);
+				captureException(error, {
+					extra: { sessionId: id, operation: 'kill-ai' },
+				});
 			}
 
 			try {
 				await window.maestro.process.kill(`${id}-terminal`);
 			} catch (error) {
-				console.error('Failed to kill terminal process:', error);
+				captureException(error, {
+					extra: { sessionId: id, operation: 'kill-terminal' },
+				});
 			}
 
 			// Delete associated playbooks
 			try {
 				await window.maestro.playbooks.deleteAll(id);
 			} catch (error) {
-				Sentry.captureException(error, {
+				captureException(error, {
 					extra: { sessionId: id, operation: 'delete-playbooks' },
 				});
 			}
@@ -274,7 +278,7 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 				try {
 					await window.maestro.shell.trashItem(session.cwd);
 				} catch (error) {
-					Sentry.captureException(error, {
+					captureException(error, {
 						extra: { sessionId: id, cwd: session.cwd, operation: 'trash-working-directory' },
 					});
 					notifyToast({
@@ -322,11 +326,28 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 					if (agentId === 'claude-code') {
 						window.maestro.claude
 							.updateSessionStarred(s.projectRoot, tab.agentSessionId, newStarred)
-							.catch((err) => console.error('Failed to persist tab starred:', err));
+							.catch((err) => {
+								captureException(err, {
+									extra: {
+										sessionId: s.id,
+										agentSessionId: tab.agentSessionId,
+										operation: 'persist-starred-claude',
+									},
+								});
+							});
 					} else {
 						window.maestro.agentSessions
 							.setSessionStarred(agentId, s.projectRoot, tab.agentSessionId, newStarred)
-							.catch((err) => console.error('Failed to persist tab starred:', err));
+							.catch((err) => {
+								captureException(err, {
+									extra: {
+										sessionId: s.id,
+										agentSessionId: tab.agentSessionId,
+										agentType: agentId,
+										operation: 'persist-starred-agent',
+									},
+								});
+							});
 					}
 				}
 				return {
@@ -402,7 +423,12 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 						: undefined,
 			});
 		}
-	}, [activeSessionId, activeSession?.activeTabId]);
+	}, [
+		activeSessionId,
+		activeSession?.activeTabId,
+		activeSession?.inputMode,
+		activeSession?.aiTabs?.length,
+	]);
 
 	return {
 		handleSaveEditAgent,
