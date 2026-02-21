@@ -170,47 +170,38 @@ export function useSessionLifecycle(deps: SessionLifecycleDeps): SessionLifecycl
 							window.maestro.claude
 								.updateSessionName(s.projectRoot, tab.agentSessionId, newName || '')
 								.catch((err) => {
-									window.maestro.logger.log(
-										'error',
-										'Failed to persist tab name to Claude session storage',
-										'TabNaming',
-										{
+									captureException(err, {
+										extra: {
 											tabId: renameTabId,
 											agentSessionId: tab.agentSessionId,
-											error: String(err),
-										}
-									);
+											operation: 'persist-tab-name-claude',
+										},
+									});
 								});
 						} else {
 							window.maestro.agentSessions
 								.setSessionName(agentId, s.projectRoot, tab.agentSessionId, newName || null)
 								.catch((err) => {
-									window.maestro.logger.log(
-										'error',
-										'Failed to persist tab name to agent session storage',
-										'TabNaming',
-										{
+									captureException(err, {
+										extra: {
 											tabId: renameTabId,
 											agentSessionId: tab.agentSessionId,
 											agentType: agentId,
-											error: String(err),
-										}
-									);
+											operation: 'persist-tab-name-agent',
+										},
+									});
 								});
 						}
 						// Also update past history entries with this agentSessionId
 						window.maestro.history
 							.updateSessionName(tab.agentSessionId, newName || '')
 							.catch((err) => {
-								window.maestro.logger.log(
-									'warn',
-									'Failed to update history session names',
-									'TabNaming',
-									{
+								captureException(err, {
+									extra: {
 										agentSessionId: tab.agentSessionId,
-										error: String(err),
-									}
-								);
+										operation: 'update-history-session-name',
+									},
+								});
 							});
 					} else {
 						window.maestro.logger.log(

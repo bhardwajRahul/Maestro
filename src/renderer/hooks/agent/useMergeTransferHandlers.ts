@@ -295,6 +295,11 @@ export function useMergeTransferHandlers(
 
 	const handleSendToAgent = useCallback(
 		async (targetSessionId: string, options: SendToAgentOptions) => {
+			if (!activeSession) {
+				getModalActions().setSendToAgentModalOpen(false);
+				return { success: false, error: 'No active session' };
+			}
+
 			// Find the target session
 			const targetSession = sessions.find((s) => s.id === targetSessionId);
 			if (!targetSession) {
@@ -302,14 +307,14 @@ export function useMergeTransferHandlers(
 			}
 
 			// Store source and target agents for progress modal display
-			setTransferSourceAgent(activeSession!.toolType);
+			setTransferSourceAgent(activeSession.toolType);
 			setTransferTargetAgent(targetSession.toolType);
 
 			// Close the selection modal - progress modal will take over
 			getModalActions().setSendToAgentModalOpen(false);
 
 			// Get source tab context
-			const sourceTab = activeSession!.aiTabs.find((t) => t.id === activeSession!.activeTabId);
+			const sourceTab = activeSession.aiTabs.find((t) => t.id === activeSession.activeTabId);
 			if (!sourceTab) {
 				setTransferSourceAgent(null);
 				setTransferTargetAgent(null);
@@ -332,8 +337,8 @@ export function useMergeTransferHandlers(
 				.join('\n\n');
 
 			const sourceName =
-				activeSession!.name || activeSession!.projectRoot.split('/').pop() || 'Unknown';
-			const sourceAgentName = activeSession!.toolType;
+				activeSession.name || activeSession.projectRoot.split('/').pop() || 'Unknown';
+			const sourceAgentName = activeSession.toolType;
 
 			// Create the context message to be sent directly to the agent
 			const contextMessage = formattedContext
