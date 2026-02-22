@@ -1392,6 +1392,89 @@ describe('useAutoRunHandlers', () => {
 			expect(newSession).toBeDefined();
 			expect(newSession?.parentSessionId).toBe('test-session-1');
 		});
+
+		it('should populate config.worktree for existing-closed with createPROnCompletion', async () => {
+			const mockSession = createMockSession();
+			const mockDeps = createMockDeps();
+
+			useSettingsStore.setState({
+				defaultSaveToHistory: true,
+				defaultShowThinking: 'off',
+			} as any);
+
+			vi.mocked(gitService.getBranches).mockResolvedValue(['main', 'feature-pr']);
+
+			const config: BatchRunConfig = {
+				documents: [{ id: '1', filename: 'Phase 1', resetOnCompletion: false, isDuplicate: false }],
+				prompt: 'Test prompt',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-closed',
+					worktreePath: '/projects/worktrees/feature-pr',
+					baseBranch: 'develop',
+					createPROnCompletion: true,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(mockSession, mockDeps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			// config.worktree should be populated for PR creation
+			expect(config.worktree).toEqual({
+				enabled: true,
+				path: '/projects/worktrees/feature-pr',
+				branchName: 'feature-pr',
+				createPROnCompletion: true,
+				prTargetBranch: 'develop',
+			});
+
+			// Should dispatch to a new session
+			expect(mockDeps.startBatchRun).toHaveBeenCalledTimes(1);
+			const [targetId] = mockDeps.startBatchRun.mock.calls[0];
+			expect(targetId).not.toBe('test-session-1');
+		});
+
+		it('should handle existing-closed worktree exception gracefully', async () => {
+			const mockSession = createMockSession();
+			const mockDeps = createMockDeps();
+
+			useSettingsStore.setState({
+				defaultSaveToHistory: true,
+				defaultShowThinking: 'off',
+			} as any);
+
+			// Simulate getBranches throwing an error
+			vi.mocked(gitService.getBranches).mockRejectedValue(new Error('Network error'));
+
+			const config: BatchRunConfig = {
+				documents: [{ id: '1', filename: 'Phase 1', resetOnCompletion: false, isDuplicate: false }],
+				prompt: 'Test prompt',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-closed',
+					worktreePath: '/projects/worktrees/feature-broken',
+					createPROnCompletion: false,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(mockSession, mockDeps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			// Should still dispatch — getBranches failure is non-fatal
+			expect(mockDeps.startBatchRun).toHaveBeenCalledTimes(1);
+
+			// Session should still be created with path-derived branch name
+			const sessions = useSessionStore.getState().sessions;
+			const newSession = sessions.find((s) => s.cwd === '/projects/worktrees/feature-broken');
+			expect(newSession).toBeDefined();
+			expect(newSession?.worktreeBranch).toBe('feature-broken');
+		});
 	});
 
 	// ============================================================================
