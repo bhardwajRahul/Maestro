@@ -656,7 +656,16 @@ export function useBatchProcessor({
 				return;
 			}
 
-			const { effectiveCwd, worktreeActive, worktreePath, worktreeBranch } = worktreeResult;
+			const { effectiveCwd } = worktreeResult;
+			let { worktreeActive, worktreePath, worktreeBranch } = worktreeResult;
+
+			// When dispatching to a worktree agent via "Run in Worktree", the agent is already
+			// in the worktree directory. Mark worktree as active so PR creation fires on completion.
+			if (config.worktreeTarget && config.worktree?.createPROnCompletion) {
+				worktreeActive = true;
+				worktreePath = session.cwd;
+				worktreeBranch = session.worktreeBranch || config.worktree.branchName;
+			}
 
 			// Get git branch for template variable substitution
 			let gitBranch: string | undefined;
@@ -1476,9 +1485,15 @@ export function useBatchProcessor({
 				totalCompletedTasks > 0 &&
 				worktreePath
 			) {
+				// For worktree-dispatched runs, the main repo is the parent session's cwd
+				const mainRepoCwd = config.worktreeTarget
+					? (sessionsRef.current.find((s) => s.id === session.parentSessionId)?.cwd ||
+						session.cwd)
+					: session.cwd;
+
 				const prResult = await worktreeManager.createPR({
 					worktreePath,
-					mainRepoCwd: session.cwd,
+					mainRepoCwd,
 					worktree,
 					documents,
 					totalCompletedTasks,
