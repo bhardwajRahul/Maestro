@@ -492,12 +492,18 @@ export function UsageDashboardModal({
 	if (!isOpen) return null;
 
 	return (
-		<div className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] animate-in fade-in duration-100">
+		<div
+			className="fixed inset-0 modal-overlay flex items-center justify-center z-[9999] animate-in fade-in duration-100"
+			onClick={onClose}
+		>
 			<button
 				type="button"
 				className="absolute inset-0"
 				tabIndex={-1}
-				onClick={onClose}
+				onClick={(e) => {
+					e.stopPropagation();
+					onClose();
+				}}
 				aria-label="Close usage dashboard"
 			/>
 			<div
@@ -507,6 +513,7 @@ export function UsageDashboardModal({
 				aria-modal="true"
 				aria-label="Usage Dashboard"
 				className="relative z-10 rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none"
+				onClick={(e) => e.stopPropagation()}
 				style={{
 					backgroundColor: theme.colors.bgActivity,
 					borderColor: theme.colors.border,

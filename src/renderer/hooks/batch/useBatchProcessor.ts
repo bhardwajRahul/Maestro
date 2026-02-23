@@ -32,7 +32,7 @@ const BATCH_STATE_DEBOUNCE_MS = 200;
 // Matches both [x] and [X] with various checkbox formats (standard and GitHub-style)
 // Note: countUnfinishedTasks, countCheckedTasks, uncheckAllTasks are now imported from ./batch/batchUtils
 
-interface BatchCompleteInfo {
+export interface BatchCompleteInfo {
 	sessionId: string;
 	sessionName: string;
 	completedTasks: number;
@@ -41,7 +41,7 @@ interface BatchCompleteInfo {
 	elapsedTimeMs: number;
 }
 
-interface PRResultInfo {
+export interface PRResultInfo {
 	sessionId: string;
 	sessionName: string;
 	success: boolean;

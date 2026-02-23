@@ -424,7 +424,10 @@ export function useWorktreeHandlers(): WorktreeHandlersReturn {
 			// the ref is still empty, causing a duplicate session from the watcher.
 			const normalizedCreatedPath = normalizePath(worktreePath);
 			recentlyCreatedWorktreePathsRef.current.add(normalizedCreatedPath);
-			setTimeout(() => recentlyCreatedWorktreePathsRef.current.delete(normalizedCreatedPath), 10000);
+			setTimeout(
+				() => recentlyCreatedWorktreePathsRef.current.delete(normalizedCreatedPath),
+				10000
+			);
 
 			try {
 				// Create the worktree via git (pass SSH remote ID for remote sessions)

@@ -204,9 +204,7 @@ describe('ThinkingStatusPill', () => {
 			const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 			const item = createThinkingItem();
 
-			const { unmount } = render(
-				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />
-			);
+			const { unmount } = render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
 
 			unmount();
 			expect(clearIntervalSpy).toHaveBeenCalled();
@@ -367,11 +365,7 @@ describe('ThinkingStatusPill', () => {
 			const onInterrupt = vi.fn();
 			const item = createThinkingItem();
 			render(
-				<ThinkingStatusPill
-					thinkingItems={[item]}
-					theme={mockTheme}
-					onInterrupt={onInterrupt}
-				/>
+				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} onInterrupt={onInterrupt} />
 			);
 
 			fireEvent.click(screen.getByText('Stop'));
@@ -399,10 +393,7 @@ describe('ThinkingStatusPill', () => {
 		});
 
 		it('has correct tooltip on +N indicator', () => {
-			const items = [
-				createThinkingItem({ id: 'sess-1' }),
-				createThinkingItem({ id: 'sess-2' }),
-			];
+			const items = [createThinkingItem({ id: 'sess-1' }), createThinkingItem({ id: 'sess-2' })];
 			render(<ThinkingStatusPill thinkingItems={items} theme={mockTheme} />);
 			expect(screen.getByTitle('+1 more thinking')).toBeInTheDocument();
 		});
@@ -726,11 +717,7 @@ describe('ThinkingStatusPill', () => {
 				batchName: 'Batch',
 			};
 			render(
-				<ThinkingStatusPill
-					thinkingItems={[item]}
-					theme={mockTheme}
-					autoRunState={autoRunState}
-				/>
+				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} autoRunState={autoRunState} />
 			);
 			expect(screen.getByText('AutoRun')).toBeInTheDocument();
 			expect(screen.queryByText('Thinking Session')).not.toBeInTheDocument();
@@ -845,9 +832,7 @@ describe('ThinkingStatusPill', () => {
 			const item1 = createThinkingItem({ id: 'sess-1', name: 'Session 1' });
 			const item2 = createThinkingItem({ id: 'sess-2', name: 'Session 2' });
 
-			const { rerender } = render(
-				<ThinkingStatusPill thinkingItems={[item1]} theme={mockTheme} />
-			);
+			const { rerender } = render(<ThinkingStatusPill thinkingItems={[item1]} theme={mockTheme} />);
 
 			expect(screen.queryByText('+1')).not.toBeInTheDocument();
 
@@ -859,9 +844,7 @@ describe('ThinkingStatusPill', () => {
 		it('re-renders when item property changes', () => {
 			const item = createThinkingItem({ currentCycleTokens: 500 });
 
-			const { rerender } = render(
-				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />
-			);
+			const { rerender } = render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
 
 			expect(screen.getByText('500')).toBeInTheDocument();
 
@@ -882,9 +865,7 @@ describe('ThinkingStatusPill', () => {
 				colors: { ...mockTheme.colors, accent: '#ff0000' },
 			};
 
-			const { rerender } = render(
-				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />
-			);
+			const { rerender } = render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
 
 			rerender(<ThinkingStatusPill thinkingItems={[item]} theme={newTheme} />);
 
@@ -994,9 +975,7 @@ describe('ThinkingStatusPill', () => {
 
 		it('handles rapid state changes', () => {
 			const item = createThinkingItem();
-			const { rerender } = render(
-				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />
-			);
+			const { rerender } = render(<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} />);
 
 			for (let i = 0; i < 10; i++) {
 				const updatedItem: ThinkingItem = {
@@ -1063,11 +1042,7 @@ describe('ThinkingStatusPill', () => {
 			const item = createThinkingItem({ agentSessionId: 'claude-abc123' });
 
 			const { rerender } = render(
-				<ThinkingStatusPill
-					thinkingItems={[item]}
-					theme={mockTheme}
-					namedSessions={{}}
-				/>
+				<ThinkingStatusPill thinkingItems={[item]} theme={mockTheme} namedSessions={{}} />
 			);
 
 			expect(screen.getAllByText('Test Session').length).toBeGreaterThan(0);

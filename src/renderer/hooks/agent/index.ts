@@ -92,6 +92,13 @@ export type {
 	UseSummarizeAndContinueResult,
 } from './useSummarizeAndContinue';
 
+// Merge & transfer orchestration (Phase 2.5)
+export { useMergeTransferHandlers } from './useMergeTransferHandlers';
+export type {
+	UseMergeTransferHandlersDeps,
+	UseMergeTransferHandlersReturn,
+} from './useMergeTransferHandlers';
+
 // Agent IPC listeners (process event routing)
 export { useAgentListeners, getErrorTitleForType } from './useAgentListeners';
 export type { UseAgentListenersDeps } from './useAgentListeners';

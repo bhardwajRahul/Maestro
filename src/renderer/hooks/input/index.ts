@@ -35,3 +35,7 @@ export type { AutocompleteState } from './useTemplateAutocomplete';
 // Input keyboard handling (slash commands, tab completion, @ mentions, enter-to-send)
 export { useInputKeyDown } from './useInputKeyDown';
 export type { InputKeyDownDeps, InputKeyDownReturn } from './useInputKeyDown';
+
+// Input handler orchestration (Phase 2J)
+export { useInputHandlers } from './useInputHandlers';
+export type { UseInputHandlersDeps, UseInputHandlersReturn } from './useInputHandlers';

@@ -2195,11 +2195,15 @@ describe('SettingsModal', () => {
 				await vi.advanceTimersByTimeAsync(50);
 			});
 
-			expect(screen.getByText(/Optional features that extend Maestro's capabilities/)).toBeInTheDocument();
-			expect(screen.getByText(/Contributors building new features should consider gating them here/)).toBeInTheDocument();
+			expect(
+				screen.getByText(/Optional features that extend Maestro's capabilities/)
+			).toBeInTheDocument();
+			expect(
+				screen.getByText(/Contributors building new features should consider gating them here/)
+			).toBeInTheDocument();
 		});
 
-		it('should show Director\'s Notes feature toggle defaulting to off', async () => {
+		it("should show Director's Notes feature toggle defaulting to off", async () => {
 			render(<SettingsModal {...createDefaultProps()} />);
 
 			await act(async () => {
@@ -2217,7 +2221,7 @@ describe('SettingsModal', () => {
 			expect(screen.queryByText('Synopsis Provider')).not.toBeInTheDocument();
 		});
 
-		it('should call setEncoreFeatures when Director\'s Notes toggle is clicked', async () => {
+		it("should call setEncoreFeatures when Director's Notes toggle is clicked", async () => {
 			mockSetEncoreFeatures.mockClear();
 
 			render(<SettingsModal {...createDefaultProps()} />);
@@ -2245,7 +2249,9 @@ describe('SettingsModal', () => {
 		it('should call setEncoreFeatures with false when toggling DN off', async () => {
 			mockSetEncoreFeatures.mockClear();
 
-			render(<SettingsModal {...createDefaultProps({ encoreFeatures: { directorNotes: true } })} />);
+			render(
+				<SettingsModal {...createDefaultProps({ encoreFeatures: { directorNotes: true } })} />
+			);
 
 			await act(async () => {
 				await vi.advanceTimersByTimeAsync(50);
@@ -2266,7 +2272,7 @@ describe('SettingsModal', () => {
 			});
 		});
 
-		describe('with Director\'s Notes enabled', () => {
+		describe("with Director's Notes enabled", () => {
 			const dnEnabledProps = { encoreFeatures: { directorNotes: true } };
 
 			it('should render provider dropdown with detected available agents', async () => {
@@ -2347,8 +2353,12 @@ describe('SettingsModal', () => {
 					await vi.advanceTimersByTimeAsync(50);
 				});
 
-				expect(screen.getByText(/Unified history view and AI-generated synopsis across all sessions/)).toBeInTheDocument();
-				expect(screen.getByText(/AI agent used to generate synopsis summaries/)).toBeInTheDocument();
+				expect(
+					screen.getByText(/Unified history view and AI-generated synopsis across all sessions/)
+				).toBeInTheDocument();
+				expect(
+					screen.getByText(/AI agent used to generate synopsis summaries/)
+				).toBeInTheDocument();
 				expect(screen.getByText(/How far back to look when generating notes/)).toBeInTheDocument();
 			});
 

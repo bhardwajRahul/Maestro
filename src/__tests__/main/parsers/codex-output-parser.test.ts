@@ -479,18 +479,24 @@ describe('CodexOutputParser', () => {
 		it('should reset lastToolName after tool_result consumption', () => {
 			const p = new CodexOutputParser();
 			// tool_call → tool_result (consumes name) → another tool_result (no name)
-			p.parseJsonLine(JSON.stringify({
-				type: 'item.completed',
-				item: { type: 'tool_call', tool: 'shell', args: {} },
-			}));
-			p.parseJsonLine(JSON.stringify({
-				type: 'item.completed',
-				item: { type: 'tool_result', output: 'ok' },
-			}));
-			const orphan = p.parseJsonLine(JSON.stringify({
-				type: 'item.completed',
-				item: { type: 'tool_result', output: 'orphan' },
-			}));
+			p.parseJsonLine(
+				JSON.stringify({
+					type: 'item.completed',
+					item: { type: 'tool_call', tool: 'shell', args: {} },
+				})
+			);
+			p.parseJsonLine(
+				JSON.stringify({
+					type: 'item.completed',
+					item: { type: 'tool_result', output: 'ok' },
+				})
+			);
+			const orphan = p.parseJsonLine(
+				JSON.stringify({
+					type: 'item.completed',
+					item: { type: 'tool_result', output: 'orphan' },
+				})
+			);
 			expect(orphan?.toolName).toBeUndefined();
 		});
 	});

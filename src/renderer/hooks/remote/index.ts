@@ -29,3 +29,7 @@ export type {
 // SSH remote configuration management
 export { useSshRemotes } from './useSshRemotes';
 export type { UseSshRemotesReturn } from './useSshRemotes';
+
+// Remote command handling & SSH name mapping (Phase 2K)
+export { useRemoteHandlers } from './useRemoteHandlers';
+export type { UseRemoteHandlersDeps, UseRemoteHandlersReturn } from './useRemoteHandlers';

@@ -36,6 +36,7 @@ import {
 	ArrowDownToLine,
 	Clapperboard,
 	HelpCircle,
+	AppWindow,
 } from 'lucide-react';
 import { useSettings } from '../hooks';
 import type {
@@ -407,6 +408,11 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 		setWakatimeApiKey,
 		wakatimeEnabled,
 		setWakatimeEnabled,
+		// Window chrome settings
+		useNativeTitleBar,
+		setUseNativeTitleBar,
+		autoHideMenuBar,
+		setAutoHideMenuBar,
 	} = useSettings();
 
 	const [activeTab, setActiveTab] = useState<
@@ -1049,15 +1055,15 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 	};
 
 	// Theme picker JSX (not a separate component to avoid remount issues)
-		const themePickerContent = (
-			<div
-				ref={themePickerRef}
-				className="space-y-6 outline-none"
-				tabIndex={0}
-				onKeyDown={handleThemePickerKeyDown}
-				role="group"
-				aria-label="Theme picker"
-			>
+	const themePickerContent = (
+		<div
+			ref={themePickerRef}
+			className="space-y-6 outline-none"
+			tabIndex={0}
+			onKeyDown={handleThemePickerKeyDown}
+			role="group"
+			aria-label="Theme picker"
+		>
 			{['dark', 'light', 'vibe'].map((mode) => (
 				<div key={mode}>
 					<div
@@ -1431,9 +1437,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 									>
 										{/* Custom Shell Path */}
 										<div>
-											<div className="block text-xs opacity-60 mb-1">
-												Custom Path (optional)
-											</div>
+											<div className="block text-xs opacity-60 mb-1">Custom Path (optional)</div>
 											<div className="flex gap-2">
 												<input
 													type="text"
@@ -2046,9 +2050,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
 									{/* Clear Old Data Dropdown */}
 									<div>
-										<div className="block text-xs opacity-60 mb-2">
-											Clear stats older than...
-										</div>
+										<div className="block text-xs opacity-60 mb-2">Clear stats older than...</div>
 										<div className="flex items-center gap-2">
 											<select
 												id="clear-stats-period"
@@ -2203,12 +2205,12 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 												}}
 											>
 												<Key className="w-4 h-4 mr-2 opacity-50" />
-													<input
-														type="password"
-														value={wakatimeApiKey}
-														onChange={(e) => handleWakatimeApiKeyChange(e.target.value)}
-														onBlur={() => {
-															if (wakatimeApiKey) {
+												<input
+													type="password"
+													value={wakatimeApiKey}
+													onChange={(e) => handleWakatimeApiKeyChange(e.target.value)}
+													onBlur={() => {
+														if (wakatimeApiKey) {
 															setWakatimeKeyValidating(true);
 															setWakatimeKeyValid(null);
 															window.maestro.wakatime
@@ -2231,12 +2233,12 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 												{!wakatimeKeyValidating && wakatimeKeyValid === false && wakatimeApiKey && (
 													<X className="w-4 h-4 ml-2" style={{ color: theme.colors.error }} />
 												)}
-													{wakatimeApiKey && (
-														<button
-															onClick={() => handleWakatimeApiKeyChange('')}
-															className="ml-2 opacity-50 hover:opacity-100"
-															title="Clear API key"
-														>
+												{wakatimeApiKey && (
+													<button
+														onClick={() => handleWakatimeApiKeyChange('')}
+														className="ml-2 opacity-50 hover:opacity-100"
+														title="Clear API key"
+													>
 														<X className="w-3 h-3" />
 													</button>
 												)}
@@ -2299,9 +2301,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 									{/* Current Location (if different) */}
 									{customSyncPath && (
 										<div>
-											<div className="block text-xs opacity-60 mb-1">
-												Current Location (Custom)
-											</div>
+											<div className="block text-xs opacity-60 mb-1">Current Location (Custom)</div>
 											<div
 												className="text-xs p-2 rounded font-mono truncate flex items-center gap-2"
 												style={{
@@ -2463,9 +2463,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
 							{/* Font Size */}
 							<div>
-								<div className="block text-xs font-bold opacity-70 uppercase mb-2">
-									Font Size
-								</div>
+								<div className="block text-xs font-bold opacity-70 uppercase mb-2">Font Size</div>
 								<ToggleButtonGroup
 									options={[
 										{ value: 12, label: 'Small' },
@@ -2554,6 +2552,89 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 								</div>
 							)}
 
+							{/* Window Chrome Settings */}
+							<div>
+								<label
+									className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2"
+									style={{ color: theme.colors.textDim }}
+								>
+									<AppWindow className="w-3 h-3" />
+									Window Chrome
+								</label>
+								<div
+									className="p-3 rounded border space-y-3"
+									style={{
+										borderColor: theme.colors.border,
+										backgroundColor: theme.colors.bgMain,
+									}}
+								>
+									{/* Native Title Bar */}
+									<div className="flex items-center justify-between">
+										<div>
+											<p className="text-sm" style={{ color: theme.colors.textMain }}>
+												Use native title bar
+											</p>
+											<p className="text-xs opacity-50 mt-0.5">
+												Use the OS native title bar instead of Maestro&apos;s custom title bar.
+												Requires restart.
+											</p>
+										</div>
+										<button
+											onClick={() => setUseNativeTitleBar(!useNativeTitleBar)}
+											className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 outline-none"
+											tabIndex={0}
+											style={{
+												backgroundColor: useNativeTitleBar
+													? theme.colors.accent
+													: theme.colors.bgActivity,
+											}}
+											role="switch"
+											aria-checked={useNativeTitleBar}
+										>
+											<span
+												className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+													useNativeTitleBar ? 'translate-x-5' : 'translate-x-0.5'
+												}`}
+											/>
+										</button>
+									</div>
+
+									{/* Auto-Hide Menu Bar */}
+									<div
+										className="flex items-center justify-between pt-3 border-t"
+										style={{ borderColor: theme.colors.border }}
+									>
+										<div>
+											<p className="text-sm" style={{ color: theme.colors.textMain }}>
+												Auto-hide menu bar
+											</p>
+											<p className="text-xs opacity-50 mt-0.5">
+												Hide the application menu bar. Press Alt to toggle visibility. Applies to
+												Windows and Linux. Requires restart.
+											</p>
+										</div>
+										<button
+											onClick={() => setAutoHideMenuBar(!autoHideMenuBar)}
+											className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 outline-none"
+											tabIndex={0}
+											style={{
+												backgroundColor: autoHideMenuBar
+													? theme.colors.accent
+													: theme.colors.bgActivity,
+											}}
+											role="switch"
+											aria-checked={autoHideMenuBar}
+										>
+											<span
+												className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+													autoHideMenuBar ? 'translate-x-5' : 'translate-x-0.5'
+												}`}
+											/>
+										</button>
+									</div>
+								</div>
+							</div>
+
 							{/* Document Graph Settings */}
 							<div>
 								<div className="block text-xs font-bold opacity-70 uppercase mb-2 flex items-center gap-2">
@@ -2606,9 +2687,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
 									{/* Max Nodes */}
 									<div>
-										<div className="block text-xs opacity-60 mb-2">
-											Maximum nodes to display
-										</div>
+										<div className="block text-xs opacity-60 mb-2">Maximum nodes to display</div>
 										<div className="flex items-center gap-3">
 											<input
 												type="range"
@@ -2833,9 +2912,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 							</div>
 
 							<div>
-								<div className="block text-xs font-bold opacity-70 uppercase mb-2">
-									Model Slug
-								</div>
+								<div className="block text-xs font-bold opacity-70 uppercase mb-2">Model Slug</div>
 								<input
 									value={props.modelSlug}
 									onChange={(e) => props.setModelSlug(e.target.value)}
@@ -2849,9 +2926,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 
 							{props.llmProvider !== 'ollama' && (
 								<div>
-									<div className="block text-xs font-bold opacity-70 uppercase mb-2">
-										API Key
-									</div>
+									<div className="block text-xs font-bold opacity-70 uppercase mb-2">API Key</div>
 									<div
 										className="flex items-center border rounded px-3 py-2"
 										style={{

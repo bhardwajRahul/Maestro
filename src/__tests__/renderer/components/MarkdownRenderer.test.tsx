@@ -5,7 +5,9 @@ import { MarkdownRenderer } from '../../../renderer/components/MarkdownRenderer'
 
 // Mock react-syntax-highlighter
 vi.mock('react-syntax-highlighter', () => ({
-	Prism: ({ children }: { children: string }) => <pre data-testid="syntax-highlighter">{children}</pre>,
+	Prism: ({ children }: { children: string }) => (
+		<pre data-testid="syntax-highlighter">{children}</pre>
+	),
 }));
 vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
 	vscDarkPlus: {},

@@ -232,7 +232,11 @@ export interface UseMainPanelPropsDeps {
 	handleFileTabSelect: (tabId: string) => void;
 	handleFileTabClose: (tabId: string) => void;
 	handleFileTabEditModeChange: (tabId: string, editMode: boolean) => void;
-	handleFileTabEditContentChange: (tabId: string, editContent: string | undefined, savedContent?: string) => void;
+	handleFileTabEditContentChange: (
+		tabId: string,
+		editContent: string | undefined,
+		savedContent?: string
+	) => void;
 	handleFileTabScrollPositionChange: (tabId: string, scrollTop: number) => void;
 	handleFileTabSearchQueryChange: (tabId: string, searchQuery: string) => void;
 	handleReloadFileTab: (tabId: string) => void;
@@ -291,7 +295,12 @@ export interface UseMainPanelPropsDeps {
 	refreshFileTree: (sessionId: string) => Promise<FileTreeChanges | undefined>;
 
 	// Open saved file in tab
-	onOpenSavedFileInTab?: (file: { path: string; name: string; content: string; sshRemoteId?: string }) => void;
+	onOpenSavedFileInTab?: (file: {
+		path: string;
+		name: string;
+		content: string;
+		sshRemoteId?: string;
+	}) => void;
 
 	// Complex wizard handlers (passed through from App.tsx)
 	onWizardComplete?: () => void;

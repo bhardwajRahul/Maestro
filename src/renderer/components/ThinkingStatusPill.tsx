@@ -143,10 +143,7 @@ const ThinkingItemRow = memo(
 				>
 					{tokens > 0 && <span>{formatTokensCompact(tokens)}</span>}
 					{thinkingStartTime && (
-						<ElapsedTimeDisplay
-							startTime={thinkingStartTime}
-							textColor={theme.colors.textDim}
-						/>
+						<ElapsedTimeDisplay startTime={thinkingStartTime} textColor={theme.colors.textDim} />
 					)}
 				</div>
 			</button>

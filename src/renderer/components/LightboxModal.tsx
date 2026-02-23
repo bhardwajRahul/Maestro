@@ -192,12 +192,13 @@ export function LightboxModal({
 					←
 				</button>
 			)}
-				<img
-					src={image}
-					alt="Expanded image preview"
-					className="max-w-[90%] max-h-[90%] rounded shadow-2xl"
-					onMouseDown={(e) => e.stopPropagation()}
-				/>
+			<img
+				src={image}
+				alt="Expanded image preview"
+				className="max-w-[90%] max-h-[90%] rounded shadow-2xl"
+				onMouseDown={(e) => e.stopPropagation()}
+				onClick={(e) => e.stopPropagation()}
+			/>
 
 			{/* Top right buttons: Copy, Delete (if available) */}
 			<div className="absolute top-4 right-4 flex gap-2">

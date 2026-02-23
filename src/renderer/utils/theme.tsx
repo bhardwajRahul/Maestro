@@ -148,7 +148,15 @@ const CONFIG_FOLDER_NAMES = new Set([
 	'configs',
 	'settings',
 ]);
-const ASSET_FOLDER_NAMES = new Set(['assets', 'images', 'img', 'icons', 'public', 'static', 'media']);
+const ASSET_FOLDER_NAMES = new Set([
+	'assets',
+	'images',
+	'img',
+	'icons',
+	'public',
+	'static',
+	'media',
+]);
 const DEP_FOLDER_NAMES = new Set(['node_modules', 'vendor', 'deps', 'packages']);
 const DATA_FOLDER_NAMES = new Set(['data', 'db', 'database', 'migrations', 'seeds']);
 const SECURE_FOLDER_NAMES = new Set(['secrets', 'certs', 'certificates', 'keys']);
@@ -169,7 +177,7 @@ export const getExplorerFileIcon = (
 	type?: FileChangeType
 ): JSX.Element => {
 	const normalized = normalizeName(fileName);
-	const ext = normalized.includes('.') ? normalized.split('.').pop() ?? '' : '';
+	const ext = normalized.includes('.') ? (normalized.split('.').pop() ?? '') : '';
 	const isTestFile =
 		normalized.includes('.test.') ||
 		normalized.includes('.spec.') ||
@@ -183,7 +191,12 @@ export const getExplorerFileIcon = (
 	};
 
 	if (LOCK_FILE_NAMES.has(normalized)) {
-		return <Lock className="w-3.5 h-3.5" style={{ ...style, color: fileTypeColor(type, theme.colors.warning) }} />;
+		return (
+			<Lock
+				className="w-3.5 h-3.5"
+				style={{ ...style, color: fileTypeColor(type, theme.colors.warning) }}
+			/>
+		);
 	}
 	if (CONFIG_FILE_NAMES.has(normalized) || CONFIG_EXTENSIONS.has(ext)) {
 		return (
@@ -241,7 +254,12 @@ export const getExplorerFileIcon = (
 			/>
 		);
 	}
-	return <File className="w-3.5 h-3.5" style={{ ...style, color: fileTypeColor(type, theme.colors.textDim) }} />;
+	return (
+		<File
+			className="w-3.5 h-3.5"
+			style={{ ...style, color: fileTypeColor(type, theme.colors.textDim) }}
+		/>
+	);
 };
 
 export const getExplorerFolderIcon = (

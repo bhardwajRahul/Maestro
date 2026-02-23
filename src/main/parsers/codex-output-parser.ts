@@ -166,10 +166,7 @@ interface CodexUsage {
  * Extract a human-readable error message from Codex's polymorphic error field.
  * Codex sends errors as either a plain string or { message?, type? } object.
  */
-function extractErrorText(
-	error: CodexRawMessage['error'],
-	fallback = 'Unknown error'
-): string {
+function extractErrorText(error: CodexRawMessage['error'], fallback = 'Unknown error'): string {
 	if (typeof error === 'object' && error?.message) return error.message;
 	if (typeof error === 'string') return error;
 	return fallback;
@@ -412,7 +409,8 @@ export class CodexOutputParser implements AgentOutputParser {
 
 		if (decoded.length > CodexOutputParser.MAX_TOOL_OUTPUT_LENGTH) {
 			const originalLength = decoded.length;
-			decoded = decoded.substring(0, CodexOutputParser.MAX_TOOL_OUTPUT_LENGTH) +
+			decoded =
+				decoded.substring(0, CodexOutputParser.MAX_TOOL_OUTPUT_LENGTH) +
 				`\n... [output truncated, ${originalLength} chars total]`;
 		}
 

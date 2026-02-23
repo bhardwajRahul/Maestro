@@ -1657,11 +1657,7 @@ describe('marketplace IPC handlers', () => {
 
 		it('should reject document filename containing ../', async () => {
 			const handler = handlers.get('marketplace:getDocument');
-			const result = await handler!(
-				{} as any,
-				'/Users/test/playbooks/safe',
-				'../../../etc/passwd'
-			);
+			const result = await handler!({} as any, '/Users/test/playbooks/safe', '../../../etc/passwd');
 
 			expect(result.success).toBe(false);
 			expect(result.error).toContain('Invalid filename');
@@ -1669,11 +1665,7 @@ describe('marketplace IPC handlers', () => {
 
 		it('should reject document filename with absolute path', async () => {
 			const handler = handlers.get('marketplace:getDocument');
-			const result = await handler!(
-				{} as any,
-				'/Users/test/playbooks/safe',
-				'/etc/passwd'
-			);
+			const result = await handler!({} as any, '/Users/test/playbooks/safe', '/etc/passwd');
 
 			// path.resolve('/Users/test/playbooks/safe', '/etc/passwd.md') resolves to /etc/passwd.md
 			// which is outside the base, so validateSafePath blocks it
@@ -1733,11 +1725,7 @@ describe('marketplace IPC handlers', () => {
 
 		it('should reject document filename with embedded .. segments', async () => {
 			const handler = handlers.get('marketplace:getDocument');
-			const result = await handler!(
-				{} as any,
-				'/Users/test/playbooks/safe',
-				'subdir/../../secret'
-			);
+			const result = await handler!({} as any, '/Users/test/playbooks/safe', 'subdir/../../secret');
 
 			expect(result.success).toBe(false);
 			expect(result.error).toContain('Invalid filename');

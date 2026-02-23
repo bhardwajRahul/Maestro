@@ -71,6 +71,11 @@ export type {
 
 // Main batch processor hook
 export { useBatchProcessor } from './useBatchProcessor';
+export type { BatchCompleteInfo, PRResultInfo } from './useBatchProcessor';
+
+// Batch handler orchestration (Phase 2I)
+export { useBatchHandlers } from './useBatchHandlers';
+export type { UseBatchHandlersDeps, UseBatchHandlersReturn } from './useBatchHandlers';
 
 // Auto Run event handlers
 export { useAutoRunHandlers } from './useAutoRunHandlers';

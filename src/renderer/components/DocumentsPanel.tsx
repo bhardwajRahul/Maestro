@@ -411,17 +411,24 @@ function DocumentSelectorModal({
 	}, [selectedDocs, taskCounts]);
 
 	return (
-		<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+		<div
+			className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]"
+			onClick={onClose}
+		>
 			<button
 				type="button"
 				className="absolute inset-0 outline-none"
 				tabIndex={-1}
-				onClick={onClose}
+				onClick={(e) => {
+					e.stopPropagation();
+					onClose();
+				}}
 				aria-label="Close document selector"
 			/>
 			<div
 				className="relative z-10 w-[550px] max-h-[70vh] border rounded-lg shadow-2xl overflow-hidden flex flex-col"
 				style={{ backgroundColor: theme.colors.bgSidebar, borderColor: theme.colors.border }}
+				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Selector Header */}
 				<div

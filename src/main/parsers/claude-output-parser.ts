@@ -86,7 +86,10 @@ export class ClaudeOutputParser implements AgentOutputParser {
 
 			// DEBUG: Log raw message if it contains usage data
 			if (msg.modelUsage || msg.usage || msg.total_cost_usd !== undefined) {
-				console.log('[ClaudeOutputParser] Raw message with usage data:', JSON.stringify(msg, null, 2));
+				console.log(
+					'[ClaudeOutputParser] Raw message with usage data:',
+					JSON.stringify(msg, null, 2)
+				);
 			}
 
 			return this.transformMessage(msg);

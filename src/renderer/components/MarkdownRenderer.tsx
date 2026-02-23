@@ -322,7 +322,10 @@ export const MarkdownRenderer = memo(
 												// Attempt to convert non-standard URLs (e.g. git@host:user/repo)
 												try {
 													const converted = href.startsWith('git@')
-														? href.replace(/^git@/, 'https://').replace(/:([^/])/, '/$1').replace(/\.git$/, '')
+														? href
+																.replace(/^git@/, 'https://')
+																.replace(/:([^/])/, '/$1')
+																.replace(/\.git$/, '')
 														: href;
 													if (/^https?:\/\//.test(converted)) {
 														window.maestro.shell.openExternal(converted);

@@ -57,6 +57,10 @@ export interface WindowManagerDependencies {
 	rendererPath: string;
 	/** Development server URL */
 	devServerUrl: string;
+	/** Whether to use the native OS title bar instead of custom title bar */
+	useNativeTitleBar: boolean;
+	/** Whether to auto-hide the menu bar (Linux/Windows) */
+	autoHideMenuBar: boolean;
 }
 
 /** Window manager instance */
@@ -72,7 +76,15 @@ export interface WindowManager {
  * @returns WindowManager instance
  */
 export function createWindowManager(deps: WindowManagerDependencies): WindowManager {
-	const { windowStateStore, isDevelopment, preloadPath, rendererPath, devServerUrl } = deps;
+	const {
+		windowStateStore,
+		isDevelopment,
+		preloadPath,
+		rendererPath,
+		devServerUrl,
+		useNativeTitleBar,
+		autoHideMenuBar,
+	} = deps;
 
 	return {
 		createWindow: (): BrowserWindow => {
@@ -87,7 +99,8 @@ export function createWindowManager(deps: WindowManagerDependencies): WindowMana
 				minWidth: 1000,
 				minHeight: 600,
 				backgroundColor: '#0b0b0d',
-				titleBarStyle: 'hiddenInset',
+				...(useNativeTitleBar ? {} : { titleBarStyle: 'hiddenInset' as const }),
+				...(autoHideMenuBar ? { autoHideMenuBar: true } : {}),
 				webPreferences: {
 					preload: preloadPath,
 					contextIsolation: true,
@@ -179,7 +192,11 @@ export function createWindowManager(deps: WindowManagerDependencies): WindowMana
 					if (parsedUrl.origin === devUrl.origin) return;
 				} else {
 					// In production, only allow file:// URLs within the app's renderer directory
-					if (parsedUrl.protocol === 'file:' && url.includes(path.dirname(rendererPath).replace(/\\/g, '/'))) return;
+					if (
+						parsedUrl.protocol === 'file:' &&
+						url.includes(path.dirname(rendererPath).replace(/\\/g, '/'))
+					)
+						return;
 				}
 				event.preventDefault();
 				logger.warn(`Blocked navigation to: ${url}`, 'Window');
@@ -251,21 +268,24 @@ export function createWindowManager(deps: WindowManagerDependencies): WindowMana
 			});
 
 			// Handle page load failures (network issues, invalid URLs, etc.)
-			mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-				// Ignore aborted loads (user navigated away)
-				if (errorCode === -3) return;
+			mainWindow.webContents.on(
+				'did-fail-load',
+				(_event, errorCode, errorDescription, validatedURL) => {
+					// Ignore aborted loads (user navigated away)
+					if (errorCode === -3) return;
 
-				logger.error('Page failed to load', 'Window', {
-					errorCode,
-					errorDescription,
-					url: validatedURL,
-				});
-				reportCrashToSentry(`Page failed to load: ${errorDescription}`, 'error', {
-					errorCode,
-					errorDescription,
-					url: validatedURL,
-				});
-			});
+					logger.error('Page failed to load', 'Window', {
+						errorCode,
+						errorDescription,
+						url: validatedURL,
+					});
+					reportCrashToSentry(`Page failed to load: ${errorDescription}`, 'error', {
+						errorCode,
+						errorDescription,
+						url: validatedURL,
+					});
+				}
+			);
 
 			// Handle preload script errors
 			mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {

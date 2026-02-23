@@ -195,7 +195,9 @@ describe('Auto-scroll feature', () => {
 
 			render(<TerminalOutput {...props} />);
 
-			expect(screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)).not.toBeInTheDocument();
+			expect(
+				screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)
+			).not.toBeInTheDocument();
 		});
 
 		it('button renders with accent styling when auto-scroll is active (pinned at bottom)', () => {
@@ -222,7 +224,9 @@ describe('Auto-scroll feature', () => {
 			render(<TerminalOutput {...props} />);
 
 			// At bottom with auto-scroll off = no button visible
-			expect(screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)).not.toBeInTheDocument();
+			expect(
+				screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)
+			).not.toBeInTheDocument();
 		});
 
 		it('button does NOT render in terminal mode', () => {
@@ -234,12 +238,18 @@ describe('Auto-scroll feature', () => {
 
 			render(<TerminalOutput {...props} />);
 
-			expect(screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)).not.toBeInTheDocument();
+			expect(
+				screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)
+			).not.toBeInTheDocument();
 		});
 
 		it('shows dimmed button when scrolled up (not pinned)', async () => {
 			const logs: LogEntry[] = Array.from({ length: 20 }, (_, i) =>
-				createLogEntry({ id: `log-${i}`, text: `Message ${i}`, source: i % 2 === 0 ? 'user' : 'stdout' })
+				createLogEntry({
+					id: `log-${i}`,
+					text: `Message ${i}`,
+					source: i % 2 === 0 ? 'user' : 'stdout',
+				})
 			);
 
 			const session = createDefaultSession({
@@ -295,7 +305,11 @@ describe('Auto-scroll feature', () => {
 		it('clicking when scrolled up enables auto-scroll and scrolls to bottom (pin)', async () => {
 			const setAutoScrollAiMode = vi.fn();
 			const logs: LogEntry[] = Array.from({ length: 20 }, (_, i) =>
-				createLogEntry({ id: `log-${i}`, text: `Message ${i}`, source: i % 2 === 0 ? 'user' : 'stdout' })
+				createLogEntry({
+					id: `log-${i}`,
+					text: `Message ${i}`,
+					source: i % 2 === 0 ? 'user' : 'stdout',
+				})
 			);
 
 			const session = createDefaultSession({
@@ -345,7 +359,11 @@ describe('Auto-scroll feature', () => {
 		it('auto-scroll dims when user scrolls up (paused)', async () => {
 			const setAutoScrollAiMode = vi.fn();
 			const logs: LogEntry[] = Array.from({ length: 20 }, (_, i) =>
-				createLogEntry({ id: `log-${i}`, text: `Message ${i}`, source: i % 2 === 0 ? 'user' : 'stdout' })
+				createLogEntry({
+					id: `log-${i}`,
+					text: `Message ${i}`,
+					source: i % 2 === 0 ? 'user' : 'stdout',
+				})
 			);
 
 			const session = createDefaultSession({
@@ -383,7 +401,11 @@ describe('Auto-scroll feature', () => {
 		it('clicking re-pins after scroll-up and scrolls to bottom', async () => {
 			const setAutoScrollAiMode = vi.fn();
 			const logs: LogEntry[] = Array.from({ length: 20 }, (_, i) =>
-				createLogEntry({ id: `log-${i}`, text: `Message ${i}`, source: i % 2 === 0 ? 'user' : 'stdout' })
+				createLogEntry({
+					id: `log-${i}`,
+					text: `Message ${i}`,
+					source: i % 2 === 0 ? 'user' : 'stdout',
+				})
 			);
 
 			const session = createDefaultSession({
@@ -446,7 +468,9 @@ describe('Auto-scroll feature', () => {
 
 			const { container } = render(<TerminalOutput {...props} />);
 			expect(container).toBeTruthy();
-			expect(screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)).not.toBeInTheDocument();
+			expect(
+				screen.queryByTitle(/Auto-scroll|Scroll to bottom|New messages/)
+			).not.toBeInTheDocument();
 		});
 	});
 
@@ -483,15 +507,26 @@ describe('Auto-scroll feature', () => {
 			// Simulate thinking chunk update: text grows but array length stays the same
 			const updatedThinkingLog = { ...thinkingLog, text: 'Let me analyze this code carefully' };
 			const updatedSession = createDefaultSession({
-				tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs: [updatedThinkingLog], isUnread: false }],
+				tabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'claude-123',
+						logs: [updatedThinkingLog],
+						isUnread: false,
+					},
+				],
 				activeTabId: 'tab-1',
 			});
 
-			rerender(<TerminalOutput {...createDefaultProps({
-				session: updatedSession,
-				autoScrollAiMode: true,
-				setAutoScrollAiMode: vi.fn(),
-			})} />);
+			rerender(
+				<TerminalOutput
+					{...createDefaultProps({
+						session: updatedSession,
+						autoScrollAiMode: true,
+						setAutoScrollAiMode: vi.fn(),
+					})}
+				/>
+			);
 
 			// Trigger MutationObserver callback (simulates DOM mutation)
 			(window as any).__mutationCallback?.([]);
@@ -532,7 +567,9 @@ describe('Auto-scroll feature', () => {
 			Object.defineProperty(scrollContainer, 'scrollTop', { value: 500, configurable: true });
 			Object.defineProperty(scrollContainer, 'clientHeight', { value: 400, configurable: true });
 			fireEvent.scroll(scrollContainer);
-			await act(async () => { vi.advanceTimersByTime(50); });
+			await act(async () => {
+				vi.advanceTimersByTime(50);
+			});
 
 			// Update thinking text (in-place, same array length)
 			const updatedLog = { ...thinkingLog, text: 'Thinking about a lot of things...' };
@@ -541,20 +578,30 @@ describe('Auto-scroll feature', () => {
 				activeTabId: 'tab-1',
 			});
 
-			rerender(<TerminalOutput {...createDefaultProps({
-				session: updatedSession,
-				autoScrollAiMode: false,
-				setAutoScrollAiMode: vi.fn(),
-			})} />);
+			rerender(
+				<TerminalOutput
+					{...createDefaultProps({
+						session: updatedSession,
+						autoScrollAiMode: false,
+						setAutoScrollAiMode: vi.fn(),
+					})}
+				/>
+			);
 
-			await act(async () => { vi.advanceTimersByTime(50); });
+			await act(async () => {
+				vi.advanceTimersByTime(50);
+			});
 
 			// Badge should NOT appear — no new entries were added
 			expect(screen.queryByText('1')).not.toBeInTheDocument();
 		});
 
 		it('auto-scrolls when tool event appends new entry after thinking', async () => {
-			const thinkingLog = createLogEntry({ id: 'thinking-1', text: 'Thinking...', source: 'thinking' });
+			const thinkingLog = createLogEntry({
+				id: 'thinking-1',
+				text: 'Thinking...',
+				source: 'thinking',
+			});
 
 			const session = createDefaultSession({
 				tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs: [thinkingLog], isUnread: false }],
@@ -578,20 +625,33 @@ describe('Auto-scroll feature', () => {
 			// Tool event arrives: new entry appended
 			const toolLog = createLogEntry({ id: 'tool-1', text: 'grep_search', source: 'tool' });
 			const updatedSession = createDefaultSession({
-				tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs: [thinkingLog, toolLog], isUnread: false }],
+				tabs: [
+					{
+						id: 'tab-1',
+						agentSessionId: 'claude-123',
+						logs: [thinkingLog, toolLog],
+						isUnread: false,
+					},
+				],
 				activeTabId: 'tab-1',
 			});
 
-			rerender(<TerminalOutput {...createDefaultProps({
-				session: updatedSession,
-				autoScrollAiMode: true,
-				setAutoScrollAiMode: vi.fn(),
-			})} />);
+			rerender(
+				<TerminalOutput
+					{...createDefaultProps({
+						session: updatedSession,
+						autoScrollAiMode: true,
+						setAutoScrollAiMode: vi.fn(),
+					})}
+				/>
+			);
 
 			// Trigger MutationObserver callback (simulates DOM mutation from new node)
 			(window as any).__mutationCallback?.([]);
 
-			await act(async () => { vi.advanceTimersByTime(20); });
+			await act(async () => {
+				vi.advanceTimersByTime(20);
+			});
 
 			expect(scrollToSpy).toHaveBeenCalled();
 		});
@@ -600,7 +660,11 @@ describe('Auto-scroll feature', () => {
 	describe('programmatic scroll guard', () => {
 		it('still pauses auto-scroll on genuine user scroll-up', async () => {
 			const logs = Array.from({ length: 20 }, (_, i) =>
-				createLogEntry({ id: `log-${i}`, text: `Message ${i}`, source: i % 2 === 0 ? 'user' : 'stdout' })
+				createLogEntry({
+					id: `log-${i}`,
+					text: `Message ${i}`,
+					source: i % 2 === 0 ? 'user' : 'stdout',
+				})
 			);
 
 			const session = createDefaultSession({

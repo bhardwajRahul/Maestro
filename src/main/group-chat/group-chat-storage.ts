@@ -338,7 +338,10 @@ export function deleteGroupChat(id: string): Promise<void> {
 				return;
 			} catch (err) {
 				const code = (err as NodeJS.ErrnoException).code;
-				if ((code === 'EPERM' || code === 'EBUSY' || code === 'ENOTEMPTY') && attempt < maxRetries) {
+				if (
+					(code === 'EPERM' || code === 'EBUSY' || code === 'ENOTEMPTY') &&
+					attempt < maxRetries
+				) {
 					// Exponential backoff — file locks from OneDrive/antivirus may need time to release
 					await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
 					continue;
