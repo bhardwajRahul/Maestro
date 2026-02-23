@@ -306,7 +306,6 @@ export function WorktreeRunSection({
 					<Info
 						className="w-3.5 h-3.5 shrink-0"
 						style={{ color: theme.colors.textDim, opacity: 0.5 }}
-						title="Dispatch this Auto Run to a separate worktree agent instead of the current one"
 					/>
 				</button>
 

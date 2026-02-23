@@ -338,6 +338,19 @@ export function useAutoRunHandlers(
 					return;
 				} else {
 					targetSessionId = config.worktreeTarget.sessionId;
+
+					// Populate config.worktree for PR creation when using existing-open worktree.
+					// spawnWorktreeAgentAndDispatch does this for create-new/existing-closed,
+					// but existing-open skips that function entirely.
+					if (config.worktreeTarget.createPROnCompletion) {
+						config.worktree = {
+							enabled: true,
+							path: targetSession.cwd,
+							branchName: targetSession.worktreeBranch || targetSession.cwd.split('/').pop() || 'worktree',
+							createPROnCompletion: true,
+							prTargetBranch: config.worktreeTarget.baseBranch || 'main',
+						};
+					}
 				}
 			} else if (
 				config.worktreeTarget?.mode === 'create-new' ||

@@ -79,6 +79,8 @@ describe('WorktreeRunSection', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// Restore git.branch to default mock (previous tests may override it)
+		(window.maestro.git as Record<string, unknown>).branch = vi.fn().mockResolvedValue({ stdout: 'main' });
 		mockOnWorktreeTargetChange = vi.fn();
 		mockOnOpenWorktreeConfig = vi.fn();
 	});
@@ -922,7 +924,7 @@ describe('WorktreeRunSection', () => {
 		expect(screen.queryByText('Off')).toBeNull();
 	});
 
-	it('renders info icon with tooltip next to the toggle button', () => {
+	it('renders info icon next to the toggle button', () => {
 		const session = createMockSession();
 		render(
 			<WorktreeRunSection
@@ -935,9 +937,10 @@ describe('WorktreeRunSection', () => {
 			/>
 		);
 
-		// Info icon should be present (rendered as an SVG with a title attribute)
-		const infoIcon = document.querySelector('[title*="Dispatch this Auto Run"]');
-		expect(infoIcon).toBeTruthy();
+		// Info icon (Lucide SVG) should be present inside the toggle button
+		const toggleButton = screen.getByText('Dispatch to a separate worktree').closest('button');
+		const svgIcon = toggleButton?.querySelector('svg');
+		expect(svgIcon).toBeTruthy();
 	});
 
 	it('shows agent state color indicator when an open agent is selected', () => {

@@ -380,6 +380,159 @@ describe('handleStartBatchRun — worktree dispatch integration', () => {
 				})
 			);
 		});
+
+		it('populates config.worktree when createPROnCompletion is true', async () => {
+			const session = createMockSession();
+			const deps = createMockDeps();
+
+			const worktreeChild = createMockSession({
+				id: 'wt-pr-child',
+				name: 'WT PR Child',
+				state: 'idle',
+				cwd: '/projects/worktrees/feature-x',
+				worktreeBranch: 'feature-x',
+				parentSessionId: session.id,
+			});
+			useSessionStore.setState({
+				sessions: [session, worktreeChild],
+				activeSessionId: session.id,
+			} as any);
+
+			const config: BatchRunConfig = {
+				documents: baseDocuments,
+				prompt: 'Go',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-open',
+					sessionId: 'wt-pr-child',
+					baseBranch: 'develop',
+					createPROnCompletion: true,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(session, deps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			expect(config.worktree).toEqual({
+				enabled: true,
+				path: '/projects/worktrees/feature-x',
+				branchName: 'feature-x',
+				createPROnCompletion: true,
+				prTargetBranch: 'develop',
+			});
+		});
+
+		it('does not populate config.worktree when createPROnCompletion is false', async () => {
+			const session = createMockSession();
+			const deps = createMockDeps();
+
+			const worktreeChild = createMockSession({
+				id: 'wt-no-pr',
+				state: 'idle',
+				cwd: '/projects/worktrees/no-pr',
+				worktreeBranch: 'no-pr',
+				parentSessionId: session.id,
+			});
+			useSessionStore.setState({
+				sessions: [session, worktreeChild],
+				activeSessionId: session.id,
+			} as any);
+
+			const config: BatchRunConfig = {
+				documents: baseDocuments,
+				prompt: 'Go',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-open',
+					sessionId: 'wt-no-pr',
+					createPROnCompletion: false,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(session, deps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			expect(config.worktree).toBeUndefined();
+		});
+
+		it('defaults prTargetBranch to "main" when baseBranch is not specified', async () => {
+			const session = createMockSession();
+			const deps = createMockDeps();
+
+			const worktreeChild = createMockSession({
+				id: 'wt-default-base',
+				state: 'idle',
+				cwd: '/projects/worktrees/default-base',
+				worktreeBranch: 'default-base',
+				parentSessionId: session.id,
+			});
+			useSessionStore.setState({
+				sessions: [session, worktreeChild],
+				activeSessionId: session.id,
+			} as any);
+
+			const config: BatchRunConfig = {
+				documents: baseDocuments,
+				prompt: 'Go',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-open',
+					sessionId: 'wt-default-base',
+					// baseBranch intentionally omitted
+					createPROnCompletion: true,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(session, deps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			expect(config.worktree?.prTargetBranch).toBe('main');
+		});
+
+		it('falls back to path-derived branch name when worktreeBranch is not set', async () => {
+			const session = createMockSession();
+			const deps = createMockDeps();
+
+			const worktreeChild = createMockSession({
+				id: 'wt-no-branch',
+				state: 'idle',
+				cwd: '/projects/worktrees/path-derived',
+				worktreeBranch: undefined,
+				parentSessionId: session.id,
+			});
+			useSessionStore.setState({
+				sessions: [session, worktreeChild],
+				activeSessionId: session.id,
+			} as any);
+
+			const config: BatchRunConfig = {
+				documents: baseDocuments,
+				prompt: 'Go',
+				loopEnabled: false,
+				worktreeTarget: {
+					mode: 'existing-open',
+					sessionId: 'wt-no-branch',
+					createPROnCompletion: true,
+				},
+			};
+
+			const { result } = renderHook(() => useAutoRunHandlers(session, deps));
+
+			await act(async () => {
+				await result.current.handleStartBatchRun(config);
+			});
+
+			expect(config.worktree?.branchName).toBe('path-derived');
+		});
 	});
 
 	// -----------------------------------------------------------------------
