@@ -1462,10 +1462,15 @@ export const FilePreview = React.memo(
 			theme.colors.accent,
 		]);
 
-		const copyPathToClipboard = () => {
+		const copyPathToClipboard = async () => {
 			if (!file) return;
-			navigator.clipboard.writeText(file.path);
-			setCopyNotificationMessage('File Path Copied to Clipboard');
+			try {
+				await navigator.clipboard.writeText(file.path);
+				setCopyNotificationMessage('File Path Copied to Clipboard');
+			} catch (err) {
+				captureException(err);
+				setCopyNotificationMessage('Failed to Copy Path');
+			}
 			setShowCopyNotification(true);
 			setTimeout(() => setShowCopyNotification(false), 2000);
 		};
@@ -1479,14 +1484,20 @@ export const FilePreview = React.memo(
 					const blob = await response.blob();
 					await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
 					setCopyNotificationMessage('Image Copied to Clipboard');
-				} catch {
+				} catch (err) {
+					captureException(err);
 					// Fallback: copy the data URL if image copy fails
-					navigator.clipboard.writeText(file.content);
-					setCopyNotificationMessage('Image URL Copied to Clipboard');
+					try {
+						await navigator.clipboard.writeText(file.content);
+						setCopyNotificationMessage('Image URL Copied to Clipboard');
+					} catch (fallbackErr) {
+						captureException(fallbackErr);
+						setCopyNotificationMessage('Failed to Copy Image');
+					}
 				}
 			} else {
 				// For text files, copy the content
-				navigator.clipboard.writeText(file.content);
+				await navigator.clipboard.writeText(file.content);
 				setCopyNotificationMessage('Content Copied to Clipboard');
 			}
 			setShowCopyNotification(true);

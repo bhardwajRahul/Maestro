@@ -13,7 +13,7 @@
  * - Project (last path segment)
  */
 
-import { memo, useState, useEffect, useMemo, useCallback } from 'react';
+import { memo, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Trophy } from 'lucide-react';
 import type { Theme } from '../../types';
 import type { StatsTimeRange } from '../../hooks/stats/useStats';
@@ -126,18 +126,34 @@ export const LongestAutoRunsTable = memo(function LongestAutoRunsTable({
 	const [sessions, setSessions] = useState<AutoRunSession[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(false);
+	const requestIdRef = useRef(0);
 
 	const fetchData = useCallback(async () => {
+		const thisRequestId = ++requestIdRef.current;
 		setLoading(true);
 		setError(false);
 		try {
 			const autoRunSessions = await window.maestro.stats.getAutoRunSessions(timeRange);
+			if (thisRequestId !== requestIdRef.current) return;
 			setSessions(autoRunSessions);
 		} catch (err) {
-			setError(true);
 			captureException(err);
+			if (thisRequestId !== requestIdRef.current) return;
+			if (
+				err instanceof Error &&
+				(err.name === 'AbortError' ||
+					err.message.includes('SQLITE') ||
+					err.message.includes('timeout'))
+			) {
+				setError(true);
+			} else {
+				setError(true);
+				throw err;
+			}
 		} finally {
-			setLoading(false);
+			if (thisRequestId === requestIdRef.current) {
+				setLoading(false);
+			}
 		}
 	}, [timeRange]);
 
@@ -176,9 +192,13 @@ export const LongestAutoRunsTable = memo(function LongestAutoRunsTable({
 	if (error) {
 		return (
 			<div
-				className="p-4 rounded-lg"
+				className="p-4 rounded-lg outline-none"
 				style={{ backgroundColor: theme.colors.bgMain }}
 				data-testid="longest-autoruns-error"
+				tabIndex={0}
+				role="alert"
+				aria-live="assertive"
+				ref={(el) => el?.focus()}
 			>
 				<div
 					className="h-32 flex items-center justify-center text-sm"
