@@ -125,13 +125,16 @@ export const LongestAutoRunsTable = memo(function LongestAutoRunsTable({
 }: LongestAutoRunsTableProps) {
 	const [sessions, setSessions] = useState<AutoRunSession[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState(false);
 
 	const fetchData = useCallback(async () => {
 		setLoading(true);
+		setError(false);
 		try {
 			const autoRunSessions = await window.maestro.stats.getAutoRunSessions(timeRange);
 			setSessions(autoRunSessions);
 		} catch (err) {
+			setError(true);
 			captureException(err);
 		} finally {
 			setLoading(false);
@@ -165,6 +168,23 @@ export const LongestAutoRunsTable = memo(function LongestAutoRunsTable({
 					style={{ color: theme.colors.textDim }}
 				>
 					Loading longest Auto Runs...
+				</div>
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div
+				className="p-4 rounded-lg"
+				style={{ backgroundColor: theme.colors.bgMain }}
+				data-testid="longest-autoruns-error"
+			>
+				<div
+					className="h-32 flex items-center justify-center text-sm"
+					style={{ color: theme.colors.textDim }}
+				>
+					Failed to load Auto Run data
 				</div>
 			</div>
 		);

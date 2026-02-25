@@ -22,12 +22,12 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Clipboard,
+	Copy,
 	Loader2,
 	Image,
 	Globe,
 	Save,
 	Edit,
-	FolderOpen,
 	AlertTriangle,
 	Share2,
 	GitGraph,
@@ -37,6 +37,7 @@ import {
 	X,
 } from 'lucide-react';
 import { visit } from 'unist-util-visit';
+import { captureException } from '../utils/sentry';
 import { useLayerStack } from '../contexts/LayerStackContext';
 import { MODAL_PRIORITIES } from '../constants/modalPriorities';
 import { useClickOutside } from '../hooks/ui/useClickOutside';
@@ -991,7 +992,8 @@ export const FilePreview = React.memo(
 
 		const showPath = showStatsBar && !!directoryPath;
 		const headerIconClass = 'w-4 h-4';
-		const headerBtnClass = 'p-2 rounded hover:bg-white/10 transition-colors';
+		const headerBtnClass =
+			'p-2 rounded hover:bg-white/10 transition-colors outline-none focus-visible:ring-1 focus-visible:ring-white/30';
 
 		// Fetch file stats when file changes
 		useEffect(() => {
@@ -1765,7 +1767,7 @@ export const FilePreview = React.memo(
 				// Cmd+C: Copy image to clipboard when viewing an image
 				e.preventDefault();
 				e.stopPropagation();
-				copyContentToClipboard();
+				copyContentToClipboard().catch(captureException);
 			}
 		};
 
@@ -1860,7 +1862,7 @@ export const FilePreview = React.memo(
 									</button>
 								)}
 								<button
-									onClick={copyContentToClipboard}
+									onClick={() => copyContentToClipboard().catch(captureException)}
 									className={headerBtnClass}
 									style={{ color: theme.colors.textDim }}
 									title={
@@ -1909,7 +1911,7 @@ export const FilePreview = React.memo(
 									style={{ color: theme.colors.textDim }}
 									title="Copy full path to clipboard"
 								>
-									<FolderOpen className={headerIconClass} />
+									<Copy className={headerIconClass} />
 								</button>
 							</div>
 						</div>

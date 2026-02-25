@@ -119,6 +119,20 @@ function typeInTextarea(textarea: HTMLTextAreaElement, value: string) {
 	fireEvent.change(textarea, { target: { value } });
 }
 
+/**
+ * Seeds the session store with groups and renders GroupChatInput
+ */
+function seedAndRender({
+	groups = [] as Group[],
+	sessions = [] as Session[],
+	...propOverrides
+}: { groups?: Group[]; sessions?: Session[] } & Partial<
+	Parameters<typeof GroupChatInput>[0]
+> = {}) {
+	useSessionStore.setState({ groups });
+	return render(<GroupChatInput {...createDefaultProps({ sessions, ...propOverrides })} />);
+}
+
 // =============================================================================
 // @MENTION AUTOCOMPLETE TESTS
 // =============================================================================
@@ -440,9 +454,7 @@ describe('GroupChatInput', () => {
 				{ ...createMockSession('session-1', 'Agent1', 'claude-code'), groupId: 'group-1' },
 				{ ...createMockSession('session-2', 'Agent2', 'claude-code'), groupId: 'group-1' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
@@ -457,9 +469,7 @@ describe('GroupChatInput', () => {
 			const sessions = [
 				{ ...createMockSession('session-1', 'Agent1', 'claude-code'), groupId: 'group-1' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
@@ -481,9 +491,7 @@ describe('GroupChatInput', () => {
 				{ ...createMockSession('session-1', 'Agent1', 'claude-code'), groupId: 'group-1' },
 				{ ...createMockSession('session-2', 'Agent2', 'claude-code'), groupId: 'group-1' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
@@ -501,9 +509,7 @@ describe('GroupChatInput', () => {
 				{ ...createMockSession('session-1', 'Agent1', 'claude-code'), groupId: 'group-1' },
 				{ ...createMockSession('session-2', 'Agent2', 'claude-code'), groupId: 'group-1' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
@@ -519,9 +525,7 @@ describe('GroupChatInput', () => {
 			const sessions = [
 				{ ...createMockSession('session-1', 'Term1', 'terminal'), groupId: 'group-1' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
@@ -539,9 +543,7 @@ describe('GroupChatInput', () => {
 				{ ...createMockSession('session-1', 'Agent1', 'claude-code'), groupId: 'group-1' },
 				{ ...createMockSession('session-2', 'Agent2', 'claude-code'), groupId: 'group-2' },
 			];
-			useSessionStore.setState({ groups });
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ groups, sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@proj');
@@ -553,8 +555,7 @@ describe('GroupChatInput', () => {
 
 		it('works without groups prop', () => {
 			const sessions = [createMockSession('session-1', 'Agent1', 'claude-code')];
-
-			render(<GroupChatInput {...createDefaultProps({ sessions })} />);
+			seedAndRender({ sessions });
 
 			const textarea = screen.getByPlaceholderText(/Type a message/i) as HTMLTextAreaElement;
 			typeInTextarea(textarea, '@');
