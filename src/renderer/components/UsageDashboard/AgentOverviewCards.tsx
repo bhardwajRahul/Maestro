@@ -31,6 +31,8 @@ import { SegmentedControl, type SegmentedOption } from '../ui/SegmentedControl';
 import { ThemedSelect, type ThemedSelectOption } from '../shared/ThemedSelect';
 import { UNGROUPED_ID, UNGROUPED_NAME, type GroupLike } from '../../../shared/statsGroupRollup';
 import { isAgentActiveInRange } from '../../../shared/statsActiveAgents';
+import { buildAgentsSummary } from './footerSummary';
+import { usePublishFooterSummary } from './useFooterSummary';
 import { EntityTile } from './EntityTile';
 
 /** Dropdown value meaning "do not narrow by group". */
@@ -462,6 +464,15 @@ export const AgentOverviewCards = memo(function AgentOverviewCards({
 		}
 		return scored.map((entry) => entry.session);
 	}, [activeSessions, filterQuery, sortMode]);
+
+	// Footer readout. The denominator is every agent, not the group-scoped or
+	// active-only subset, so the line always answers "how much of the fleet am
+	// I looking at" rather than restating the filter back to itself.
+	const totalAgentCount = useMemo(
+		() => sessions.filter((s) => s.toolType !== 'terminal').length,
+		[sessions]
+	);
+	usePublishFooterSummary('agents', buildAgentsSummary(filteredSessions.length, totalAgentCount));
 
 	// The dropdown earns its place only once a REAL group is on offer. With no
 	// groups configured the options collapse to "All groups" and "Ungrouped",

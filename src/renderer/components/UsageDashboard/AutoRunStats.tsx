@@ -19,6 +19,8 @@ import type { StatsTimeRange, AutoRunSession } from '../../../shared/stats-types
 import { captureException } from '../../utils/sentry';
 import { formatDurationHuman as formatDuration, formatNumber } from '../../../shared/formatters';
 import { ChartTooltip } from './ChartTooltip';
+import { buildAutoRunSummary } from './footerSummary';
+import { usePublishFooterSummary } from './useFooterSummary';
 
 interface AutoRunStatsProps {
 	/** Current time range for filtering */
@@ -188,6 +190,17 @@ export const AutoRunStats = memo(function AutoRunStats({
 			avgTaskDuration,
 		};
 	}, [sessions]);
+
+	usePublishFooterSummary(
+		'autorun',
+		loading
+			? null
+			: buildAutoRunSummary({
+					runs: metrics.totalSessions,
+					tasksCompleted: metrics.totalTasksCompleted,
+					tasksAttempted: metrics.totalTasksAttempted,
+				})
+	);
 
 	// Group sessions by date for chart (uses session-level tasksCompleted)
 	const tasksByDate = useMemo(() => {

@@ -3919,3 +3919,121 @@ describe('useMainKeyboardHandler - openPromptComposer', () => {
 		expect(useModalStore.getState().isOpen('promptComposer')).toBe(false);
 	});
 });
+
+/**
+ * Switching between full-window destination surfaces by hotkey.
+ *
+ * The modal guard blocks most shortcuts while a modal is up. It used to consult
+ * a hardcoded chord test (Alt+Cmd plus l/p/u/s), which allowlisted exactly
+ * three destinations - so Director's Notes -> Usage Dashboard worked and the
+ * way back did nothing.
+ */
+describe('useMainKeyboardHandler - destination surface switching', () => {
+	const originalAddEventListener = window.addEventListener;
+	const originalRemoveEventListener = window.removeEventListener;
+
+	afterEach(() => {
+		window.addEventListener = originalAddEventListener;
+		window.removeEventListener = originalRemoveEventListener;
+	});
+
+	/** Bind `shortcutId` to `chord` and press it, with or without a modal up. */
+	function pressShortcut(
+		shortcutId: string,
+		chord: KeyboardEventInit,
+		extra: Record<string, unknown> = {},
+		modalOpen = true
+	) {
+		const { result } = renderHook(() => useMainKeyboardHandler());
+		const matches = (e: KeyboardEvent) =>
+			!!e.metaKey === !!chord.metaKey &&
+			!!e.shiftKey === !!chord.shiftKey &&
+			!!e.altKey === !!chord.altKey &&
+			e.key === chord.key;
+
+		result.current.keyboardHandlerRef.current = createMockContext({
+			hasOpenLayers: () => modalOpen,
+			hasOpenModal: () => modalOpen,
+			isShortcut: (e: KeyboardEvent, actionId: string) => actionId === shortcutId && matches(e),
+			encoreFeatures: { usageStats: true, directorNotes: true, symphony: true, maestroCue: true },
+			sessions: [{ id: 'test' }],
+			...extra,
+		});
+
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent('keydown', { ...chord, bubbles: true }));
+		});
+	}
+
+	it("opens Director's Notes from an open modal (the direction that was dead)", () => {
+		const setDirectorNotesOpen = vi.fn();
+		pressShortcut(
+			'directorNotes',
+			{ key: 'o', metaKey: true, shiftKey: true },
+			{ setDirectorNotesOpen }
+		);
+
+		expect(setDirectorNotesOpen).toHaveBeenCalledWith(true);
+	});
+
+	it('still opens the Usage Dashboard from an open modal', () => {
+		const setUsageDashboardOpen = vi.fn();
+		pressShortcut(
+			'usageDashboard',
+			{ key: 'u', metaKey: true, altKey: true },
+			{ setUsageDashboardOpen }
+		);
+
+		expect(setUsageDashboardOpen).toHaveBeenCalledWith(true);
+	});
+
+	it('opens Symphony from an open modal', () => {
+		const setSymphonyModalOpen = vi.fn();
+		pressShortcut(
+			'openSymphony',
+			{ key: 'y', metaKey: true, altKey: true },
+			{ setSymphonyModalOpen }
+		);
+
+		expect(setSymphonyModalOpen).toHaveBeenCalledWith(true);
+	});
+
+	it('opens Maestro Cue from an open modal', () => {
+		const setCueModalOpen = vi.fn();
+		pressShortcut('openCue', { key: 'q', altKey: true }, { setCueModalOpen });
+
+		expect(setCueModalOpen).toHaveBeenCalledWith(true);
+	});
+
+	it('honors a REBOUND destination shortcut', () => {
+		// The old chord test could only ever recognize the factory keys, so
+		// rebinding a surface silently removed it from the guard.
+		const setDirectorNotesOpen = vi.fn();
+		pressShortcut('directorNotes', { key: 'F9' }, { setDirectorNotesOpen });
+
+		expect(setDirectorNotesOpen).toHaveBeenCalledWith(true);
+	});
+
+	it('still blocks a non-destination shortcut while a modal is open', () => {
+		const chord = { key: 'b', metaKey: true, shiftKey: true };
+
+		// Positive control: with nothing open, the same press reaches its branch.
+		// Without this the assertion below would pass even if the chord never
+		// matched anything.
+		const reachedWithNoModal = vi.fn();
+		pressShortcut(
+			'openBatchRunner',
+			chord,
+			{ handleOpenBatchRunner: reachedWithNoModal, activeSession: { id: 'test' } },
+			false
+		);
+		expect(reachedWithNoModal).toHaveBeenCalled();
+
+		const blockedWithModal = vi.fn();
+		pressShortcut('openBatchRunner', chord, {
+			handleOpenBatchRunner: blockedWithModal,
+			activeSession: { id: 'test' },
+		});
+		expect(blockedWithModal).not.toHaveBeenCalled();
+	});
+});

@@ -528,7 +528,7 @@ Drag a thumbnail sideways to move it. The slot numbers follow the drag, so with 
 
 ### The Staged Images organizer
 
-With two or more images staged, an expand button (⤢) appears to the left of the strip. It opens the **Staged Images** organizer: the same set of images at a size you can actually tell apart, always numbered, with the same drag-to-reorder.
+With two or more images staged, an expand button (⤢) appears to the left of the strip, or press `Cmd+Shift+Y` / `Ctrl+Shift+Y`. Either opens the **Staged Images** organizer: the same set of images at a size you can actually tell apart, always numbered, with the same drag-to-reorder.
 
 - **Zoom** with the magnifier buttons in the header, or with the bare `+` and `-` keys (`=` and `_` work too, so you never have to think about Shift). `0` snaps back to 100%, as does clicking the percentage. The size you pick is remembered across sessions.
 - **Annotate** or **remove** any image from its thumbnail, exactly as in the strip.

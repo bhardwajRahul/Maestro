@@ -15,9 +15,11 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { StatsTimeRange, StatsAggregation } from '../../../shared/stats-types';
-import { X, BarChart3, Calendar, Download, Database } from 'lucide-react';
+import { X, BarChart3, Calendar, Download } from 'lucide-react';
 import { SummaryCards } from './SummaryCards';
 import { AgentOverviewCards } from './AgentOverviewCards';
+import { UsageDashboardFooter } from './UsageDashboardFooter';
+import { buildModalOwnedFooterSummary } from './footerSummary';
 import { GroupOverviewCards } from './GroupOverviewCards';
 import { GroupDetailModal } from './GroupDetailModal';
 import { AgentDetailModal } from './AgentDetailModal';
@@ -512,6 +514,15 @@ export function UsageDashboardModal({
 			autoRunStatsCols: isNarrow ? 2 : isMedium ? 3 : 6,
 		};
 	}, [containerWidth]);
+
+	// Footer line for the tabs this modal can describe from `data` alone. Tabs
+	// backed by a panel that fetches for itself (Cue, Auto Run, Shortcuts, the
+	// quota panels) and the two card grids that own their own filter state
+	// publish their own line instead, which wins over this one.
+	const footerSummary = useMemo(
+		() => buildModalOwnedFooterSummary(viewMode, { data, sessions }),
+		[viewMode, data, sessions]
+	);
 
 	// Get sections for current view mode.
 	const currentSections = useMemo((): readonly SectionId[] => {
@@ -1683,35 +1694,17 @@ export function UsageDashboardModal({
 					)}
 				</div>
 
-				{/* Footer */}
-				<div
-					className="px-6 py-3 border-t flex items-center justify-between text-xs flex-shrink-0"
-					style={{
-						borderColor: theme.colors.border,
-						color: theme.colors.textDim,
-					}}
-				>
-					<div className="flex items-center gap-4">
-						<span>
-							{data && data.totalQueries > 0
-								? `Showing ${TIME_RANGE_OPTIONS.find((o) => o.value === timeRange)?.label.toLowerCase()} data`
-								: 'No data for selected time range'}
-						</span>
-						{/* Database size indicator */}
-						{databaseSize !== null && (
-							<span
-								className="flex items-center gap-1"
-								style={{ opacity: 0.7 }}
-								title="Stats database size"
-								data-testid="database-size-indicator"
-							>
-								<Database className="w-3 h-3" />
-								{formatDatabaseSize(databaseSize)}
-							</span>
-						)}
-					</div>
-					<span style={{ opacity: 0.7 }}>Press Esc to close</span>
-				</div>
+				<UsageDashboardFooter
+					theme={theme}
+					viewMode={viewMode}
+					rangeLabel={
+						data && data.totalQueries > 0
+							? `Showing ${TIME_RANGE_OPTIONS.find((o) => o.value === timeRange)?.label.toLowerCase()} data`
+							: 'No data for selected time range'
+					}
+					fallbackSummary={footerSummary}
+					databaseSizeLabel={databaseSize !== null ? formatDatabaseSize(databaseSize) : null}
+				/>
 			</div>
 
 			{detailGroup && data && (

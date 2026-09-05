@@ -79,9 +79,10 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Toast notifications:** `notifyToast({ color, title, message, dismissible? })`, `theme` in `src/renderer/stores/notificationStore.ts`
 - **Center flash (rapid acks):** `notifyCenterFlash({ message, color, detail?, duration? })`, `flashCopiedToClipboard()` in `src/renderer/stores/centerFlashStore.ts`
 - **Opening a modal / dashboard by name:** `UI_SURFACES`, `resolveUiSurface()` in `src/shared/uiSurfaces.ts`
-- **Whether a modal takes the window over:** `DESTINATION_MODALS`, `registerExternalDestination()` in `src/renderer/stores/modalStore.ts`
+- **Whether a modal takes the window over:** `DESTINATION_MODALS`, `DESTINATION_SHORTCUT_IDS`, `registerExternalDestination()` in `src/renderer/stores/modalStore.ts`
 - **Toggling the unread filters:** `toggleAllUnreadFilters()`, `toggleTabUnreadFilter()` in `src/renderer/services/unreadFilters.ts`
 - **Scheduled Tasks (clock-driven Cue subs):** `src/shared/cue/scheduled-tasks.ts`
+- **Which pipelines belong to an agent:** `pipelinesForSession()`, `pipelineInvolvesSession()` in `src/renderer/components/CuePipelineEditor/utils/pipelineMembership.ts`
 - **How much work happened in a group chat:** `computeGroupChatActivity(entries)`, `elapsedTimeMs` in `src/shared/groupChatActivity.ts`
 - **Whether an agent is drawn in the Left Bar:** `sessionMatchesFilter()`, `passesUnreadFilter()` in `src/renderer/utils/sidebarMembership.ts`
 - **Session lookup:** `selectActiveSession()`, `selectSessionById()` in `src/renderer/stores/sessionStore.ts`
@@ -115,6 +116,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Highlighting a FUZZY hit:** `renderFuzzyHighlight(text, indices, styles?)`, `fuzzyMatchWithIndices(text, query)` in `src/renderer/utils/search.ts`
 - **Jumping a markdown preview to a heading:** `scrollToHeadingSlug()`, `headingLevelColor()` in `src/renderer/components/FilePreview/shared/headings.ts`
 - **Reaching the open file preview from a modal:** `requestHeadingPalette()`, `HEADING_PALETTE_EVENT` in `src/renderer/services/headingPalette.ts`
+- **Opening the expanded staged-image organizer:** `requestOpenStagedImagesOrganizer()`, `OPEN_STAGED_IMAGES_ORGANIZER_EVENT` in `src/renderer/services/stagedImagesOrganizer.ts`
 - **A text box that narrows a list:** `resultLabel`, `AutoRunSearchBar` in `src/renderer/components/ui/FilterInput.tsx`
 - **A pane that reads and edits a markdown document:** `generateProseStyles({ theme, scopeSelector })`, `focus` in `src/renderer/components/FilePreview/markdownEditor`
 - **`{{template}}` variable autocomplete:** `useTemplateAutocompleteEngine()`, `useTemplateAutocomplete()` in `src/renderer/hooks/input/useTemplateAutocompleteEngine.ts`

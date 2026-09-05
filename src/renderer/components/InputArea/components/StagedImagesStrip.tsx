@@ -1,6 +1,8 @@
 import React, { memo, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { Theme } from '../../../types';
+import { useEventListener } from '../../../hooks/utils/useEventListener';
+import { OPEN_STAGED_IMAGES_ORGANIZER_EVENT } from '../../../services/stagedImagesOrganizer';
 import { StagedImageTile } from './StagedImageTile';
 import { useStagedImageDnd } from './stagedImageDrag';
 import { StagedImagesOrganizerModal } from './StagedImagesOrganizerModal';
@@ -31,6 +33,14 @@ export const StagedImagesStrip = memo(function StagedImagesStrip({
 }: StagedImagesStripProps) {
 	const [organizerOpen, setOrganizerOpen] = useState(false);
 	const dnd = useStagedImageDnd(stagedImages.length, onReorder);
+
+	// The openImageOrganizer shortcut (opt+cmd+y's sibling) opens the expanded
+	// view from anywhere. Like the Maximize button, it only acts with more than
+	// one image - a single thumbnail has nothing to compare or reorder, and the
+	// lightbox (cmd+y) already covers viewing one image full-screen.
+	useEventListener(OPEN_STAGED_IMAGES_ORGANIZER_EVENT, () => {
+		if (isVisible && stagedImages.length > 1) setOrganizerOpen(true);
+	});
 
 	if (!isVisible || stagedImages.length === 0) {
 		return null;
