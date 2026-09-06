@@ -110,6 +110,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Whether a surface is the topmost layer:** `useIsTopLayer(priority)`, `MODAL_PRIORITIES` in `src/renderer/hooks/ui/useIsTopLayer.ts`
 - **Who asked for this turn (interactive vs automation):** `QUERY_SOURCE_ENV_VAR`, `QuerySource` in `src/shared/querySource.ts`
 - **An agent's effective environment:** `resolveAgentEnvironment()`, `isSecretEnvKey()` in `src/shared/agentEnvironment.ts`
+- **Whether a configured env value means "unset":** `isBlankEnvValue()`, `stripBlankEnvVars()` in `src/shared/agentEnvironment.ts`
 - **Whether a login flow can fix an auth failure:** `classifyCredentialKind()`, `credentialKindBlocksLogin()` in `src/shared/providerAuthIdentity.ts`
 - **Typing a login command into a shell:** `formatAgentLoginCommand(login, syntax?)`, `loginShellSyntaxFor(shellId, isWindows)` in `src/shared/agentMetadata.ts`
 - **Bucketing Director's Notes bullets:** `bucketNarrativeItems()`, `shouldRenderBuckets()` in `src/shared/directorNotesGrouping.ts`
@@ -156,6 +157,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Debounce/throttle:** `useDebouncedValue()`, `useDebouncedCallback()` in `src/renderer/hooks/utils/useThrottle.ts`
 - **Identity-stable callback:** `useStableCallback()`, `createMarkdownComponents()` in `src/renderer/hooks/utils/useStableCallback.ts`
 - **Render markdown:** `components`, `MarkdownRenderer` in `src/renderer/components/Markdown/`
+- **Diagram content clipped at the SVG edge:** `expandSvgViewBoxToContent(svg, padding?)` in `src/renderer/utils/svgViewBox.ts`
 - **Clickable task checkboxes in rendered markdown:** `toggleTaskCheckboxAtLine(content, line)`, `rehypeSourceLine` in `src/renderer/utils/markdownTasks.ts`
 - **Model/effort badges on a finished turn:** `turnEffort`, `codifyTurnSettings()` in `src/renderer/components/ui/TurnSettingPills.tsx`
 - **The tab a queued item is going to:** `resolveQueuedItemTabName(session, item)`, `resolveQueuedItemTarget()` in `src/renderer/utils/executionQueue.ts`
@@ -482,9 +484,15 @@ if (sshStore && session.sshRemoteConfig?.enabled) {
 - Agent's `binaryName` is used for remote execution (not local paths)
 - When the user enabled SSH but the configured remote can't be resolved, **fail
   loudly** instead of silently running locally - the user explicitly opted into
-  SSH and their prompt shouldn't leak to the local machine (see
+  SSH and their prompt shouldn't leak to the local machine. `wrapSpawnWithSsh()`
+  does NOT throw in that case: it hands back the unmodified local config with
+  `sshRemoteUsed: null`, which still carries the REMOTE's `cwd`, so taking it
+  runs the agent on the user's machine against a path that is either missing or
+  (worse) the wrong files. Every caller must check `sshRemoteUsed` and throw
+  `sshUnresolvedRemoteMessage(sshConfig)` from `ssh-spawn-wrapper.ts`. See
+  `groomContext()` and `spawnGroupChatAgent()` for the pattern, and
   `sshUnresolvedFailure()` in `src/cli/services/agent-spawner.ts` for the CLI's
-  version of this).
+  version of this.
 
 **CLI parity:** The CLI (`src/cli/services/agent-spawner.ts`) spawns agent
 processes for batch/playbook automation and honors the same SSH wrapping and
