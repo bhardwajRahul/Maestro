@@ -129,6 +129,14 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 				return;
 			}
 
+			// Whether the dequeue below actually took the item, and onto which tab.
+			// The updater runs exactly once, synchronously, inside the store's `set`
+			// (see sessionStore.setSessions), so reading these back after the call is
+			// deterministic - and it is the ONLY honest answer to "did we take it?",
+			// because every bail below is a data-dependent re-check of live state that
+			// the caller's (possibly stale) session snapshot cannot predict.
+			let dequeuedOntoTabId: string | null = null;
+
 			// Set session to busy and remove item from queue
 			setSessions((prev) =>
 				prev.map((s) => {
@@ -149,6 +157,22 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 					const target = resolveQueuedItemTarget(s, firstItem);
 					if (!target) return s;
 
+					// A tab runs at most one turn at a time, and the agent process is keyed
+					// per tab (`${sessionId}-ai-${tabId}`), so the session-level `state`
+					// check above is NOT sufficient: an agent can read idle while this
+					// exact tab is still mid-turn. Dispatching there makes main reject the
+					// spawn ("Agent process already running for session ...-ai-<tabId>"),
+					// and the rejection lands in the catch below - which re-queues into a
+					// race it usually loses, so the message is simply gone.
+					//
+					// Resolved-target lookup rather than `getQueueBusyContext`: that helper
+					// keys off `item.tabId` alone, which misses both the active-tab
+					// fallback and orphan tabs that `resolveQueuedItemTarget` handles.
+					const targetTab =
+						s.aiTabs.find((t) => t.id === target.tabId) ??
+						s.orphanedThinkingTabs?.find((t) => t.id === target.tabId);
+					if (targetTab?.state === 'busy') return s;
+
 					const updatedAiTabs = s.aiTabs.map((tab) =>
 						tab.id === target.tabId ? markTabRunningQueuedItem(tab, firstItem, s) : tab
 					);
@@ -160,6 +184,7 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 								)
 							: s.orphanedThinkingTabs;
 
+					dequeuedOntoTabId = target.tabId;
 					return {
 						...s,
 						state: 'busy' as SessionState,
@@ -176,28 +201,43 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 				})
 			);
 
+			// The dequeue bailed on a live re-check (agent busy, tab mid-turn, queue
+			// already drained by another trigger). Dispatching anyway would spawn a
+			// second turn on a tab that already has one, so the item stays queued and
+			// this recovery pass does nothing - the next trigger picks it up.
+			const dispatchedOntoTabId: string | null = dequeuedOntoTabId;
+			if (!dispatchedOntoTabId) return;
+
 			// Process the item
 			processQueuedItem(session.id, firstItem).catch((err) => {
 				console.error(`[QueueProcessing] Failed for session ${session.id}:`, err);
-				// Reset session busy state and re-queue the failed item so it isn't lost
+				// Reset busy state and re-queue the failed item so it isn't lost
 				setSessions((prev) =>
 					prev.map((s) => {
 						if (s.id !== session.id) return s;
+						// Clear ONLY the tab this dispatch marked busy. The old sweep over
+						// every busy tab also cleared tabs running turns of their own, which
+						// told the recovery effect the agent was free: it dispatched the next
+						// queued item into the same live process, failed the same way, and
+						// walked the whole queue into the ground one message per render.
+						const aiTabs = s.aiTabs.map((tab) =>
+							tab.id === dispatchedOntoTabId && tab.state === 'busy'
+								? { ...tab, state: 'idle' as const, thinkingStartTime: undefined }
+								: tab
+						);
+						// Likewise the agent only goes idle if nothing else is still working.
+						const stillBusy = aiTabs.some((tab) => tab.state === 'busy');
 						return {
 							...s,
-							state: 'idle',
-							busySource: undefined,
-							thinkingStartTime: undefined,
+							...(stillBusy
+								? {}
+								: {
+										state: 'idle' as SessionState,
+										busySource: undefined,
+										thinkingStartTime: undefined,
+									}),
 							executionQueue: [firstItem, ...s.executionQueue],
-							aiTabs: s.aiTabs.map((tab) =>
-								tab.state === 'busy'
-									? {
-											...tab,
-											state: 'idle' as const,
-											thinkingStartTime: undefined,
-										}
-									: tab
-							),
+							aiTabs,
 						};
 					})
 				);
