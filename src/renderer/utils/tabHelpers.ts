@@ -2658,9 +2658,21 @@ export interface GoToNextUnreadResult {
 }
 
 /**
- * Compute the next unread/draft tab to jump to. Prefers a non-active actionable
- * tab in the current session (tab-level jump, no session change); otherwise
- * searches forward through other sessions in the ordered list, wrapping around.
+ * Which way unread/draft navigation walks. `next` is Opt+Cmd+Down; `previous`
+ * is the second press of Opt+Cmd+Up (Focus Active Tab), which has nothing left
+ * to do once the tab is already centered and focused.
+ */
+export type UnreadNavDirection = 'next' | 'previous';
+
+/**
+ * Compute the next/previous unread/draft tab to jump to. Prefers a non-active
+ * actionable tab in the current session (tab-level jump, no session change);
+ * otherwise walks the other sessions in the ordered list in `direction`,
+ * wrapping around.
+ *
+ * The two directions are exact mirrors: `next` reads tabs and sessions in list
+ * order, `previous` reads them in reverse, so pressing one and then the other
+ * lands you back where you started rather than in a third place.
  *
  * A tab with an active inline wizard counts as actionable: an unfinished wizard
  * is effectively a draft (it's meant to be completed into an Auto Run doc), so
@@ -2668,22 +2680,28 @@ export interface GoToNextUnreadResult {
  *
  * Does NOT mutate state - the caller applies the result via setSessions/setActiveSessionId.
  */
-export function findNextUnreadSession(
+export function findUnreadSessionInDirection(
 	orderedSessions: Session[],
 	activeSessionId: string,
+	direction: UnreadNavDirection,
 	isWizardActive?: (tabId: string) => boolean
 ): GoToNextUnreadResult {
+	const step = direction === 'next' ? 1 : -1;
 	const currentIndex = orderedSessions.findIndex((s) => s.id === activeSessionId);
 	const currentSession = orderedSessions.find((s) => s.id === activeSessionId);
 	const isActionable = (tab: AITab) =>
 		tab.hasUnread || hasDraft(tab) || (isWizardActive?.(tab.id) ?? false);
+	// Scanning the reversed array is what makes `previous` stop on the
+	// actionable tab nearest the LEFT end of the strip instead of repeating the
+	// forward pick.
+	const inScanOrder = (tabs: AITab[]) => (direction === 'next' ? tabs : [...tabs].reverse());
 
 	// 1) Tab-level jump within the current session: if there's an unread/draft
 	//    tab here that isn't already active, switch to it without changing
 	//    sessions. The shortcut is called "Next Unread / Draft *Tab*" - staying
 	//    in the same session is the closest "next" when one exists.
 	if (currentSession) {
-		const inSessionTarget = currentSession.aiTabs?.find(
+		const inSessionTarget = inScanOrder(currentSession.aiTabs ?? []).find(
 			(t) => t.id !== currentSession.activeTabId && isActionable(t)
 		);
 		if (inSessionTarget) {
@@ -2698,11 +2716,14 @@ export function findNextUnreadSession(
 
 	const currentHasUnread = currentSession?.aiTabs?.some(isActionable) ?? false;
 
-	// 2) Search forward through other sessions, wrapping around.
-	for (let i = 1; i <= orderedSessions.length; i++) {
-		const candidate = orderedSessions[(currentIndex + i) % orderedSessions.length];
+	// 2) Search through the other sessions in `direction`, wrapping around. The
+	//    double modulo keeps the backward walk in range: a plain `%` on a
+	//    negative index returns a negative index in JS.
+	const count = orderedSessions.length;
+	for (let i = 1; i <= count; i++) {
+		const candidate = orderedSessions[(((currentIndex + step * i) % count) + count) % count];
 		if (candidate.id !== activeSessionId && candidate.aiTabs?.some(isActionable)) {
-			const firstUnreadTab = candidate.aiTabs.find(isActionable);
+			const firstUnreadTab = inScanOrder(candidate.aiTabs).find(isActionable);
 			return {
 				jumped: true,
 				clearedCurrent: currentHasUnread,
@@ -2719,4 +2740,22 @@ export function findNextUnreadSession(
 		jumped: false,
 		clearedCurrent: false,
 	};
+}
+
+/** Forward walk: see {@link findUnreadSessionInDirection}. */
+export function findNextUnreadSession(
+	orderedSessions: Session[],
+	activeSessionId: string,
+	isWizardActive?: (tabId: string) => boolean
+): GoToNextUnreadResult {
+	return findUnreadSessionInDirection(orderedSessions, activeSessionId, 'next', isWizardActive);
+}
+
+/** Backward walk: see {@link findUnreadSessionInDirection}. */
+export function findPreviousUnreadSession(
+	orderedSessions: Session[],
+	activeSessionId: string,
+	isWizardActive?: (tabId: string) => boolean
+): GoToNextUnreadResult {
+	return findUnreadSessionInDirection(orderedSessions, activeSessionId, 'previous', isWizardActive);
 }

@@ -297,6 +297,8 @@ export interface AppUtilityModalsProps {
 	onQuickActionsNewTerminalTab?: () => void;
 	// Next unread / draft tab navigation (shared with Alt+Cmd+Down)
 	onGoToNextUnread?: () => void;
+	// Previous unread / draft tab navigation (shared with a second Alt+Cmd+Up)
+	onGoToPreviousUnread?: () => void;
 	// Session/tab history navigation (shared with Cmd+Shift+, / Cmd+Shift+.)
 	onNavBack?: () => void;
 	onNavForward?: () => void;
@@ -512,6 +514,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 	onQuickActionsNewBrowserTab,
 	onQuickActionsNewTerminalTab,
 	onGoToNextUnread,
+	onGoToPreviousUnread,
 	onNavBack,
 	onNavForward,
 }: AppUtilityModalsProps) {
@@ -659,6 +662,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 					onNewBrowserTab={onQuickActionsNewBrowserTab}
 					onNewTerminalTab={onQuickActionsNewTerminalTab}
 					onGoToNextUnread={onGoToNextUnread}
+					onGoToPreviousUnread={onGoToPreviousUnread}
 					onNavBack={onNavBack}
 					onNavForward={onNavForward}
 				/>

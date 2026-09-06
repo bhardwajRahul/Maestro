@@ -181,9 +181,10 @@ describe('QuickActions command builders', () => {
 				platform: 'darwin',
 				openPath: vi.fn(),
 				onGoToNextUnread: vi.fn(),
+				onGoToPreviousUnread: vi.fn(),
 				shortcuts: {},
 			}).map((a) => a.id)
-		).toContain('nextUnreadTab');
+		).toEqual(expect.arrayContaining(['nextUnreadTab', 'previousUnreadTab']));
 
 		expect(
 			buildNewTabCommands({
