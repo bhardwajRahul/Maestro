@@ -1698,9 +1698,13 @@ describe('agentStore', () => {
 
 			const item = createQueuedItem({ tabId: 'tab-1', text: 'Will fail' });
 
-			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+			// The failure is recorded AND rethrown: callers wrap this in a `.catch()`
+			// that re-queues the prompt, and swallowing it dropped the user's message.
+			await expect(
+				useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps)
+			).rejects.toThrow('Spawn failed');
 
-			// Should have reset to idle
+			// Should still have reset to idle on the way out
 			const updated = useSessionStore.getState().sessions[0];
 			expect(updated.state).toBe('idle');
 			expect(updated.busySource).toBeUndefined();
@@ -1746,7 +1750,9 @@ describe('agentStore', () => {
 
 			const item = createQueuedItem({ tabId: 'tab-1', text: 'Will fail' });
 
-			await useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps);
+			await expect(
+				useAgentStore.getState().processQueuedItem('session-1', item, defaultDeps)
+			).rejects.toThrow('Spawn failed');
 
 			const updated = useSessionStore.getState().sessions[0];
 			const tab1 = updated.aiTabs.find((t) => t.id === 'tab-1')!;

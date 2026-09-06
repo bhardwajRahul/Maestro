@@ -17,6 +17,7 @@ import { useCallback } from 'react';
 import { generateId } from '../../utils/ids';
 import { takeNextRunnableQueueItem } from '../../utils/executionQueue';
 import { resolveQueuedItemTarget } from '../../utils/tabHelpers';
+import { logger } from '../../utils/logger';
 import type { Session, ThinkingMode, UnifiedTabRef } from '../../types';
 import { useSessionStore, selectActiveSession } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -262,9 +263,34 @@ export function useQuickActionsHandlers(
 				return { ...s, executionQueue: remainingQueue, aiTabs: updatedAiTabs };
 			})
 		);
-		// Process the item
-		processQueuedItem(activeSessionId!, nextItem);
-	}, [activeSession, activeSessionId, processQueuedItem]);
+		// Process the item. `processQueuedItem` rejects on a dispatch failure (see
+		// agentStore), so the rejection needs an owner - unhandled, it would surface
+		// as a crash report rather than a logged failure. The item was already
+		// removed from the queue above, so put it back and release the tab.
+		processQueuedItem(activeSessionId!, nextItem).catch((err) => {
+			logger.error('[QuickActions] Dispatch failed, re-queueing item', undefined, err);
+			setSessions((prev) =>
+				prev.map((s) => {
+					if (s.id !== activeSessionId) return s;
+					const aiTabs = s.aiTabs.map((tab) =>
+						tab.id === nextItem.tabId
+							? { ...tab, state: 'idle' as const, thinkingStartTime: undefined }
+							: tab
+					);
+					// The agent only goes idle if no OTHER tab is still working.
+					const stillWorking = aiTabs.some((tab) => tab.state === 'busy');
+					return {
+						...s,
+						...(stillWorking
+							? {}
+							: { state: 'idle' as const, busySource: undefined, thinkingStartTime: undefined }),
+						executionQueue: [nextItem, ...s.executionQueue],
+						aiTabs,
+					};
+				})
+			);
+		});
+	}, [activeSession, activeSessionId, processQueuedItem, setSessions]);
 
 	const handleQuickActionsToggleMarkdownEditMode = useCallback(() => {
 		// Toggle the appropriate mode based on context:
