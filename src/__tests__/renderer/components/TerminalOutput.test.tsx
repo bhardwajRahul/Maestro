@@ -2721,7 +2721,34 @@ describe('TerminalOutput', () => {
 			expect(screen.getByText('Generate a history synopsis')).toBeInTheDocument();
 		});
 
-		it('renders URLs in the AI command body as clickable links', () => {
+		it('renders the AI command body as markdown, keeping the command header', () => {
+			const body = '## Step 1\n\nRun `the script` and report **what moved**.';
+			const logs: LogEntry[] = [
+				createLogEntry({
+					text: body,
+					source: 'user',
+					aiCommand: {
+						command: '/archive-playbooks',
+						description: 'Archive finished playbooks',
+					},
+				}),
+			];
+
+			const session = createDefaultSession({
+				tabs: [{ id: 'tab-1', agentSessionId: 'claude-123', logs, isUnread: false }],
+				activeTabId: 'tab-1',
+			});
+
+			const props = createDefaultProps({ session });
+			render(<TerminalOutput {...props} />);
+
+			// Header pill still renders, body goes through the markdown stack
+			// (react-markdown is mocked to a div with this testid).
+			expect(screen.getByText('/archive-playbooks:')).toBeInTheDocument();
+			expect(screen.getByTestId('react-markdown')).toHaveTextContent('Step 1');
+		});
+
+		it('shows the AI command body as raw source in markdown edit mode', () => {
 			const url = 'https://github.com/RunMaestro/Maestro/pull/738';
 			const logs: LogEntry[] = [
 				createLogEntry({
@@ -2739,9 +2766,12 @@ describe('TerminalOutput', () => {
 				activeTabId: 'tab-1',
 			});
 
-			const props = createDefaultProps({ session });
+			const props = createDefaultProps({ session, markdownEditMode: true });
 			render(<TerminalOutput {...props} />);
 
+			expect(screen.queryByTestId('react-markdown')).not.toBeInTheDocument();
+
+			// Raw source still linkifies bare URLs.
 			const link = screen.getByText(url);
 			expect(link.tagName).toBe('A');
 			expect(link).toHaveAttribute('href', url);
