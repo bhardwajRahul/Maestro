@@ -18,6 +18,7 @@ import type { StatsTimeRange, StatsAggregation } from '../../../shared/stats-typ
 import { X, BarChart3, Calendar, Download } from 'lucide-react';
 import { SummaryCards } from './SummaryCards';
 import { AgentOverviewCards } from './AgentOverviewCards';
+import { ALL_PROFILES_VALUE, providerProfileKey } from '../../../shared/providerProfiles';
 import { UsageDashboardFooter } from './UsageDashboardFooter';
 import { buildModalOwnedFooterSummary } from './footerSummary';
 import { GroupOverviewCards } from './GroupOverviewCards';
@@ -258,6 +259,10 @@ export function UsageDashboardModal({
 	const [databaseSize, setDatabaseSize] = useState<number | null>(null);
 	const [focusedSection, setFocusedSection] = useState<SectionId | null>(null);
 	const [detailSession, setDetailSession] = useState<Session | null>(null);
+	// Provider-profile filter for the Agents grid. Owned here (rather than
+	// inside the grid) so the quota tabs' "N agents" chips can select an account
+	// and send the user to the grid already narrowed to it.
+	const [agentProfileFilter, setAgentProfileFilter] = useState<string>(ALL_PROFILES_VALUE);
 	// The group whose detail modal is open. Holds the whole rollup rather than an
 	// id: the modal renders the same totals the clicked tile showed, and
 	// re-deriving them would let the two disagree if the aggregation refreshed
@@ -551,6 +556,26 @@ export function UsageDashboardModal({
 				return OVERVIEW_SECTIONS;
 		}
 	}, [viewMode]);
+
+	// Clicking an account's "N agents" chip on a quota tab answers the question
+	// the chip raises - WHICH agents? - by opening the Agents grid narrowed to
+	// that account. The tab switch is the point here, unlike the group tiles
+	// below: the chip has no detail view of its own to open instead.
+	const handleShowAccountAgents = useCallback(
+		(toolType: string) => (accountKey: string) => {
+			setAgentProfileFilter(providerProfileKey(toolType, accountKey));
+			switchViewMode('agents');
+		},
+		[switchViewMode]
+	);
+	const showClaudeAccountAgents = useMemo(
+		() => handleShowAccountAgents('claude-code'),
+		[handleShowAccountAgents]
+	);
+	const showCodexAccountAgents = useMemo(
+		() => handleShowAccountAgents('codex'),
+		[handleShowAccountAgents]
+	);
 
 	// Clicking a group tile opens its detail modal - the per-agent breakdown of
 	// the totals on the tile. It does NOT switch tabs: the Agents tab answers a
@@ -1014,6 +1039,7 @@ export function UsageDashboardModal({
 										showAllAccounts
 										autoRefresh={false}
 										refreshHotkey
+										onShowAccountAgents={showClaudeAccountAgents}
 									/>
 								</ChartErrorBoundary>
 							</div>
@@ -1043,7 +1069,13 @@ export function UsageDashboardModal({
 								data-testid="section-codex-usage"
 							>
 								<ChartErrorBoundary theme={theme} chartName="OpenAI Usage">
-									<CodexPlanUsage theme={theme} showAllAccounts autoRefresh={false} refreshHotkey />
+									<CodexPlanUsage
+										theme={theme}
+										showAllAccounts
+										autoRefresh={false}
+										refreshHotkey
+										onShowAccountAgents={showCodexAccountAgents}
+									/>
 								</ChartErrorBoundary>
 							</div>
 						</div>
@@ -1344,6 +1376,8 @@ export function UsageDashboardModal({
 												theme={theme}
 												onShowAgentDetails={setDetailSession}
 												groups={groups}
+												profileFilter={agentProfileFilter}
+												onProfileFilterChange={setAgentProfileFilter}
 											/>
 										</ChartErrorBoundary>
 									) : (
