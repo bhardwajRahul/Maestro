@@ -86,7 +86,9 @@ depends on whether you are browsing or aiming:
   bottom-right of the preview) opens an outline of the document, indented by
   heading level. Click any heading to jump there; the overlay stays open so you
   can keep moving. `Top` and `Bottom` sit at either end for the whole document.
-  Use it to see the shape of a file you do not know yet.
+  The section you are currently reading is highlighted, and the highlight
+  follows the document as you scroll, so an open outline always shows where you
+  are standing. Use it to see the shape of a file you do not know yet.
 - **Jump to Heading** (`#`) opens a search box over the same list. Type a few
   characters of a section name, move with `Up`/`Down` (`PgUp`/`PgDn` to skip
   further), and press `Enter` to land there. The matched characters are

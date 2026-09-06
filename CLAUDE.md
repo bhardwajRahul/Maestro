@@ -115,6 +115,8 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Highlighting a search hit:** `highlightMatches(text, query, accentColor)`, `searchMatchRanges(text, query)` in `src/renderer/utils/highlightMatches.tsx`
 - **Highlighting a FUZZY hit:** `renderFuzzyHighlight(text, indices, styles?)`, `fuzzyMatchWithIndices(text, query)` in `src/renderer/utils/search.ts`
 - **Jumping a markdown preview to a heading:** `scrollToHeadingSlug()`, `headingLevelColor()` in `src/renderer/components/FilePreview/shared/headings.ts`
+- **Which heading the reader is under right now:** `findActiveHeadingSlug(scroller, container, onReadActive?)`, `ACTIVE_HEADING_FOLD_PX` in `src/renderer/components/FilePreview/shared/headings.ts`
+- **Highlight vs selection in a heading list:** `activeIndex` prop vs internal `selectedIndex` in `src/renderer/components/FilePreview/FilePreviewToc.tsx`
 - **Reaching the open file preview from a modal:** `requestHeadingPalette()`, `HEADING_PALETTE_EVENT` in `src/renderer/services/headingPalette.ts`
 - **Opening the expanded staged-image organizer:** `requestOpenStagedImagesOrganizer()`, `OPEN_STAGED_IMAGES_ORGANIZER_EVENT` in `src/renderer/services/stagedImagesOrganizer.ts`
 - **A text box that narrows a list:** `resultLabel`, `AutoRunSearchBar` in `src/renderer/components/ui/FilterInput.tsx`

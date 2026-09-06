@@ -2,6 +2,7 @@ import React, { RefObject, useEffect, useRef, useState } from 'react';
 import { List, ChevronUp, ChevronDown } from 'lucide-react';
 import type { TocEntry } from './types';
 import { headingLevelColor } from './shared/headings';
+import { useScrollIntoView } from '../../hooks/ui/useScrollIntoView';
 
 interface FilePreviewTocProps {
 	theme: any;
@@ -19,6 +20,13 @@ interface FilePreviewTocProps {
 	 * `#` heading palette cannot drift on how a jump works per preview tier.
 	 */
 	onJumpToHeading: (entry: TocEntry, behavior: ScrollBehavior) => void;
+	/**
+	 * Index of the heading the preview is currently scrolled under, or `-1` when
+	 * the reader is above the first heading. Owned by FilePreview because only it
+	 * can measure the document; the list follows it so the highlight is where the
+	 * reader is standing rather than where they last clicked.
+	 */
+	activeIndex: number;
 }
 
 export const FilePreviewToc = React.memo(function FilePreviewToc({
@@ -33,17 +41,38 @@ export const FilePreviewToc = React.memo(function FilePreviewToc({
 	isMarkdown,
 	markdownEditMode,
 	onJumpToHeading,
+	activeIndex,
 }: FilePreviewTocProps) {
-	const headingButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
-	const [activeIndex, setActiveIndex] = useState(0);
+	// The row the list highlights. It follows the scrolled-to heading, and a
+	// click or arrow press moves it immediately rather than waiting for the
+	// jump's scroll to land - which also keeps arrow nav working past the last
+	// heading the document can actually scroll to (near the bottom, scrolling
+	// clamps and `activeIndex` stops changing).
+	// `-1` is a real value here: it means the reader is above the first heading,
+	// so no row is highlighted and the "Top" sash lights up instead.
+	const [selectedIndex, setSelectedIndex] = useState(activeIndex);
+	const headingButtonRefs = useScrollIntoView<HTMLButtonElement>(
+		showTocOverlay,
+		selectedIndex,
+		tocEntries.length,
+		// Instant: the reader may be scrolling the document continuously, and a
+		// smooth animation per section change would never finish.
+		'auto'
+	);
 	const prevShowRef = useRef(false);
 
-	// Focus the first heading whenever the overlay opens - supports keyboard-only nav.
+	// Follow the document. Only fires when the reader crosses into a new section.
+	useEffect(() => {
+		setSelectedIndex(activeIndex);
+	}, [activeIndex]);
+
+	// Focus the current heading whenever the overlay opens - supports keyboard-only nav.
 	useEffect(() => {
 		if (showTocOverlay && !prevShowRef.current && tocEntries.length > 0) {
-			setActiveIndex(0);
+			setSelectedIndex(activeIndex);
+			const focusIndex = Math.max(activeIndex, 0);
 			requestAnimationFrame(() => {
-				headingButtonRefs.current[0]?.focus();
+				headingButtonRefs.current[focusIndex]?.focus();
 			});
 		}
 		prevShowRef.current = showTocOverlay;
@@ -58,13 +87,13 @@ export const FilePreviewToc = React.memo(function FilePreviewToc({
 		e.preventDefault();
 		e.stopPropagation();
 		const last = tocEntries.length - 1;
-		let next = activeIndex;
-		if (e.key === 'ArrowDown') next = Math.min(activeIndex + 1, last);
-		else if (e.key === 'ArrowUp') next = Math.max(activeIndex - 1, 0);
+		let next = selectedIndex;
+		if (e.key === 'ArrowDown') next = Math.min(selectedIndex + 1, last);
+		else if (e.key === 'ArrowUp') next = Math.max(selectedIndex - 1, 0);
 		else if (e.key === 'Home') next = 0;
 		else if (e.key === 'End') next = last;
-		if (next === activeIndex) return;
-		setActiveIndex(next);
+		if (next === selectedIndex) return;
+		setSelectedIndex(next);
 		headingButtonRefs.current[next]?.focus();
 		// Instant scroll on keyboard nav so rapid arrow presses stay responsive.
 		onJumpToHeading(tocEntries[next], 'auto');
@@ -137,9 +166,13 @@ export const FilePreviewToc = React.memo(function FilePreviewToc({
 						}}
 						className="w-full px-3 py-2 text-left text-xs border-b transition-colors flex items-center gap-2 hover:brightness-110 flex-shrink-0"
 						style={{
-							backgroundColor: `${theme.colors.accent}15`,
+							// Lit when the reader is above the first heading: the row
+							// that says where they are standing.
+							backgroundColor:
+								selectedIndex < 0 ? `${theme.colors.accent}25` : `${theme.colors.accent}15`,
 							borderColor: theme.colors.border,
 							color: theme.colors.textMain,
+							boxShadow: selectedIndex < 0 ? `inset 2px 0 0 ${theme.colors.accent}` : undefined,
 						}}
 						title="Jump to top"
 					>
@@ -156,7 +189,7 @@ export const FilePreviewToc = React.memo(function FilePreviewToc({
 					>
 						{tocEntries.map((entry, index) => {
 							const headingColor = headingLevelColor(theme, entry.level);
-							const isActive = index === activeIndex;
+							const isActive = index === selectedIndex;
 							return (
 								<button
 									key={`${entry.slug}-${index}`}
@@ -164,7 +197,7 @@ export const FilePreviewToc = React.memo(function FilePreviewToc({
 										headingButtonRefs.current[index] = el;
 									}}
 									onClick={() => {
-										setActiveIndex(index);
+										setSelectedIndex(index);
 										// Click is deliberate - keep smooth scroll for visual continuity.
 										onJumpToHeading(entry, 'smooth');
 										// ToC stays open so user can click multiple items
