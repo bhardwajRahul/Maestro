@@ -3195,8 +3195,10 @@ describe('TerminalOutput', () => {
 
 		it('does not fight a user who scrolls while the restore is still settling', async () => {
 			// Their input wins - a restore that keeps yanking the view is worse
-			// than landing high.
+			// than landing high. The wheel is what makes this the user: a bare
+			// `scroll` event is also what our own writes produce.
 			const box = mountWithScrollBox({ initialIsAtBottom: true }, { scrollHeight: 6000 });
+			fireEvent.wheel(box.el);
 			fireEvent.scroll(box.el);
 			await box.settle();
 
@@ -3204,6 +3206,57 @@ describe('TerminalOutput', () => {
 			await box.settle();
 
 			expect(box.scrollTop()).toBeLessThan(box.bottom());
+		});
+
+		it('does not mistake a late echo of its own write for the user scrolling up', async () => {
+			// THE regression behind "I come back and I am way up the transcript".
+			// Every scroll this component performs fires a `scroll` event that is
+			// indistinguishable from the user's, and the one-shot guard covers at
+			// most one of them: the restore writes each frame, the handler is
+			// throttled to 16ms, and `scrollToBottom` drops the guard on a 32ms
+			// timer. An event the guard missed reported an offset that was no longer
+			// the bottom (the content grew underneath it), which read as a scroll-up:
+			// auto-scroll paused and the tab was persisted as parked mid-history, so
+			// every later visit opened it high with the tail no longer followed.
+			const onAtBottomChange = vi.fn();
+			const box = mountWithScrollBox(
+				{ initialIsAtBottom: true, onAtBottomChange },
+				{ scrollHeight: 6000 }
+			);
+			await box.settle();
+			const landed = box.scrollTop();
+
+			// The agent writes more while the user sits at the bottom, then the
+			// event for OUR last write is delivered against the taller content.
+			box.grow(21000);
+			fireEvent.scroll(box.el);
+			await box.settle(250);
+
+			expect(landed).toBe(5200);
+			expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
+		});
+
+		it('does not persist a position while the restore is still settling', async () => {
+			// Saving a way-point of our own restore overwrote the tab's real
+			// position with wherever the climb had got to, and wrote
+			// `isAtBottom: false` for a tab that was following the tail. The tab
+			// then opened there next time, higher every visit.
+			const onScrollPositionChange = vi.fn();
+			const onAtBottomChange = vi.fn();
+			const box = mountWithScrollBox(
+				{ initialIsAtBottom: true, onScrollPositionChange, onAtBottomChange },
+				{ scrollHeight: 6000 }
+			);
+			await box.settle(50);
+
+			box.grow(21000);
+			fireEvent.scroll(box.el);
+			await act(async () => {
+				vi.advanceTimersByTime(250);
+			});
+
+			expect(onAtBottomChange).not.toHaveBeenCalledWith(false);
+			expect(onScrollPositionChange).not.toHaveBeenCalledWith(5200);
 		});
 	});
 

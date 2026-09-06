@@ -91,6 +91,26 @@ const JUMP_SETTLE_MS = 400;
  */
 const TRANSCRIPT_BACKFILL_TOP_THRESHOLD = 200;
 
+/**
+ * How long after a wheel, touch, scroll key, or scrollbar drag a `scroll` event
+ * still counts as the user's. Long enough to cover trackpad momentum between
+ * two wheel events, short enough that the next auto-scroll is not mistaken for
+ * them.
+ */
+const USER_SCROLL_WINDOW_MS = 500;
+
+/** Keys that move a scroll box, so pressing one counts as the user scrolling. */
+const SCROLL_KEYS = new Set([
+	'ArrowUp',
+	'ArrowDown',
+	'PageUp',
+	'PageDown',
+	'Home',
+	'End',
+	' ',
+	'Spacebar',
+]);
+
 // ============================================================================
 // Tool display helpers (pure functions, hoisted out of render path)
 // ============================================================================
@@ -1634,6 +1654,21 @@ export const TerminalOutput = memo(
 		// ends the retry loop - continuing to chase the saved offset would fight
 		// them, which is a worse bug than landing a little high.
 		const userScrolledDuringRestoreRef = useRef(false);
+		// Where our own code last put the view. A `scroll` event reporting this
+		// exact offset is the browser echoing that write back, however late it
+		// arrives - and `isProgrammaticScrollRef` alone cannot cover it, because it
+		// is a single boolean consumed by ONE throttled handler call while the
+		// restore loop writes every frame and `scrollToBottom` clears the flag on a
+		// 32ms timer. Any echo the flag missed used to be read as the user
+		// scrolling up: it paused auto-scroll, aborted the restore, and then
+		// persisted that half-settled offset as the tab's position, so the next
+		// visit opened there instead - higher every time.
+		const lastProgrammaticTopRef = useRef<number | null>(null);
+		// When the user last actually touched the scroll: wheel, trackpad, touch,
+		// a scroll key, or a scrollbar drag. This is the only proof a scroll came
+		// from them. A `scroll` event proves only that the offset moved, and this
+		// component moves it constantly on its own.
+		const lastUserInputAtRef = useRef(0);
 
 		// Get active tab ID for resetting state on tab switch
 		const activeTabId = session.activeTabId;
@@ -2195,11 +2230,21 @@ export const TerminalOutput = memo(
 			const atBottom = scrollHeight - scrollTop - clientHeight < 50;
 			setIsAtBottom(atBottom);
 
-			// Notify parent when isAtBottom changes (for hasUnread logic)
-			if (atBottom !== prevIsAtBottomRef.current) {
-				prevIsAtBottomRef.current = atBottom;
-				onAtBottomChange?.(atBottom);
-			}
+			// Nothing is persisted until the restore has settled: everything the
+			// container reports while it is still climbing is a way-point of our own,
+			// not a position the user chose. Saving one wrote `isAtBottom: false` for
+			// a tab that was following the tail, and that stuck - the tab was treated
+			// as parked mid-history on every later visit, opening high and with
+			// auto-scroll off.
+			//
+			// The one safe exception is a tab that is BOTH heading for the bottom and
+			// currently on it. That is where the restore is going anyway, so recording
+			// it early cannot strand anyone, and it keeps a tab that is simply
+			// following live output saving its position as it goes. A tab restoring to
+			// a mid-history offset is excluded: its early frames sit on a partial
+			// bottom, and reporting that would erase the very offset being restored.
+			const canPersistPosition =
+				hasRestoredScrollRef.current || (atBottom && initialIsAtBottom !== false);
 
 			// Reaching the top pulls the next page of older history in from the
 			// provider transcript (issue #1407). Guarded on the container actually
@@ -2214,13 +2259,23 @@ export const TerminalOutput = memo(
 				setHasNewMessages(false);
 				setNewMessageCount(0);
 				// Resume auto-scroll when user scrolls back to bottom
+				autoScrollPausedRef.current = false;
 				setAutoScrollPaused(false);
 				// Save read state for current tab
 				if (activeTabId) {
 					tabReadStateRef.current.set(activeTabId, filteredLogs.length);
 				}
 			} else {
-				if (isProgrammaticScrollRef.current) {
+				// An event is ours if the guard flag is still set, or if it simply
+				// reports the offset we last wrote and the user has not touched the
+				// scroll recently. The second test is what catches the echoes the
+				// one-shot flag misses.
+				const echoesOurWrite =
+					lastProgrammaticTopRef.current !== null &&
+					Math.abs(scrollTop - lastProgrammaticTopRef.current) <= 2;
+				const userScrolledRecently =
+					Date.now() - lastUserInputAtRef.current < USER_SCROLL_WINDOW_MS;
+				if (isProgrammaticScrollRef.current || (!userScrolledRecently && echoesOurWrite)) {
 					// This scroll event was triggered by our own scrollTo() call -
 					// consume the guard flag here inside the throttled handler to avoid
 					// the race where queueMicrotask clears the flag before a deferred
@@ -2229,13 +2284,32 @@ export const TerminalOutput = memo(
 				} else {
 					// Genuine user scroll away from bottom - pause auto-scroll, and stop
 					// any restore still chasing the saved offset so it cannot fight them.
+					// The restore is over as of now, not as of the next frame: the save
+					// below is gated on that latch, and waiting for the retry loop to
+					// notice would drop this position on the floor.
 					userScrolledDuringRestoreRef.current = true;
+					hasRestoredScrollRef.current = true;
+					autoScrollPausedRef.current = true;
 					setAutoScrollPaused(true);
 				}
 			}
 
-			// Throttled scroll position save (200ms)
-			if (onScrollPositionChange) {
+			// What gets persisted is whether the tab is FOLLOWING THE TAIL, which is
+			// not the same question as whether it is on the bottom this instant. Live
+			// output outruns our own scroll writes constantly: the offset trails the
+			// bottom for a frame, the observer closes the gap, and nobody scrolled
+			// anything. Recording those frames as "not at the bottom" is what marked a
+			// tab the user was watching as parked mid-history, so that the next visit
+			// opened it high with auto-scroll off. Only an actual pause - the user
+			// scrolling away, or a restore landing mid-history - means parked.
+			const followsTail = atBottom || !autoScrollPausedRef.current;
+			if (followsTail !== prevIsAtBottomRef.current && canPersistPosition) {
+				prevIsAtBottomRef.current = followsTail;
+				onAtBottomChange?.(followsTail);
+			}
+
+			// Throttled scroll position save (200ms), under the same gate.
+			if (onScrollPositionChange && canPersistPosition) {
 				if (scrollSaveTimerRef.current) {
 					clearTimeout(scrollSaveTimerRef.current);
 				}
@@ -2244,10 +2318,31 @@ export const TerminalOutput = memo(
 					scrollSaveTimerRef.current = null;
 				}, 200);
 			}
-		}, [activeTabId, filteredLogs.length, onScrollPositionChange, onAtBottomChange]);
+		}, [
+			activeTabId,
+			filteredLogs.length,
+			onScrollPositionChange,
+			onAtBottomChange,
+			initialIsAtBottom,
+		]);
 
 		// PERF: Throttle at 16ms (60fps) instead of 4ms to reduce state updates during scroll
 		const handleScroll = useThrottledCallback(handleScrollInner, 16);
+
+		// Timestamp the user's own scroll input. Pointer events are included for the
+		// scrollbar itself, which drags without ever sending a wheel. Keys are
+		// filtered to the ones that actually move a scroll box - typing in an inline
+		// editor inside the transcript is not a scroll.
+		const noteUserScrollInput = useCallback((event: React.SyntheticEvent) => {
+			if (event.type === 'keydown') {
+				const key = (event as React.KeyboardEvent).key;
+				if (!SCROLL_KEYS.has(key)) return;
+			}
+			lastUserInputAtRef.current = Date.now();
+			// Their input supersedes wherever we last put the view, so stop treating
+			// that offset as ours.
+			lastProgrammaticTopRef.current = null;
+		}, []);
 
 		// Restore read state when switching tabs
 		useEffect(() => {
@@ -2336,6 +2431,10 @@ export const TerminalOutput = memo(
 						top: scrollContainerRef.current.scrollHeight,
 						behavior: 'auto',
 					});
+					// Record where the write actually landed (the browser clamps it), so
+					// a scroll event arriving after the guard below has expired is still
+					// recognizable as this write rather than as the user.
+					lastProgrammaticTopRef.current = scrollContainerRef.current.scrollTop;
 					// Fallback: if scrollTo is a no-op (already at bottom), the browser
 					// won't fire a scroll event, so the handler never consumes the guard.
 					// Clear it after 32ms (2x the 16ms throttle window) to prevent a
@@ -2431,7 +2530,13 @@ export const TerminalOutput = memo(
 			// `>= 0`, not `> 0`: a transcript deliberately scrolled to the absolute
 			// top persists `scrollTop: 0`, and requiring a positive offset made that
 			// one position unrestorable.
-			if (!wantsBottom && (initialScrollTop === undefined || initialScrollTop < 0)) return;
+			if (!wantsBottom && (initialScrollTop === undefined || initialScrollTop < 0)) {
+				// Nothing to restore, so the restore is over before it starts. The
+				// latch has to be set anyway - scroll saves are gated on it, and a tab
+				// that never latched would stop persisting its position entirely.
+				hasRestoredScrollRef.current = true;
+				return;
+			}
 			if (hasRestoredScrollRef.current) return;
 
 			let cancelled = false;
@@ -2443,6 +2548,17 @@ export const TerminalOutput = memo(
 			// than the saved offset settles instead of retrying forever.
 			const MAX_QUIET_FRAMES = 30;
 
+			// End the restore. The guard flag is dropped with it: the loop re-arms it
+			// on every frame it writes, so the last write leaves it set with nothing
+			// left to consume it, and a stale `true` eats the first genuine scroll-up
+			// after the tab settles - the user scrolls up to read and the next line of
+			// output drags them back down. Late echoes of that last write are still
+			// recognized, by offset, in the scroll handler.
+			const finishRestore = () => {
+				hasRestoredScrollRef.current = true;
+				isProgrammaticScrollRef.current = false;
+			};
+
 			const attempt = () => {
 				if (cancelled) return;
 
@@ -2450,14 +2566,14 @@ export const TerminalOutput = memo(
 				// That beats the position the tab was left at - restoring here would
 				// scroll straight back off the hit.
 				if (jumpInFlightRef.current) {
-					hasRestoredScrollRef.current = true;
+					finishRestore();
 					return;
 				}
 				// The user started scrolling while we were still settling. Their
 				// input wins: a restore that keeps yanking the view is worse than
 				// landing slightly high.
 				if (userScrolledDuringRestoreRef.current) {
-					hasRestoredScrollRef.current = true;
+					finishRestore();
 					return;
 				}
 
@@ -2490,6 +2606,7 @@ export const TerminalOutput = memo(
 				// user scrolling and abort the very restore that produced it.
 				isProgrammaticScrollRef.current = true;
 				container.scrollTop = targetScroll;
+				lastProgrammaticTopRef.current = container.scrollTop;
 
 				// A fixed offset is reached the moment the content is tall enough to
 				// hold it. The bottom is not: `maxScroll` moves with every image that
@@ -2497,7 +2614,7 @@ export const TerminalOutput = memo(
 				// is true on the first frame and wrong a frame later. A tail-following
 				// tab therefore keeps chasing until the HEIGHT stops changing.
 				if (!wantsBottom && targetScroll >= (initialScrollTop as number)) {
-					hasRestoredScrollRef.current = true;
+					finishRestore();
 					return;
 				}
 
@@ -2509,7 +2626,7 @@ export const TerminalOutput = memo(
 					// Height has stopped changing. Either we are on the settled bottom,
 					// or the transcript is simply shorter than the saved offset now.
 					// Accept where we are.
-					hasRestoredScrollRef.current = true;
+					finishRestore();
 					return;
 				}
 				requestAnimationFrame(attempt);
@@ -2528,6 +2645,8 @@ export const TerminalOutput = memo(
 			// previous tab's user-scroll across a switch would abort the next tab's
 			// restore on its first frame and reintroduce the bug.
 			userScrolledDuringRestoreRef.current = false;
+			lastProgrammaticTopRef.current = null;
+			lastUserInputAtRef.current = 0;
 		}, [session.id, activeTabId]);
 
 		// Cleanup throttle timer on unmount
@@ -2794,6 +2913,14 @@ export const TerminalOutput = memo(
 						overflowAnchor: session.inputMode === 'ai' && autoScrollPaused ? 'none' : undefined,
 					}}
 					onScroll={handleScroll}
+					// The input events that prove a scroll is the user's. `scroll` itself
+					// cannot: this component writes `scrollTop` on every frame of a
+					// restore and on every mutation while following the tail, and each
+					// of those writes fires an indistinguishable `scroll` event.
+					onWheel={noteUserScrollInput}
+					onTouchMove={noteUserScrollInput}
+					onPointerDown={noteUserScrollInput}
+					onKeyDown={noteUserScrollInput}
 				>
 					{/* Older-history status row (issue #1407). Only meaningful once the
 					    idle render window has reached the head of the list - above that
