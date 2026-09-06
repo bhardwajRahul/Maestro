@@ -9,8 +9,33 @@
  * taking index 0, and treat a queue with no runnable items as drained.
  */
 
-import type { QueuedItem, Session, SessionState } from '../types';
+import type { QueuedItem, QueuedItemEditPatch, Session, SessionState } from '../types';
 import { getTabDisplayName, markTabRunningQueuedItem, resolveQueuedItemTarget } from './tabHelpers';
+
+/**
+ * Apply an edit-modal patch to one queued item, returning the resulting queue.
+ *
+ * Both save paths route through here - the inline chat list edits the ACTIVE
+ * agent (App.tsx) while the Execution Queue browser edits any agent by id
+ * (useQueueHandlers) - so the two cannot drift on what an edit actually
+ * writes. They already had: one of them dropped `turnSettings` on the floor,
+ * silently discarding the model/effort the user had just picked.
+ *
+ * `turnSettings` is assigned, not merged. The modal always sends the complete
+ * settings it was displaying, so clearing a picker back to "Default" has to
+ * clear the stored field rather than leave the previous value behind.
+ */
+export function applyQueuedItemEdit(
+	queue: QueuedItem[],
+	itemId: string,
+	patch: QueuedItemEditPatch
+): QueuedItem[] {
+	return queue.map((item) =>
+		item.id === itemId
+			? { ...item, text: patch.text, images: patch.images, turnSettings: patch.turnSettings }
+			: item
+	);
+}
 
 /** A queued item is runnable when it is not held/paused by the user. */
 export function isRunnableQueueItem(item: QueuedItem): boolean {

@@ -11,9 +11,13 @@
  */
 
 import { useCallback } from 'react';
-import type { QueuedItem, SessionState } from '../../types';
+import type { QueuedItem, QueuedItemEditPatch, SessionState } from '../../types';
 import { aiTabFocusFields } from '../../utils/tabHelpers';
-import { applyQueuedItemDispatch, getQueueBusyContext } from '../../utils/executionQueue';
+import {
+	applyQueuedItemDispatch,
+	applyQueuedItemEdit,
+	getQueueBusyContext,
+} from '../../utils/executionQueue';
 import { useSessionStore } from '../../stores/sessionStore';
 import { logger } from '../../utils/logger';
 
@@ -40,11 +44,7 @@ export interface UseQueueHandlersReturn {
 	/** Toggle the held/paused state of a queued item (held items are skipped by dispatch) */
 	handleTogglePauseQueueItem: (sessionId: string, itemId: string) => void;
 	/** Edit a queued message's prompt text and attached images within a session */
-	handleEditQueueItem: (
-		sessionId: string,
-		itemId: string,
-		patch: { text: string; images: string[] }
-	) => void;
+	handleEditQueueItem: (sessionId: string, itemId: string, patch: QueuedItemEditPatch) => void;
 	/** Dispatch one queued item immediately, out of queue order */
 	handleForceSendQueueItem: (sessionId: string, itemId: string) => void;
 }
@@ -124,17 +124,13 @@ export function useQueueHandlers({
 	}, []);
 
 	const handleEditQueueItem = useCallback(
-		(sessionId: string, itemId: string, patch: { text: string; images: string[] }) => {
+		(sessionId: string, itemId: string, patch: QueuedItemEditPatch) => {
 			setSessions((prev) =>
-				prev.map((s) => {
-					if (s.id !== sessionId) return s;
-					return {
-						...s,
-						executionQueue: s.executionQueue.map((item) =>
-							item.id === itemId ? { ...item, text: patch.text, images: patch.images } : item
-						),
-					};
-				})
+				prev.map((s) =>
+					s.id === sessionId
+						? { ...s, executionQueue: applyQueuedItemEdit(s.executionQueue, itemId, patch) }
+						: s
+				)
 			);
 		},
 		[]
