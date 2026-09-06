@@ -88,8 +88,10 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Session lookup:** `selectActiveSession()`, `selectSessionById()` in `src/renderer/stores/sessionStore.ts`
 - **Session mutation:** `updateSessionWith(sessionId, updater)` in `src/renderer/stores/sessionStore.ts`
 - **Per-agent git actions:** `useGitAgentActions(session)`, `buildGitWorktreeCommands` in `src/renderer/hooks/git/useGitAgentActions.ts`
+- **Whether a PR is being opened right now:** `usePRCreationActive(worktreePath)`, `startPRCreation()` in `src/renderer/stores/prCreationStore.ts`
 - **Focus an AI tab:** `aiTabFocusFields(tabId?)`, `activeFileTabId` in `src/renderer/utils/tabHelpers.ts`
 - **Focus a file tab:** `fileTabFocusFields(tabId)` in `src/renderer/utils/tabHelpers.ts`
+- **Ending a turn with no process exit:** `settleTabThinkingState(session, tabId)` in `src/renderer/utils/tabHelpers.ts`
 - **Audio/video playback:** `handleOpenFileTab()`, `enqueueMedia()` in `src/renderer/hooks/tabs/internal/useFilePreviewTabHandlers.ts`
 - **Run a shell command from the chat:** `dispatchShellCommand()`, `runShellCommand()` in `src/renderer/services/shellCommand.ts`
 - **Revealing output the user asked for, past a paused auto-scroll:** `requestTranscriptScrollToBottom(sessionId, tabId)`, `TRANSCRIPT_SCROLL_TO_BOTTOM_EVENT` in `src/renderer/services/transcriptScroll.ts`

@@ -568,6 +568,39 @@ export function markTabRunningQueuedItem(tab: AITab, item: QueuedItem, session: 
 }
 
 /**
+ * Settle a tab that is no longer doing any work: mark it idle and recompute the
+ * agent's own thinking state from whatever is still running.
+ *
+ * The inverse of {@link markTabRunningQueuedItem}. A tab's pulsing busy dot and
+ * its row on the Thinking pill are driven by `tab.state === 'busy'` plus the
+ * session's `state`/`busySource`/`thinkingStartTime`, which normally only the
+ * process-exit listener clears. Any path that ends a turn WITHOUT a process exit
+ * has to settle that state itself, or the tab blinks forever with nothing behind
+ * it (see `cancelRetry` - a cancelled auto-retry whose resend never spawned).
+ *
+ * A tab the user closed mid-turn lives on in `orphanedThinkingTabs` purely so the
+ * pill keeps counting it, so settling one retires the orphan outright.
+ */
+export function settleTabThinkingState(session: Session, tabId: string): Session {
+	const aiTabs = session.aiTabs.map((tab) =>
+		tab.id === tabId ? { ...tab, state: 'idle' as const, thinkingStartTime: undefined } : tab
+	);
+	const orphans = session.orphanedThinkingTabs?.filter((tab) => tab.id !== tabId);
+	const stillThinking = aiTabs.some((tab) => tab.state === 'busy') || !!orphans?.length;
+
+	return {
+		...session,
+		aiTabs,
+		orphanedThinkingTabs: orphans?.length ? orphans : undefined,
+		// 'error' is the blocking modal's state, not a thinking state - leave it be
+		// so settling a tab can't dismiss an error the user still has to act on.
+		state: stillThinking || session.state === 'error' ? session.state : 'idle',
+		busySource: stillThinking ? session.busySource : undefined,
+		thinkingStartTime: stillThinking ? session.thinkingStartTime : undefined,
+	};
+}
+
+/**
  * Options for creating a new AI tab.
  */
 export interface CreateTabOptions {

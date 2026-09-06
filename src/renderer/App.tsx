@@ -159,6 +159,7 @@ import { registerBatchResumer, useActiveOutageSessionSignature } from './stores/
 import {
 	useSessionStore,
 	selectActiveSession,
+	selectSessionById,
 	updateSessionWith,
 	updateAiTab,
 } from './stores/sessionStore';
@@ -2143,7 +2144,15 @@ function MaestroConsoleInner() {
 
 	const handlePRCreated = useCallback(
 		async (prDetails: PRDetails) => {
-			const session = createPRSession || activeSession;
+			// The creation can land long after its form closed, by which point
+			// `createPRSession` is null and the active agent may be someone else -
+			// so the run's own agent id wins when it has one.
+			const session =
+				(prDetails.sessionId
+					? selectSessionById(prDetails.sessionId)(useSessionStore.getState())
+					: null) ||
+				createPRSession ||
+				activeSession;
 			notifyToast({
 				type: 'success',
 				title: 'Pull Request Created',

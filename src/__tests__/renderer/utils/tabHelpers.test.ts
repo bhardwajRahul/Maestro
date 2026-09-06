@@ -62,6 +62,7 @@ import {
 	findNextUnreadSession,
 	resolveQueuedItemTarget,
 	markTabRunningQueuedItem,
+	settleTabThinkingState,
 	filterUnifiedTabOrderForUnread,
 } from '../../../renderer/utils/tabHelpers';
 import type { LogEntry } from '../../../renderer/types';
@@ -4756,5 +4757,103 @@ describe('tabHelpers', () => {
 			});
 			expect(moveActiveUnifiedTabToEdge(session, 'end')).toBe(session);
 		});
+	});
+});
+
+/**
+ * settleTabThinkingState - ending a turn that had no process to exit.
+ *
+ * The busy dot and the Thinking pill are normally cleared by the process-exit
+ * listener. A cancelled auto-retry whose resend never spawned has no such exit,
+ * so this is what stops the tab pulsing for work nobody is doing. The session
+ * fields are the part worth guarding: they describe the AGENT, so they may only
+ * be cleared once nothing is left running.
+ */
+describe('settleTabThinkingState', () => {
+	it('idles the tab and clears the agent when nothing else is running', () => {
+		const session = createMockSession({
+			state: 'busy',
+			busySource: 'ai',
+			thinkingStartTime: 1_000,
+			aiTabs: [createMockTab({ id: 't1', state: 'busy', thinkingStartTime: 1_000 })],
+		});
+
+		const result = settleTabThinkingState(session, 't1');
+
+		expect(result.aiTabs[0].state).toBe('idle');
+		expect(result.aiTabs[0].thinkingStartTime).toBeUndefined();
+		expect(result.state).toBe('idle');
+		expect(result.busySource).toBeUndefined();
+		expect(result.thinkingStartTime).toBeUndefined();
+	});
+
+	// Settling one tab must not report the agent as finished: another tab is
+	// mid-turn, and the pill still has to count it.
+	it('leaves the agent busy while another tab is still working', () => {
+		const session = createMockSession({
+			state: 'busy',
+			busySource: 'ai',
+			thinkingStartTime: 1_000,
+			aiTabs: [
+				createMockTab({ id: 't1', state: 'busy' }),
+				createMockTab({ id: 't2', state: 'busy' }),
+			],
+		});
+
+		const result = settleTabThinkingState(session, 't1');
+
+		expect(result.aiTabs[0].state).toBe('idle');
+		expect(result.aiTabs[1].state).toBe('busy');
+		expect(result.state).toBe('busy');
+		expect(result.busySource).toBe('ai');
+		expect(result.thinkingStartTime).toBe(1_000);
+	});
+
+	// A tab closed mid-turn survives only so the pill keeps counting it, so
+	// settling it has to retire the orphan outright - otherwise the agent stays
+	// marked busy for a tab that no longer exists.
+	it('retires an orphaned thinking tab rather than leaving it counting', () => {
+		const session = createMockSession({
+			state: 'busy',
+			busySource: 'ai',
+			thinkingStartTime: 1_000,
+			aiTabs: [createMockTab({ id: 't1', state: 'idle' })],
+			orphanedThinkingTabs: [createMockTab({ id: 'gone', state: 'busy' })],
+		});
+
+		const result = settleTabThinkingState(session, 'gone');
+
+		expect(result.orphanedThinkingTabs).toBeUndefined();
+		expect(result.state).toBe('idle');
+		expect(result.busySource).toBeUndefined();
+	});
+
+	it('keeps the agent busy for an orphan that is not the one being settled', () => {
+		const session = createMockSession({
+			state: 'busy',
+			busySource: 'ai',
+			aiTabs: [createMockTab({ id: 't1', state: 'busy' })],
+			orphanedThinkingTabs: [createMockTab({ id: 'gone', state: 'busy' })],
+		});
+
+		const result = settleTabThinkingState(session, 't1');
+
+		expect(result.orphanedThinkingTabs?.map((t) => t.id)).toEqual(['gone']);
+		expect(result.state).toBe('busy');
+	});
+
+	// 'error' is the blocking modal's state, not a thinking state. Settling a tab
+	// must not dismiss an error the user still has to act on.
+	it('does not clear an error state', () => {
+		const session = createMockSession({
+			state: 'error',
+			busySource: 'ai',
+			aiTabs: [createMockTab({ id: 't1', state: 'busy' })],
+		});
+
+		const result = settleTabThinkingState(session, 't1');
+
+		expect(result.aiTabs[0].state).toBe('idle');
+		expect(result.state).toBe('error');
 	});
 });
