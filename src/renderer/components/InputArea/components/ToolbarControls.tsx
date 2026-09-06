@@ -79,6 +79,17 @@ export const ToolbarControls = memo(function ToolbarControls({
 }: ToolbarControlsProps) {
 	const isAiMode = session.inputMode === 'ai';
 
+	// Advertise the full-screen model/effort switcher from inside the dropdowns
+	// the user already opened, which is where they are thinking about the
+	// setting. Read from the shortcut map rather than hardcoding the chord: the
+	// binding is rebindable, its display differs per platform, and on a build
+	// that has no such shortcut this resolves to undefined so no hint renders
+	// instead of pointing at a key combo that does nothing.
+	const modelEffortShortcut = shortcuts?.openModelEffort;
+	const modelEffortHint = modelEffortShortcut
+		? `Try: ${formatShortcutKeys(modelEffortShortcut.keys)}`
+		: undefined;
+
 	return (
 		<div className="flex flex-wrap items-center gap-1 px-2 pb-2 pt-1">
 			<div className="flex gap-1 items-center">
@@ -159,6 +170,7 @@ export const ToolbarControls = memo(function ToolbarControls({
 				<ModelEffortPills
 					isVisible={isAiMode}
 					theme={theme}
+					shortcutHint={modelEffortHint}
 					currentModel={currentModel}
 					currentEffort={currentEffort}
 					availableModels={availableModels}
