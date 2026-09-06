@@ -20,6 +20,8 @@
  *   - Runtime recovery: guards against double-dispatch via state re-check
  *   - Runtime recovery: does not fire before startup recovery
  *   - Runtime recovery: skips busy and error sessions
+ *   - Agent Resilience: holds the queue while a retry counts down for the target tab
+ *   - Agent Resilience: drains the held queue once the retry clears
  *   - Return value: exposes processQueuedItem and processQueuedItemRef
  */
 
@@ -52,6 +54,26 @@ vi.mock('../../../renderer/stores/sessionStore', () => ({
 				...mockSessionStoreState,
 				setSessions: mockSetSessions,
 			}),
+			setState: vi.fn(),
+			subscribe: vi.fn(() => vi.fn()),
+		}
+	),
+}));
+
+/**
+ * Agent Resilience. `pendingRetryTabs` is the set of tabs with a retry counting
+ * down; `mockRetries` is the store slice the hook subscribes to so a cleared
+ * retry re-runs the runtime-recovery effect.
+ */
+const pendingRetryTabs = new Set<string>();
+let mockRetries: Record<string, unknown> = {};
+
+vi.mock('../../../renderer/stores/retryStore', () => ({
+	hasPendingRetry: (_sessionId: string, tabId: string) => pendingRetryTabs.has(tabId),
+	useRetryStore: Object.assign(
+		(selector: (s: Record<string, unknown>) => unknown) => selector({ retries: mockRetries }),
+		{
+			getState: () => ({ retries: mockRetries }),
 			setState: vi.fn(),
 			subscribe: vi.fn(() => vi.fn()),
 		}
@@ -206,6 +228,9 @@ beforeEach(() => {
 
 	mockSessionStoreState.sessionsLoaded = false;
 	mockSessionStoreState.sessions = [];
+
+	pendingRetryTabs.clear();
+	mockRetries = {};
 
 	// Default: agentStore.processQueuedItem resolves immediately
 	mockAgentStoreProcessQueuedItem.mockResolvedValue(undefined);
@@ -1286,6 +1311,95 @@ describe('runtime queue recovery', () => {
 		});
 
 		expect(mockSetSessions).not.toHaveBeenCalled();
+	});
+});
+
+// ============================================================================
+// Agent Resilience hold
+// ============================================================================
+
+describe('runtime recovery — Agent Resilience hold', () => {
+	/** Render, run out the startup window, and clear the setSessions spy. */
+	function primeAfterStartup() {
+		vi.useFakeTimers();
+		mockSessionStoreState.sessionsLoaded = true;
+		mockSessionStoreState.sessions = [createSession({ state: 'idle', executionQueue: [] })];
+
+		const { rerender } = renderHook(() => useQueueProcessing(createDeps()));
+		act(() => {
+			vi.advanceTimersByTime(600);
+		});
+		mockSetSessions.mockClear();
+		return rerender;
+	}
+
+	function idleSessionWithQueue(): Session[] {
+		const tab = createTab({ id: 'tab-1', state: 'idle' });
+		mockGetActiveTab.mockReturnValue(tab);
+		return [
+			createSession({
+				id: 'session-1',
+				state: 'idle',
+				aiTabs: [tab],
+				activeTabId: 'tab-1',
+				executionQueue: [
+					createQueuedItem({ id: 'held-1', tabId: 'tab-1' }),
+					createQueuedItem({ id: 'held-2', tabId: 'tab-1' }),
+				],
+			}),
+		];
+	}
+
+	it('does not dispatch while a retry is counting down for the target tab', () => {
+		const rerender = primeAfterStartup();
+
+		// The agent errored on quota, Agent Resilience took over, and the exit path
+		// left the agent idle with its queue intact. Recovery must not step in.
+		pendingRetryTabs.add('tab-1');
+		mockSessionStoreState.sessions = idleSessionWithQueue();
+
+		act(() => {
+			rerender();
+		});
+
+		expect(mockSetSessions).not.toHaveBeenCalled();
+		expect(mockAgentStoreProcessQueuedItem).not.toHaveBeenCalled();
+	});
+
+	it('dispatches when the retry is for a different tab than the queued item', () => {
+		const rerender = primeAfterStartup();
+
+		pendingRetryTabs.add('some-other-tab');
+		mockSessionStoreState.sessions = idleSessionWithQueue();
+
+		act(() => {
+			rerender();
+		});
+
+		expect(mockSetSessions).toHaveBeenCalled();
+	});
+
+	it('drains the held queue once the retry clears', () => {
+		const rerender = primeAfterStartup();
+
+		pendingRetryTabs.add('tab-1');
+		mockSessionStoreState.sessions = idleSessionWithQueue();
+		act(() => {
+			rerender();
+		});
+		expect(mockSetSessions).not.toHaveBeenCalled();
+
+		// The retry resolved (fired, recovered, or the user pressed Stop). The store
+		// slice changes identity, which is what re-runs the recovery effect - the
+		// session list is deliberately untouched here.
+		pendingRetryTabs.delete('tab-1');
+		mockRetries = { changed: true };
+
+		act(() => {
+			rerender();
+		});
+
+		expect(mockSetSessions).toHaveBeenCalled();
 	});
 });
 

@@ -26,6 +26,8 @@ import {
 	nextRunnableQueueItem,
 	takeNextRunnableQueueItem,
 } from '../../utils/executionQueue';
+import { hasPendingRetry, useRetryStore } from '../../stores/retryStore';
+import { queueIsHeldByRetry } from './internal/helpers/exitDequeue';
 import { logger } from '../../utils/logger';
 
 // ============================================================================
@@ -74,6 +76,11 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 	// --- Reactive subscriptions ---
 	const sessionsLoaded = useSessionStore((s) => s.sessionsLoaded);
 	const sessions = useSessionStore((s) => s.sessions);
+	// Runtime recovery holds the queue while a retry counts down (see
+	// dispatchQueuedItem). Subscribing to the retry entries re-runs that effect
+	// the moment one clears - cancelled, recovered, or superseded - so a held
+	// queue drains then instead of waiting for an unrelated session change.
+	const retries = useRetryStore((s) => s.retries);
 
 	// --- Store actions (stable via getState) ---
 	const { setSessions } = useSessionStore.getState();
@@ -108,6 +115,19 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 			// held, there's nothing to do.
 			const firstItem = nextRunnableQueueItem(session.executionQueue);
 			if (!firstItem) return;
+
+			// Agent Resilience owns the queue while a retry counts down. The exit path
+			// already holds it (chooseNextQueuedItem returns 'wait'), which leaves the
+			// agent idle with items still queued - exactly the shape this recovery
+			// effect fires on. Without the same rule here, recovery dispatches ~1s
+			// later anyway: the item burns against the wall the provider just put up,
+			// AND the dispatch supersedes the pending retry (retryStore.noteDispatch),
+			// discarding the prompt that retry was holding. A queue of N items ran the
+			// whole agent dry in seconds and left the user re-typing every one of them.
+			// Hold instead; the queue drains in order once the retry lands.
+			if (queueIsHeldByRetry(session, undefined, (tabId) => hasPendingRetry(session.id, tabId))) {
+				return;
+			}
 
 			// Set session to busy and remove item from queue
 			setSessions((prev) =>
@@ -242,7 +262,10 @@ export function useQueueProcessing(deps: UseQueueProcessingDeps): UseQueueProces
 				dispatchQueuedItem(session);
 			}
 		}
-	}, [sessionsLoaded, sessions, dispatchQueuedItem]);
+		// `retries` is not read here: it is a re-run trigger so a queue held by
+		// `dispatchQueuedItem`'s resilience check gets a fresh look the moment the
+		// retry that held it goes away.
+	}, [sessionsLoaded, sessions, retries, dispatchQueuedItem]);
 
 	return {
 		processQueuedItem,
