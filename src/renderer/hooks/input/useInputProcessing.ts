@@ -26,6 +26,7 @@ import { requestAiCommand } from '../../services/aiCommand';
 import { getAiCommandEntry } from '../../stores/aiCommandStore';
 import { gitService } from '../../services/git';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { hasPendingRetry } from '../../stores/retryStore';
 import { logger } from '../../utils/logger';
 
 let cachedImageOnlyPrompt: string = '';
@@ -425,9 +426,18 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 							const forceParallel =
 								options?.forceParallel === true &&
 								useSettingsStore.getState().forcedParallelExecution;
-							const sessionIsIdle = forceParallel
-								? activeTab?.state !== 'busy'
-								: activeSession.state !== 'busy' && !isAutoRunActive;
+							// Agent Resilience holds the line for this tab - see the message
+							// path below for the full reasoning. A held tab is idle, so
+							// without this the command would spawn straight into the wall.
+							const retryHoldsTab = hasPendingRetry(
+								activeSession.id,
+								activeTab?.id || activeSession.activeTabId
+							);
+							const sessionIsIdle =
+								!retryHoldsTab &&
+								(forceParallel
+									? activeTab?.state !== 'busy'
+									: activeSession.state !== 'busy' && !isAutoRunActive);
 
 							const queuedItem: QueuedItem = {
 								id: generateId(),
@@ -785,11 +795,31 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 				// ALSO: Always queue write commands when AutoRun is active (to prevent file conflicts)
 				// FORCE PARALLEL: queues only when THIS tab is busy (skips cross-tab and AutoRun wait).
 				// When the tab finishes, the queued item dispatches immediately without waiting for other tabs.
-				const shouldQueue = forceParallel
-					? activeTab?.state === 'busy' // Force parallel: only queue if THIS tab is busy
-					: isReadOnlyMode
-						? activeTab?.state === 'busy' // Read-only: only queue if THIS tab is busy
-						: (activeSession.state === 'busy' && !canWriteBypassQueue()) || isAutoRunActive; // Write mode: queue if busy OR AutoRun active
+				// Agent Resilience holds the line: this tab's provider just refused a
+				// turn and a retry is counting down for it. The tab reads IDLE while it
+				// waits, so every busy-based rule below says "send now" - and sending
+				// now is wrong twice over. The message burns against the same wall, AND
+				// the dispatch supersedes the pending retry (see retryStore.noteDispatch),
+				// discarding the prompt that retry was holding. That is how one quota
+				// wall used to eat a whole conversation, one message per Enter.
+				//
+				// Queue instead, so the retry keeps its place and the queue drains in
+				// order behind it once it lands. This overrides forceParallel on purpose:
+				// force-parallel bypasses BUSY-TAB serialization, and a provider wall is
+				// not that. Releasing early is a deliberate act (Cancel or Retry Now on
+				// the countdown banner), not a side effect of hitting Enter again.
+				const retryHoldsTab = hasPendingRetry(
+					activeSession.id,
+					activeTab?.id || activeSession.activeTabId
+				);
+
+				const shouldQueue =
+					retryHoldsTab ||
+					(forceParallel
+						? activeTab?.state === 'busy' // Force parallel: only queue if THIS tab is busy
+						: isReadOnlyMode
+							? activeTab?.state === 'busy' // Read-only: only queue if THIS tab is busy
+							: (activeSession.state === 'busy' && !canWriteBypassQueue()) || isAutoRunActive); // Write mode: queue if busy OR AutoRun active
 
 				// Debug logging to diagnose queue issues
 				logger.info('[processInput] Queue decision:', undefined, {
@@ -799,6 +829,7 @@ export function useInputProcessing(deps: UseInputProcessingDeps): UseInputProces
 					isReadOnlyMode,
 					isAutoRunActive,
 					forceParallel,
+					retryHoldsTab,
 					shouldQueue,
 					queueLength: activeSession.executionQueue.length,
 				});
