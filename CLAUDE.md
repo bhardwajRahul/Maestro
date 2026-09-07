@@ -137,6 +137,7 @@ Grep-verified 2026-09-04 (`npm run docs:verify` re-checks every path). This is t
 - **Adding a control to the Left Bar header:** three-zone row in `src/renderer/components/SessionList/SessionList.tsx`; see guide before touching
 - **Element width for JS-computed layout:** `useElementWidth(ref, enabled?)`, `ResizeObserver` in `src/renderer/hooks/ui/useElementWidth.ts`
 - **Usage Dashboard card tile:** `StatCard` in `src/renderer/components/UsageDashboard/EntityTile.tsx`
+- **A label that must not truncate:** `useOptionalLabelFits(rowRef)` in `src/renderer/hooks/ui/useOptionalLabelFits.ts`
 - **Usage Dashboard metric tile:** `MetricCard` in `src/renderer/components/UsageDashboard/MetricCard.tsx`
 - **Recording wizard usage:** `beginWizardRun()`, `recordWizardDocuments()` in `src/renderer/services/wizardStats.ts`
 - **Fixed-pitch font for shell text:** `resolveFixedPitchFontFamily()`, `resolveTerminalFontFamily()` in `src/renderer/utils/fixedPitchFont.ts`
