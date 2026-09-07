@@ -12,6 +12,13 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { logger } from '../../utils/logger';
 import { parseWizardIntent } from '../../services/wizardIntentParser';
+import {
+	beginWizardRun,
+	countWizardExchange,
+	finishWizardRun,
+	recordWizardDocuments,
+	updateWizardRun,
+} from '../../services/wizardStats';
 import { getAutoRunFolderPath, type ExistingDocument } from '../../utils/existingDocsDetector';
 import {
 	startInlineWizardConversation,
@@ -613,6 +620,17 @@ export function useInlineWizard(): UseInlineWizardReturn {
 				conductorProfile,
 			}));
 
+			// Open the analytics row now, not at first message: "how long did I
+			// spend with the wizard" has to include the thinking time before the
+			// first prompt, and a run abandoned during initialization still counts
+			// as a run. Keyed by tab, so parallel wizards stay separate.
+			beginWizardRun(effectiveTabId, {
+				sessionId: sessionId || '',
+				agentType: agentType || 'unknown',
+				surface: 'inline',
+				projectPath,
+			});
+
 			try {
 				// Step 0: Fetch history file path for task recall (if session ID is available)
 				// Skip for SSH sessions - the local path is unreachable from the remote host
@@ -745,6 +763,12 @@ export function useInlineWizard(): UseInlineWizardReturn {
 					existingDocuments: existingDocs,
 					historyFilePath,
 				}));
+
+				// Intent parsing is what decides new-vs-iterate; the run opened as
+				// 'new' before we knew. 'ask' stays unsettled until setMode.
+				if (mode === 'new' || mode === 'iterate') {
+					updateWizardRun(effectiveTabId, { mode });
+				}
 			} catch (error) {
 				// Handle any errors during initialization
 				const errorMessage = error instanceof Error ? error.message : 'Failed to initialize wizard';
@@ -780,6 +804,9 @@ export function useInlineWizard(): UseInlineWizardReturn {
 			// Get previous UI state for this tab
 			const previousState = previousUIStateRefsMap.current.get(tabId) || null;
 			previousUIStateRefsMap.current.delete(tabId);
+
+			// Settle the analytics row before the state below is dropped.
+			finishWizardRun(tabId);
 
 			// Drop the wizard state synchronously BEFORE awaiting any async cleanup.
 			// The wizard sync effect in useWizardHandlers re-runs after the caller
@@ -850,6 +877,10 @@ export function useInlineWizard(): UseInlineWizardReturn {
 
 			// Track the in-flight turn so cancelTurn knows what it is stopping
 			activeTurnIdsRef.current.set(tabId, userMessage.id);
+
+			// Count the exchange at SEND, not at reply: a message the agent never
+			// answered is still back-and-forth the user paid for.
+			countWizardExchange(tabId);
 
 			// Add user message to history, track it for retry, and set waiting state
 			setTabState(tabId, (prev) => ({
@@ -1176,6 +1207,10 @@ export function useInlineWizard(): UseInlineWizardReturn {
 				...prev,
 				mode: newMode,
 			}));
+
+			if (newMode === 'new' || newMode === 'iterate') {
+				updateWizardRun(tabId, { mode: newMode });
+			}
 		},
 		[getEffectiveTabId, setTabState]
 	);
@@ -1329,6 +1364,9 @@ export function useInlineWizard(): UseInlineWizardReturn {
 	 */
 	const reset = useCallback(() => {
 		const tabId = currentTabId || 'default';
+
+		// Settle the analytics row - reset is a close, same as endWizard.
+		finishWizardRun(tabId);
 
 		// Clean up conversation session for this tab
 		const session = conversationSessionsMap.current.get(tabId);
@@ -1526,6 +1564,14 @@ export function useInlineWizard(): UseInlineWizardReturn {
 						// Store the full subfolder path for document loading (e.g., "/path/Auto Run Docs/Maestro-Marketing")
 						subfolderPath: result.subfolderPath || null,
 					}));
+
+					// Record the payoff as soon as it lands. The user may sit on the
+					// review screen for a long time or never close the wizard at all,
+					// so waiting for endWizard would lose the documents entirely.
+					recordWizardDocuments(tabId, {
+						documents: finalDocs.length,
+						tasks: finalDocs.reduce((sum, doc) => sum + (doc.taskCount || 0), 0),
+					});
 
 					logger.info(
 						`Playbook generation complete - ${finalDocs.length} document(s) created`,

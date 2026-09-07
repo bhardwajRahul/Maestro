@@ -35,6 +35,7 @@ import { DurationTrendsChart } from './DurationTrendsChart';
 import { AgentUsageChart } from './AgentUsageChart';
 import { AutoRunStats } from './AutoRunStats';
 import { ResilienceStats } from './ResilienceStats';
+import { WizardStats } from './WizardStats';
 import { SessionStats } from './SessionStats';
 import { ClaudePlanUsage } from './ClaudePlanUsage';
 import { CodexPlanUsage } from './CodexPlanUsage';
@@ -98,6 +99,7 @@ const AGENT_OVERVIEW_SECTIONS = ['session-stats', 'agent-efficiency', 'agent-usa
 const ACTIVITY_SECTIONS = ['activity-heatmap', 'weekday-comparison', 'duration-trends'] as const;
 const AUTORUN_SECTIONS = [
 	'autorun-stats',
+	'wizard-stats',
 	'autorun-task-percentiles',
 	'tasks-by-hour',
 	'longest-autoruns',
@@ -620,6 +622,7 @@ export function UsageDashboardModal({
 			'autorun-stats': 'Auto Run Statistics',
 			'tasks-by-hour': 'Tasks by Time of Day Chart',
 			'longest-autoruns': 'Top 25 Longest Auto Runs',
+			'wizard-stats': 'Auto Run Wizard Statistics',
 		};
 		return labels[sectionId] || sectionId;
 	}, []);
@@ -1642,6 +1645,31 @@ export function UsageDashboardModal({
 												theme={theme}
 												columns={layout.autoRunStatsCols}
 											/>
+										</ChartErrorBoundary>
+									</div>
+
+									{/* Wizard: what the /wizard conversations cost and produced.
+									    Sits right under the Auto Run totals because it is the
+									    upstream half of the same story - the wizard writes the
+									    documents Auto Run then executes. */}
+									<div
+										ref={setSectionRef('wizard-stats')}
+										tabIndex={0}
+										role="region"
+										aria-label={getSectionLabel('wizard-stats')}
+										onKeyDown={(e) => handleSectionKeyDown(e, 'wizard-stats')}
+										className="outline-none rounded-lg transition-shadow dashboard-section-enter"
+										style={{
+											boxShadow:
+												focusedSection === 'wizard-stats'
+													? `0 0 0 2px ${theme.colors.accent}`
+													: 'none',
+											animationDelay: '25ms',
+										}}
+										data-testid="section-wizard-stats"
+									>
+										<ChartErrorBoundary theme={theme} chartName="Wizard Stats">
+											<WizardStats timeRange={timeRange} theme={theme} />
 										</ChartErrorBoundary>
 									</div>
 

@@ -31,6 +31,8 @@ import {
 	ADD_QUERY_EVENT_TOKEN_COLUMNS,
 	CREATE_RESILIENCE_EVENTS_SQL,
 	CREATE_RESILIENCE_EVENTS_INDEXES_SQL,
+	CREATE_WIZARD_RUNS_SQL,
+	CREATE_WIZARD_RUNS_INDEXES_SQL,
 	runStatements,
 } from './schema';
 import { LOG_CONTEXT } from './utils';
@@ -95,6 +97,14 @@ function getMigrations(): Migration[] {
 			version: 9,
 			description: 'Add resilience_events table for Agent Resilience outage tracking',
 			up: (db) => migrateV9(db),
+		},
+		{
+			// MERGE NOTE (main -> rc): this rides on top of the v9 renumbering
+			// note above - if v9 becomes 10 on rc, this becomes 11 there. The
+			// body is idempotent (CREATE IF NOT EXISTS) so renumbering is safe.
+			version: 10,
+			description: 'Add wizard_runs table for Auto Run wizard usage tracking',
+			up: (db) => migrateV10(db),
 		},
 	];
 }
@@ -358,6 +368,16 @@ function migrateV9(db: Database.Database): void {
 	runStatements(db, CREATE_RESILIENCE_EVENTS_SQL);
 	runStatements(db, CREATE_RESILIENCE_EVENTS_INDEXES_SQL);
 	logger.debug('Created resilience_events table', LOG_CONTEXT);
+}
+
+/**
+ * Migration v10: wizard_runs - one row per Auto Run wizard conversation,
+ * powering the Usage Dashboard's "Wizard" section on the Auto Run tab.
+ */
+function migrateV10(db: Database.Database): void {
+	runStatements(db, CREATE_WIZARD_RUNS_SQL);
+	runStatements(db, CREATE_WIZARD_RUNS_INDEXES_SQL);
+	logger.debug('Created wizard_runs table', LOG_CONTEXT);
 }
 
 /**
